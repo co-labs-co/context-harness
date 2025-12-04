@@ -55,17 +55,19 @@ Or select the compaction option from "What's Next?" suggestions.
 │  - Invokes subagents for guidance only                  │
 └────────────┬──────────────────────────────────┬─────────┘
              │                                  │
-      @research-subagent               @compaction-guide
-      @docs-subagent                          │
-             │                                  │
-             ▼                                  ▼
-┌─────────────────────────┐       ┌────────────────────────┐
-│ Research & Docs         │       │ Compaction Guide       │
-│ Subagents               │       │ Subagent               │
-│ - Provide guidance      │       │ - Analyze session      │
-│ - Return recommendations│       │ - Recommend what to    │
-│ - NO execution          │       │   preserve             │
-└─────────────────────────┘       └────────────────────────┘
+@research-subagent               @compaction-guide
+       @docs-subagent                          │
+              │                                  │
+              ▼                                  ▼
+ ┌─────────────────────────┐       ┌────────────────────────┐
+ │ Grounded Research       │       │ Compaction Guide       │
+ │ & Docs Subagents        │       │ Subagent               │
+ │ - Context7 MCP access   │       │ - Analyze session      │
+ │ - Web search verification│       │ - Recommend what to    │
+ │ - Provide guidance      │       │   preserve             │
+ │ - Return recommendations│       │                        │
+ │ - NO execution          │       │                        │
+ └─────────────────────────┘       └────────────────────────┘
 ```
 
 ## Directory Structure
@@ -124,7 +126,13 @@ Each session maintains a `SESSION.md` file with:
 ## Subagents
 
 ### @research-subagent
-Provides research guidance on best practices, API documentation, and implementation approaches. **Advisory only—does not execute.**
+Provides grounded research guidance using Context7 MCP and web search for accurate, up-to-date API documentation, best practices, and implementation approaches. **Advisory only—does not execute.**
+
+**Enhanced Capabilities**:
+- **Context7 MCP Integration**: Access to up-to-date documentation for popular libraries and frameworks
+- **Web Search Verification**: Real-time information lookup and fact verification
+- **Grounded Responses**: All research is cross-referenced and sourced
+- **Version Awareness**: Tracks library versions and compatibility
 
 ### @docs-subagent
 Provides documentation summaries, framework guides, and API references. **Advisory only—does not execute.**
