@@ -27,19 +27,20 @@ ContextHarness solves the problem of context loss in long development sessions b
 │  - Invokes subagents for guidance                       │
 └────────────┬──────────────────────────────────┬─────────┘
              │                                  │
-@research-subagent               @compaction-guide
-       @docs-subagent                          │
-              │                                  │
-              ▼                                  ▼
- ┌─────────────────────────┐       ┌────────────────────────┐
- │ Grounded Research       │       │ Compaction Guide       │
- │ & Docs Subagents        │       │ Subagent               │
- │ - Context7 MCP access   │       │ - Analyze session      │
- │ - Web search verification│       │ - Recommend preserve   │
- │ - Provide guidance      │       │ - NO execution         │
- │ - Return recommendations│       │                        │
- │ - NO execution          │       │                        │
- └─────────────────────────┘       └────────────────────────┘
+    @research-subagent                  @compaction-guide
+    @docs-subagent                             │
+             │                                  │
+             ▼                                  ▼
+┌──────────────────────────┐      ┌─────────────────────────┐
+│ Grounded Research        │      │ Compaction Guide        │
+│ & Docs Subagents         │      │ Subagent                │
+│                          │      │                         │
+│ - Context7 MCP access    │      │ - Analyze session       │
+│ - Web search verification│      │ - Recommend preserve    │
+│ - Provide guidance       │      │ - NO execution          │
+│ - Return recommendations │      │                         │
+│ - NO execution           │      │                         │
+└──────────────────────────┘      └─────────────────────────┘
 ```
 
 ## Directory Structure

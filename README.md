@@ -55,19 +55,20 @@ Or select the compaction option from "What's Next?" suggestions.
 │  - Invokes subagents for guidance only                  │
 └────────────┬──────────────────────────────────┬─────────┘
              │                                  │
-@research-subagent               @compaction-guide
-       @docs-subagent                          │
-              │                                  │
-              ▼                                  ▼
- ┌─────────────────────────┐       ┌────────────────────────┐
- │ Grounded Research       │       │ Compaction Guide       │
- │ & Docs Subagents        │       │ Subagent               │
- │ - Context7 MCP access   │       │ - Analyze session      │
- │ - Web search verification│       │ - Recommend what to    │
- │ - Provide guidance      │       │   preserve             │
- │ - Return recommendations│       │                        │
- │ - NO execution          │       │                        │
- └─────────────────────────┘       └────────────────────────┘
+    @research-subagent                  @compaction-guide
+    @docs-subagent                             │
+             │                                  │
+             ▼                                  ▼
+┌──────────────────────────┐      ┌─────────────────────────┐
+│ Grounded Research        │      │ Compaction Guide        │
+│ & Docs Subagents         │      │ Subagent                │
+│                          │      │                         │
+│ - Context7 MCP access    │      │ - Analyze session       │
+│ - Web search verification│      │ - Recommend what to     │
+│ - Provide guidance       │      │   preserve              │
+│ - Return recommendations │      │ - NO execution          │
+│ - NO execution           │      │                         │
+└──────────────────────────┘      └─────────────────────────┘
 ```
 
 ## Directory Structure
