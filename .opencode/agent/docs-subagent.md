@@ -1,5 +1,5 @@
 ---
-description: Documentation research and summarization subagent for frameworks, libraries, and APIs
+description: Documentation research and summarization subagent with Context7 MCP for frameworks, libraries, and APIs
 mode: subagent
 model: github-copilot/claude-opus-4.5
 temperature: 0.2
@@ -15,6 +15,7 @@ tools:
   webfetch: true
   websearch: true
   codesearch: true
+  mcp_context7: true
 ---
 
 # Documentation Subagent

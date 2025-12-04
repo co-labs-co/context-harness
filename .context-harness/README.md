@@ -27,17 +27,20 @@ ContextHarness solves the problem of context loss in long development sessions b
 │  - Invokes subagents for guidance                       │
 └────────────┬──────────────────────────────────┬─────────┘
              │                                  │
-      @research-subagent               @compaction-guide
-      @docs-subagent                          │
+    @research-subagent                  @compaction-guide
+    @docs-subagent                             │
              │                                  │
              ▼                                  ▼
-┌─────────────────────────┐       ┌────────────────────────┐
-│ Research & Docs         │       │ Compaction Guide       │
-│ Subagents               │       │ Subagent               │
-│ - Provide guidance      │       │ - Analyze session      │
-│ - Return recommendations│       │ - Recommend preserve   │
-│ - NO execution          │       │ - NO execution         │
-└─────────────────────────┘       └────────────────────────┘
+┌──────────────────────────┐      ┌─────────────────────────┐
+│ Grounded Research        │      │ Compaction Guide        │
+│ & Docs Subagents         │      │ Subagent                │
+│                          │      │                         │
+│ - Context7 MCP access    │      │ - Analyze session       │
+│ - Web search verification│      │ - Recommend preserve    │
+│ - Provide guidance       │      │ - NO execution          │
+│ - Return recommendations │      │                         │
+│ - NO execution           │      │                         │
+└──────────────────────────┘      └─────────────────────────┘
 ```
 
 ## Directory Structure
@@ -136,11 +139,18 @@ The Primary Agent is the sole executor in the framework. It:
 **Role**: Advisory  
 **Authority**: None (guidance only)
 
-Provides research guidance on:
-- Best practices and patterns
-- API documentation and usage
-- Technology comparisons
-- Implementation approaches
+Provides grounded research guidance using Context7 MCP and web search:
+- **Context7 MCP**: Up-to-date documentation for popular libraries/frameworks
+- **Web Search**: Real-time information lookup and verification
+- **Best Practices**: Current patterns and approaches
+- **API Documentation**: Accurate, version-specific usage
+- **Technology Comparisons**: Informed analysis with sources
+
+**Enhanced Capabilities**:
+- All responses are grounded in verifiable sources
+- Cross-references information from Context7, web search, and official docs
+- Includes version information and compatibility notes
+- Cites sources with verification dates
 
 **Example**:
 ```
