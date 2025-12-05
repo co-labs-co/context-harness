@@ -6,6 +6,12 @@ from rich.panel import Panel
 
 from context_harness import __version__
 from context_harness.installer import install_framework, InstallResult
+from context_harness.mcp_config import (
+    add_mcp_server,
+    list_mcp_servers,
+    get_available_servers,
+    MCPResult,
+)
 
 console = Console()
 
@@ -62,9 +68,8 @@ def init(force: bool, target: str):
         console.print()
         console.print("[bold]Next steps:[/bold]")
         console.print(
-            "  1. (Optional) Add Context7 MCP to opencode.json for doc lookups"
+            "  1. (Optional) Add Context7 MCP: [cyan]context-harness mcp add context7[/cyan]"
         )
-        console.print("     [dim]See: https://github.com/upstash/context7[/dim]")
         console.print(
             "  2. Start a session: [cyan]@context-harness /ctx my-feature[/cyan]"
         )
@@ -78,6 +83,111 @@ def init(force: bool, target: str):
     elif result == InstallResult.ERROR:
         console.print("[red]❌ Failed to initialize ContextHarness.[/red]")
         raise SystemExit(1)
+
+
+@main.group()
+def mcp():
+    """Manage MCP server configurations in opencode.json.
+
+    Add, list, and configure MCP servers for enhanced AI capabilities.
+    """
+    pass
+
+
+@mcp.command("add")
+@click.argument("server", type=click.Choice(get_available_servers()))
+@click.option(
+    "--api-key",
+    "-k",
+    default=None,
+    help="API key for the MCP server (optional, enables higher rate limits).",
+)
+@click.option(
+    "--target",
+    "-t",
+    default=".",
+    type=click.Path(),
+    help="Target directory containing opencode.json (default: current directory).",
+)
+def mcp_add(server: str, api_key: str, target: str):
+    """Add an MCP server to opencode.json.
+
+    Configures the specified MCP server in your project's opencode.json file.
+    If opencode.json doesn't exist, it will be created.
+
+    Available servers: context7
+
+    Examples:
+
+        context-harness mcp add context7
+
+        context-harness mcp add context7 --api-key YOUR_API_KEY
+
+        context-harness mcp add context7 --target ./my-project
+    """
+    console.print()
+    console.print(
+        Panel.fit(
+            "[bold blue]ContextHarness[/bold blue] MCP Configuration",
+            subtitle=f"v{__version__}",
+        )
+    )
+    console.print()
+
+    result = add_mcp_server(server, target=target, api_key=api_key)
+
+    if result == MCPResult.SUCCESS:
+        console.print()
+        console.print("[bold]MCP server configured![/bold]")
+        _print_mcp_usage_tips(server)
+    elif result == MCPResult.UPDATED:
+        console.print()
+        console.print("[bold]MCP server added to existing config![/bold]")
+        _print_mcp_usage_tips(server)
+    elif result == MCPResult.ALREADY_EXISTS:
+        raise SystemExit(0)  # Not an error, just informational
+    elif result == MCPResult.ERROR:
+        console.print("[red]❌ Failed to configure MCP server.[/red]")
+        raise SystemExit(1)
+
+
+@mcp.command("list")
+@click.option(
+    "--target",
+    "-t",
+    default=".",
+    type=click.Path(),
+    help="Target directory containing opencode.json (default: current directory).",
+)
+def mcp_list(target: str):
+    """List configured MCP servers from opencode.json.
+
+    Shows all MCP servers currently configured in the project's opencode.json.
+
+    Examples:
+
+        context-harness mcp list
+
+        context-harness mcp list --target ./my-project
+    """
+    console.print()
+    list_mcp_servers(target=target)
+    console.print()
+
+
+def _print_mcp_usage_tips(server: str) -> None:
+    """Print usage tips for the configured MCP server."""
+    if server == "context7":
+        console.print()
+        console.print("[dim]Context7 provides documentation lookup capabilities.[/dim]")
+        console.print(
+            "[dim]The agent can now fetch up-to-date docs for libraries.[/dim]"
+        )
+        console.print()
+        console.print("[bold]Available tools:[/bold]")
+        console.print("  • resolve-library-id - Find library documentation IDs")
+        console.print("  • get-library-docs - Fetch documentation for a library")
+        console.print()
 
 
 if __name__ == "__main__":
