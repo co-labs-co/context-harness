@@ -292,32 +292,44 @@ def resource():
 
 ## Context7 MCP Integration
 
+### Usage Tips (IMPORTANT)
+
+1. **Invoke Context7 explicitly**: Add "use context7" to your queries for explicit invocation
+2. **Library resolution first**: Always resolve the library ID before fetching docs:
+   - Use `context7_resolve-library-id` to find the correct library ID
+   - Then use `context7_get-library-docs` with that ID
+3. **Version awareness**: Context7 tracks library versions - include version in queries when relevant
+
+### Available Tools
+
+| Tool | Purpose | When to Use |
+|------|---------|-------------|
+| `context7_resolve-library-id` | Find library ID from name | First step - always resolve ID before fetching docs |
+| `context7_get-library-docs` | Fetch documentation | After resolving library ID, use to get actual docs |
+
+### Workflow Example
+
+```
+Step 1: Resolve library ID
+→ context7_resolve-library-id("flask-limiter")
+← Returns: 'flask-limiter-v3.5.0'
+
+Step 2: Fetch documentation  
+→ context7_get-library-docs("flask-limiter-v3.5.0", topic="rate limiting")
+← Returns: Relevant documentation sections
+```
+
 ### Supported Libraries
-Context7 MCP provides up-to-date documentation for:
-- **Web Frameworks**: Flask, Django, FastAPI, Express, Next.js, React
-- **Databases**: PostgreSQL, MongoDB, Redis, SQLAlchemy
+Context7 provides documentation for popular libraries including:
+- **Web Frameworks**: Flask, Django, FastAPI, Express, Next.js, React, Vue, Angular
+- **Databases**: PostgreSQL, MongoDB, Redis, SQLAlchemy, Prisma
 - **Cloud Services**: AWS SDK, Google Cloud, Azure SDK
 - **Languages**: Python, JavaScript/TypeScript, Go, Rust
-- **Tools**: Docker, Kubernetes, Terraform
-
-### Context7 Query Patterns
-```
-For API documentation:
-"[Library] [method/class] documentation"
-
-For best practices:
-"[Library] best practices for [feature]"
-
-For configuration:
-"[Library] configuration for [scenario]"
-
-For troubleshooting:
-"[Library] [error] solution"
-```
+- **Tools**: Docker, Kubernetes, Terraform, GitHub Actions
 
 ### When Context7 is Not Available
-- Fall back to web search for recent libraries
-- Use official documentation links
+- Fall back to web search for recent or unsupported libraries
+- Use official documentation links via webfetch
 - Note that information may be less current
 
 ---
