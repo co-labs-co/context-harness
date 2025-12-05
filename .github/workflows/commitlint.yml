@@ -4,10 +4,11 @@ on:
   pull_request:
     branches:
       - main
+    types: [opened, edited, synchronize, reopened]
 
 jobs:
   commitlint:
-    name: Validate PR Commits
+    name: Validate PR Title
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -23,5 +24,7 @@ jobs:
       - name: Install dependencies
         run: npm clean-install
 
-      - name: Validate all commits in PR
-        run: npx commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
+      - name: Validate PR title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: echo "$PR_TITLE" | npx commitlint --verbose
