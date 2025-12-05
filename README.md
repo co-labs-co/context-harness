@@ -151,6 +151,21 @@ Provides documentation summaries, framework guides, and API references. **Adviso
 ### @compaction-guide
 Analyzes current work and recommends what to preserve during compaction. **Advisory only—does not execute.**
 
+## Customization
+
+All agent behaviors are defined in markdown files. Customize them to fit your workflow:
+
+| Agent | Source File | Purpose |
+|-------|-------------|---------|
+| Primary Agent | [`context-harness.md`](scripts/context-harness-cli/src/context_harness/templates/.opencode/agent/context-harness.md) | Main executor, session management, compaction triggers |
+| Research Subagent | [`research-subagent.md`](scripts/context-harness-cli/src/context_harness/templates/.opencode/agent/research-subagent.md) | API lookups, best practices, grounded research |
+| Docs Subagent | [`docs-subagent.md`](scripts/context-harness-cli/src/context_harness/templates/.opencode/agent/docs-subagent.md) | Documentation summaries, framework guides |
+| Compaction Guide | [`compaction-guide.md`](scripts/context-harness-cli/src/context_harness/templates/.opencode/agent/compaction-guide.md) | Context preservation recommendations |
+
+**Other customizable files:**
+- [`session-template.md`](scripts/context-harness-cli/src/context_harness/templates/.context-harness/templates/session-template.md) - Template for new SESSION.md files
+- [`.context-harness/README.md`](scripts/context-harness-cli/src/context_harness/templates/.context-harness/README.md) - Framework documentation installed with each project
+
 ## Best Practices
 
 1. **Use meaningful session names** - Makes it easy to find and resume work
