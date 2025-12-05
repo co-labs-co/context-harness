@@ -5,7 +5,11 @@ from rich.console import Console
 from rich.panel import Panel
 
 from context_harness import __version__
-from context_harness.installer import install_framework, InstallResult
+from context_harness.installer import (
+    install_framework,
+    install_from_github,
+    InstallResult,
+)
 from context_harness.mcp_config import (
     add_mcp_server,
     list_mcp_servers,
@@ -38,7 +42,13 @@ def main():
     type=click.Path(),
     help="Target directory for installation (default: current directory).",
 )
-def init(force: bool, target: str):
+@click.option(
+    "--ref",
+    "-r",
+    default=None,
+    help="Install from a specific git ref (branch, tag, or commit). Uses GitHub raw content.",
+)
+def init(force: bool, target: str, ref: str):
     """Initialize ContextHarness in your project.
 
     Creates the .context-harness/ and .opencode/agent/ directories with all
@@ -51,6 +61,8 @@ def init(force: bool, target: str):
         context-harness init --target ./my-project
 
         context-harness init --force
+
+        context-harness init --ref feature/rlm-agent-pattern
     """
     console.print()
     console.print(
@@ -61,7 +73,13 @@ def init(force: bool, target: str):
     )
     console.print()
 
-    result = install_framework(target, force=force)
+    # Use GitHub installation if --ref is specified
+    if ref:
+        console.print(f"[cyan]Installing from GitHub ref: {ref}[/cyan]")
+        console.print()
+        result = install_from_github(target, ref=ref, force=force)
+    else:
+        result = install_framework(target, force=force)
 
     if result == InstallResult.SUCCESS:
         console.print("[green]✅ ContextHarness initialized successfully![/green]")
@@ -75,6 +93,15 @@ def init(force: bool, target: str):
         )
         console.print("  3. Work normally - the agent handles execution")
         console.print("  4. Compact when ready: [cyan]/compact[/cyan]")
+        if ref:
+            console.print()
+            console.print("[bold]RLM Agents (Experimental):[/bold]")
+            console.print(
+                "  • Start RLM orchestrator: [cyan]opencode --agent rlm-orchestrator[/cyan]"
+            )
+            console.print(
+                "  • Or invoke directly: [cyan]@rlm-orchestrator Query: ... Context: ...[/cyan]"
+            )
         console.print()
     elif result == InstallResult.ALREADY_EXISTS:
         console.print("[yellow]⚠️  ContextHarness files already exist.[/yellow]")
