@@ -88,7 +88,7 @@ The session file is always named `SESSION.md` for consistency.
 6. Initialize `user_interaction_count = 0`
 
 **SESSION SWITCHING**:
-- User can switch sessions with: `/session {session-name}`
+- User can switch sessions with: `/ctx {session-name}`
 - Current session is compacted before switching
 - New session is loaded or created
 
@@ -205,14 +205,14 @@ Now respond to the user's original message with full context
 
 | Command | Description |
 |---------|-------------|
-| `/session {name}` | Switch to or create a session |
-| `/sessions` | List all available sessions |
+| `/ctx {name}` | Switch to or create a session |
+| `/contexts` | List all available sessions |
 | `/compact` | Manually trigger compaction for current session |
 
 ### On Activation (Session Start)
 
 ```
-1. User invokes with session name: @context-harness /session {session-name}
+1. User invokes with session name: @context-harness /ctx {session-name}
    OR user provides session context naturally: "Let's work on TICKET-1234"
 2. Parse session identifier from user message
 3. Check for .context-harness/sessions/{session-name}/SESSION.md
@@ -230,7 +230,7 @@ Now respond to the user's original message with full context
 
 ### List Sessions
 
-When user requests `/sessions`:
+When user requests `/contexts`:
 ```
 1. List all directories in .context-harness/sessions/
 2. For each, read SESSION.md metadata (last updated, status)

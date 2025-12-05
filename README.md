@@ -30,8 +30,8 @@ This creates the `.context-harness/` and `.opencode/agent/` directories with all
 ### 1. Start a Session
 
 ```
-@context-harness /session login-feature
-@context-harness /session TICKET-1234
+@context-harness /ctx login-feature
+@context-harness /ctx TICKET-1234
 ```
 
 ### 2. Work Normally
@@ -50,8 +50,8 @@ Or select the compaction option from "What's Next?" suggestions.
 ### 4. Switch Sessions
 
 ```
-/session api-rate-limiting
-/sessions  # List all sessions
+/ctx api-rate-limiting
+/contexts  # List all sessions
 ```
 
 ## Architecture
@@ -109,8 +109,8 @@ context-harness/
 
 | Command | Description |
 |---------|-------------|
-| `/session {name}` | Switch to or create a named session |
-| `/sessions` | List all available sessions |
+| `/ctx {name}` | Switch to or create a named session |
+| `/contexts` | List all available sessions |
 | `/compact` | Save current context to SESSION.md |
 
 ## Session Naming

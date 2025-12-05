@@ -63,7 +63,7 @@ def init(force: bool, target: str):
         console.print("[bold]Next steps:[/bold]")
         console.print("  1. Configure Context7 MCP in opencode.json (optional)")
         console.print(
-            "  2. Start a session: [cyan]@context-harness /session my-feature[/cyan]"
+            "  2. Start a session: [cyan]@context-harness /ctx my-feature[/cyan]"
         )
         console.print("  3. Work normally - the agent handles execution")
         console.print("  4. Compact when ready: [cyan]/compact[/cyan]")
