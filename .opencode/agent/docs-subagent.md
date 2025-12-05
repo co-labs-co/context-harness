@@ -302,6 +302,50 @@ export async function GET(
 
 ---
 
+## Context7 MCP Integration
+
+### Usage Tips (IMPORTANT)
+
+1. **Invoke Context7 explicitly**: Add "use context7" to your queries for explicit invocation
+2. **Library resolution first**: Always resolve the library ID before fetching docs:
+   - Use `context7_resolve-library-id` to find the correct library ID
+   - Then use `context7_get-library-docs` with that ID
+3. **Version awareness**: Context7 tracks library versions - include version in queries when relevant
+
+### Available Tools
+
+| Tool | Purpose | When to Use |
+|------|---------|-------------|
+| `context7_resolve-library-id` | Find library ID from name | First step - always resolve ID before fetching docs |
+| `context7_get-library-docs` | Fetch documentation | After resolving library ID, use to get actual docs |
+
+### Workflow Example
+
+```
+Step 1: Resolve library ID
+→ context7_resolve-library-id("nextjs")
+← Returns: library ID for Next.js
+
+Step 2: Fetch documentation  
+→ context7_get-library-docs(libraryId, topic="app router")
+← Returns: Relevant documentation sections
+```
+
+### Supported Libraries
+Context7 provides documentation for popular libraries including:
+- **Web Frameworks**: Flask, Django, FastAPI, Express, Next.js, React, Vue, Angular
+- **Databases**: PostgreSQL, MongoDB, Redis, SQLAlchemy, Prisma
+- **Cloud Services**: AWS SDK, Google Cloud, Azure SDK
+- **Languages**: Python, JavaScript/TypeScript, Go, Rust
+- **Tools**: Docker, Kubernetes, Terraform, GitHub Actions
+
+### When Context7 is Not Available
+- Fall back to `webfetch` for official documentation URLs
+- Use `websearch` to find current documentation links
+- Note when information may be less current or unverified
+
+---
+
 ## Error Handling
 
 ### If Asked to Execute
