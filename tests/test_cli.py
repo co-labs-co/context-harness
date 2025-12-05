@@ -1,5 +1,8 @@
 """Tests for the CLI module."""
 
+import os
+from pathlib import Path
+
 import pytest
 from click.testing import CliRunner
 
@@ -107,9 +110,6 @@ class TestInitCommand:
 
     def test_init_current_directory(self, runner, tmp_path):
         """Test that init works in current directory by default."""
-        import os
-        from pathlib import Path
-
         with runner.isolated_filesystem(temp_dir=tmp_path):
             result = runner.invoke(main, ["init"])
             assert result.exit_code == 0

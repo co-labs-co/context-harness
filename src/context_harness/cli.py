@@ -61,7 +61,10 @@ def init(force: bool, target: str):
         console.print("[green]✅ ContextHarness initialized successfully![/green]")
         console.print()
         console.print("[bold]Next steps:[/bold]")
-        console.print("  1. Configure Context7 MCP in opencode.json (optional)")
+        console.print(
+            "  1. (Optional) Add Context7 MCP to opencode.json for doc lookups"
+        )
+        console.print("     [dim]See: https://github.com/upstash/context7[/dim]")
         console.print(
             "  2. Start a session: [cyan]@context-harness /ctx my-feature[/cyan]"
         )

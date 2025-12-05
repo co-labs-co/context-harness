@@ -22,6 +22,41 @@ def get_templates_dir() -> Path:
     return Path(__file__).parent / "templates"
 
 
+# Required template files for a valid installation
+REQUIRED_TEMPLATE_FILES = [
+    ".context-harness/README.md",
+    ".context-harness/templates/session-template.md",
+    ".opencode/agent/context-harness.md",
+    ".opencode/agent/compaction-guide.md",
+    ".opencode/agent/docs-subagent.md",
+    ".opencode/agent/research-subagent.md",
+]
+
+
+def validate_templates(templates_dir: Path, quiet: bool = False) -> list[str]:
+    """Validate that all required template files exist.
+
+    Args:
+        templates_dir: Path to the templates directory
+        quiet: If True, suppress output messages
+
+    Returns:
+        List of missing files (empty if all present)
+    """
+    missing = []
+    for file_path in REQUIRED_TEMPLATE_FILES:
+        if not (templates_dir / file_path).exists():
+            missing.append(file_path)
+
+    if missing and not quiet:
+        console.print("[red]Error: Bundled templates are incomplete.[/red]")
+        console.print("[red]Missing files:[/red]")
+        for f in missing:
+            console.print(f"[red]  - {f}[/red]")
+
+    return missing
+
+
 def install_framework(
     target: str, force: bool = False, quiet: bool = False
 ) -> InstallResult:
@@ -44,6 +79,11 @@ def install_framework(
             console.print(
                 f"[red]Error: Templates directory not found at {templates_dir}[/red]"
             )
+        return InstallResult.ERROR
+
+    # Validate template structure
+    missing_files = validate_templates(templates_dir, quiet=quiet)
+    if missing_files:
         return InstallResult.ERROR
 
     # Define target directories
