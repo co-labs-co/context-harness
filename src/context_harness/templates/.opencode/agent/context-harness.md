@@ -110,6 +110,9 @@ The session file is always named `SESSION.md` for consistency.
 | Research | General research, API lookups, best practices | `@research-subagent` |
 | Documentation | Doc research, summarization, link compilation | `@docs-subagent` |
 | Compaction Guide | Context preservation recommendations | `@compaction-guide` |
+| Baseline Discovery | Analyze directory, language, tools, dependencies | `@baseline-discovery` |
+| Baseline Questions | Generate and score project analysis questions | `@baseline-questions` |
+| Baseline Answers | Answer questions and generate PROJECT-CONTEXT.md | `@baseline-answers` |
 
 ### Invocation Format
 
@@ -208,6 +211,8 @@ Now respond to the user's original message with full context
 | `/ctx {name}` | Switch to or create a session |
 | `/contexts` | List all available sessions |
 | `/compact` | Manually trigger compaction for current session |
+| `/baseline` | Analyze project and generate PROJECT-CONTEXT.md |
+| `/baseline --full` | Force full regeneration (ignore existing context) |
 
 ### On Activation (Session Start)
 
@@ -279,6 +284,233 @@ I'm ready to continue. What would you like me to work on?
 Session path: .context-harness/sessions/{session-name}/SESSION.md
 
 What would you like me to work on?
+```
+
+---
+
+## /baseline Command Workflow
+
+The `/baseline` command generates comprehensive project context by running a 3-phase analysis.
+
+### Command Variants
+
+| Command | Behavior |
+|---------|----------|
+| `/baseline` | Incremental mode - updates existing PROJECT-CONTEXT.md |
+| `/baseline --full` | Full regeneration - ignores existing context |
+
+### Output Locations
+
+```
+.context-harness/
+├── baseline/
+│   ├── discovery-report.json      # Phase 1 output (kept for debugging)
+│   └── validated-questions.json   # Phase 2 output (kept for debugging)
+└── PROJECT-CONTEXT.md             # Final output (Phase 3)
+```
+
+### Phase 1: Discovery
+
+**Invoke**: `@baseline-discovery`
+
+**Purpose**: Analyze the codebase structure
+
+**Analyzes**:
+- Directory structure and organization
+- Primary language and frameworks
+- Build tools and toolchain
+- External dependencies (databases, queues, services)
+- Infrastructure patterns
+
+**Output**: `discovery-report.json`
+
+```
+🔍 Running baseline discovery...
+
+@baseline-discovery Analyze this project:
+- Working directory: {cwd}
+- Identify: structure, language, tools, external dependencies
+- Output: JSON discovery report
+
+[Receive discovery report]
+
+✅ Discovery complete
+   - Project: {name}
+   - Language: {primary}
+   - Framework: {framework}
+   - External deps: {count} identified
+
+Saving to .context-harness/baseline/discovery-report.json
+```
+
+### Phase 2: Question Generation
+
+**Invoke**: `@baseline-questions`
+
+**Purpose**: Generate insightful questions about the project
+
+**Process**:
+1. Generate 30-50 questions across categories:
+   - Architecture decisions
+   - External dependencies
+   - Code patterns
+   - Language/framework rationale
+   - Build & distribution
+   - Security & authentication
+   - Performance & scaling
+2. Score each question (0-10) on:
+   - Relevance
+   - Validity
+   - Helpfulness
+3. Filter: only questions with composite score >= 8.0
+4. Minimum 30 validated questions required
+
+**Output**: `validated-questions.json`
+
+```
+📋 Generating analysis questions...
+
+@baseline-questions Generate questions based on:
+{discovery-report.json content}
+
+[Receive questions report]
+
+✅ Questions generated
+   - Total generated: {X}
+   - Validated (score >= 8): {Y}
+   - Categories covered: {Z}
+
+Saving to .context-harness/baseline/validated-questions.json
+```
+
+### Phase 2 Regeneration (if needed)
+
+If fewer than 30 questions pass validation:
+
+```
+⚠️ Only {X} questions validated (minimum: 30)
+
+Regenerating with adjusted parameters...
+@baseline-questions Regenerate questions:
+- Previous attempt: {X} validated
+- Adjust: lower threshold to 7.5, focus on underrepresented categories
+- Discovery report: {discovery-report.json}
+
+[Retry up to 3 times]
+```
+
+### Phase 3: Answer Generation
+
+**Invoke**: `@baseline-answers`
+
+**Purpose**: Answer questions and compile PROJECT-CONTEXT.md
+
+**Process**:
+1. For each validated question:
+   - Search codebase for evidence
+   - Formulate answer with citations
+   - Rate confidence (High/Medium/Low)
+2. Compile into PROJECT-CONTEXT.md format
+3. Note unanswerable questions
+
+**Output**: `PROJECT-CONTEXT.md` content
+
+```
+📄 Answering questions and building context...
+
+@baseline-answers Answer these questions:
+{validated-questions.json content}
+
+Using discovery:
+{discovery-report.json content}
+
+[Receive PROJECT-CONTEXT.md content]
+
+✅ Answers generated
+   - Questions answered: {X}/{Y}
+   - High confidence: {A}
+   - Medium confidence: {B}
+   - Low confidence: {C}
+   - Unanswerable: {D}
+
+Writing to .context-harness/PROJECT-CONTEXT.md
+```
+
+### Full /baseline Execution Flow
+
+```
+User: /baseline
+
+Primary Agent:
+├── 1. Create .context-harness/baseline/ directory (if needed)
+├── 2. Check for existing PROJECT-CONTEXT.md (incremental mode)
+├── 3. PHASE 1: Invoke @baseline-discovery
+│   ├── Receive discovery-report.json
+│   └── Save to .context-harness/baseline/discovery-report.json
+├── 4. PHASE 2: Invoke @baseline-questions
+│   ├── Receive validated-questions.json
+│   ├── If < 30 validated: regenerate (up to 3 times)
+│   └── Save to .context-harness/baseline/validated-questions.json
+├── 5. PHASE 3: Invoke @baseline-answers
+│   ├── Receive PROJECT-CONTEXT.md content
+│   └── Write to .context-harness/PROJECT-CONTEXT.md
+└── 6. Report completion with summary
+
+Output:
+🎉 Baseline analysis complete!
+
+📄 PROJECT-CONTEXT.md generated:
+   - Location: .context-harness/PROJECT-CONTEXT.md
+   - Questions answered: 34/36
+   - High confidence: 28
+   - Categories: 7
+
+📁 Debug files preserved:
+   - .context-harness/baseline/discovery-report.json
+   - .context-harness/baseline/validated-questions.json
+
+Next steps:
+1. Review PROJECT-CONTEXT.md for accuracy
+2. Add team knowledge where answers are incomplete
+3. Use as reference for future development
+```
+
+### Incremental Mode
+
+When running `/baseline` with existing PROJECT-CONTEXT.md:
+
+```
+1. Load existing PROJECT-CONTEXT.md
+2. Run discovery to detect changes
+3. Generate questions only for changed areas
+4. Update answers for affected questions
+5. Merge with existing content
+6. Update timestamps and metadata
+```
+
+### Error Handling
+
+**Discovery Failure**:
+```
+IF @baseline-discovery fails or returns invalid JSON:
+    RETRY once with simplified request
+    IF still fails: Report error, abort baseline
+```
+
+**Question Minimum Not Met**:
+```
+IF validated_questions < 30 after 3 regeneration attempts:
+    PROCEED with available questions
+    WARN user that minimum was not met
+    NOTE in PROJECT-CONTEXT.md metadata
+```
+
+**Answer Phase Incomplete**:
+```
+IF @baseline-answers cannot answer questions:
+    INCLUDE unanswered questions in output
+    RECOMMEND manual documentation for gaps
+    PROCEED with partial context
 ```
 
 ---
