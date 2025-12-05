@@ -104,9 +104,11 @@ def _copy_preserving_sessions(source: Path, target: Path, force: bool) -> None:
     sessions_dir = target / "sessions"
     sessions_backup = None
 
-    # Backup sessions if they exist
+    # Backup sessions if they exist (backup OUTSIDE target directory)
     if sessions_dir.exists():
-        sessions_backup = target / "sessions.backup"
+        sessions_backup = target.parent / ".sessions.backup"
+        if sessions_backup.exists():
+            shutil.rmtree(sessions_backup)
         shutil.move(str(sessions_dir), str(sessions_backup))
 
     # Remove existing .context-harness (except sessions which we backed up)
