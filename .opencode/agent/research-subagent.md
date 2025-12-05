@@ -15,7 +15,7 @@ tools:
   webfetch: true
   websearch: true
   codesearch: true
-  mcp_context7: true
+  "context7*": true
 ---
 
 # Research Subagent
