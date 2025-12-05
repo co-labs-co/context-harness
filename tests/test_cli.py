@@ -1,5 +1,6 @@
 """Tests for the CLI module."""
 
+import json
 import os
 from pathlib import Path
 
@@ -166,3 +167,188 @@ class TestInitCommand:
         content = agent_file.read_text(encoding="utf-8")
         assert "Old agent content" not in content
         assert "ContextHarness" in content
+
+
+class TestMCPCommand:
+    """Tests for the mcp command group."""
+
+    def test_mcp_help(self, runner):
+        """Test that mcp --help works."""
+        result = runner.invoke(main, ["mcp", "--help"])
+        assert result.exit_code == 0
+        assert "Manage MCP server configurations" in result.output
+
+    def test_mcp_add_help(self, runner):
+        """Test that mcp add --help works."""
+        result = runner.invoke(main, ["mcp", "add", "--help"])
+        assert result.exit_code == 0
+        assert "Add an MCP server" in result.output
+        assert "--api-key" in result.output
+        assert "--target" in result.output
+
+    def test_mcp_list_help(self, runner):
+        """Test that mcp list --help works."""
+        result = runner.invoke(main, ["mcp", "list", "--help"])
+        assert result.exit_code == 0
+        assert "List configured MCP servers" in result.output
+        assert "--target" in result.output
+
+    def test_mcp_add_context7_creates_opencode_json(self, runner, tmp_path):
+        """Test that mcp add context7 creates opencode.json."""
+        result = runner.invoke(
+            main, ["mcp", "add", "context7", "--target", str(tmp_path)]
+        )
+        assert result.exit_code == 0
+
+        config_path = tmp_path / "opencode.json"
+        assert config_path.is_file()
+
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        assert "$schema" in config
+        assert "mcp" in config
+        assert "context7" in config["mcp"]
+        assert config["mcp"]["context7"]["type"] == "remote"
+        assert "context7.com" in config["mcp"]["context7"]["url"]
+
+    def test_mcp_add_context7_with_api_key(self, runner, tmp_path):
+        """Test that mcp add context7 --api-key adds the API key."""
+        result = runner.invoke(
+            main,
+            [
+                "mcp",
+                "add",
+                "context7",
+                "--api-key",
+                "test-key-123",
+                "--target",
+                str(tmp_path),
+            ],
+        )
+        assert result.exit_code == 0
+
+        config_path = tmp_path / "opencode.json"
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+
+        assert "headers" in config["mcp"]["context7"]
+        assert (
+            config["mcp"]["context7"]["headers"]["CONTEXT7_API_KEY"] == "test-key-123"
+        )
+
+    def test_mcp_add_preserves_existing_config(self, runner, tmp_path):
+        """Test that mcp add preserves existing opencode.json content."""
+        # Create existing opencode.json with custom settings
+        config_path = tmp_path / "opencode.json"
+        existing_config = {
+            "$schema": "https://opencode.ai/config.json",
+            "theme": "dark",
+            "mcp": {
+                "other-server": {"type": "local", "command": ["some-cmd"]},
+            },
+        }
+        config_path.write_text(json.dumps(existing_config, indent=2), encoding="utf-8")
+
+        result = runner.invoke(
+            main, ["mcp", "add", "context7", "--target", str(tmp_path)]
+        )
+        assert result.exit_code == 0
+
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+
+        # Verify existing content preserved
+        assert config["theme"] == "dark"
+        assert "other-server" in config["mcp"]
+
+        # Verify context7 added
+        assert "context7" in config["mcp"]
+
+    def test_mcp_add_already_exists_same_config(self, runner, tmp_path):
+        """Test that mcp add detects existing identical config."""
+        # First add
+        runner.invoke(main, ["mcp", "add", "context7", "--target", str(tmp_path)])
+
+        # Second add (should report already exists)
+        result = runner.invoke(
+            main, ["mcp", "add", "context7", "--target", str(tmp_path)]
+        )
+        assert result.exit_code == 0
+        assert "already configured" in result.output
+
+    def test_mcp_add_updates_existing_config(self, runner, tmp_path):
+        """Test that mcp add updates config when adding API key."""
+        # First add without API key
+        runner.invoke(main, ["mcp", "add", "context7", "--target", str(tmp_path)])
+
+        # Second add with API key (should update)
+        result = runner.invoke(
+            main,
+            [
+                "mcp",
+                "add",
+                "context7",
+                "--api-key",
+                "new-key",
+                "--target",
+                str(tmp_path),
+            ],
+        )
+        assert result.exit_code == 0
+
+        config_path = tmp_path / "opencode.json"
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+
+        assert "headers" in config["mcp"]["context7"]
+        assert config["mcp"]["context7"]["headers"]["CONTEXT7_API_KEY"] == "new-key"
+
+    def test_mcp_list_empty(self, runner, tmp_path):
+        """Test that mcp list handles missing opencode.json."""
+        result = runner.invoke(main, ["mcp", "list", "--target", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "No opencode.json found" in result.output
+
+    def test_mcp_list_shows_configured_servers(self, runner, tmp_path):
+        """Test that mcp list shows configured servers."""
+        # Add context7
+        runner.invoke(main, ["mcp", "add", "context7", "--target", str(tmp_path)])
+
+        result = runner.invoke(main, ["mcp", "list", "--target", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "context7" in result.output
+        assert "remote" in result.output
+
+    def test_mcp_list_shows_api_key_indicator(self, runner, tmp_path):
+        """Test that mcp list shows indicator when API key is configured."""
+        # Add context7 with API key
+        runner.invoke(
+            main,
+            [
+                "mcp",
+                "add",
+                "context7",
+                "--api-key",
+                "test-key",
+                "--target",
+                str(tmp_path),
+            ],
+        )
+
+        result = runner.invoke(main, ["mcp", "list", "--target", str(tmp_path)])
+        assert result.exit_code == 0
+        # The key indicator emoji should be present
+        assert "🔑" in result.output
+
+    def test_mcp_add_invalid_server(self, runner, tmp_path):
+        """Test that mcp add rejects unknown server names."""
+        result = runner.invoke(
+            main, ["mcp", "add", "unknown-server", "--target", str(tmp_path)]
+        )
+        # Click should reject the invalid choice
+        assert result.exit_code != 0
+
+    def test_mcp_current_directory(self, runner, tmp_path):
+        """Test that mcp add works in current directory by default."""
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            result = runner.invoke(main, ["mcp", "add", "context7"])
+            assert result.exit_code == 0
+
+            cwd = Path(os.getcwd())
+            assert (cwd / "opencode.json").is_file()
