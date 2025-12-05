@@ -29,7 +29,7 @@ def install_framework(
 
     Args:
         target: Target directory path
-        force: If True, overwrite existing files
+        force: If True, overwrite existing files (preserves sessions/)
         quiet: If True, suppress output messages
 
     Returns:
@@ -56,23 +56,24 @@ def install_framework(
             return InstallResult.ALREADY_EXISTS
 
     try:
-        # Copy .context-harness directory
+        # Copy .context-harness directory (preserving sessions/)
         context_harness_source = templates_dir / ".context-harness"
         if context_harness_source.exists():
             if not quiet:
-                console.print(f"[dim]Creating .context-harness/ ...[/dim]")
-            if context_harness_target.exists() and force:
-                shutil.rmtree(context_harness_target)
-            shutil.copytree(context_harness_source, context_harness_target)
+                console.print("[dim]Updating .context-harness/ ...[/dim]")
+            _copy_preserving_sessions(
+                context_harness_source, context_harness_target, force
+            )
 
-        # Copy .opencode directory
+        # Copy .opencode directory (full replacement is safe - no user data)
         opencode_source = templates_dir / ".opencode"
         if opencode_source.exists():
             if not quiet:
-                console.print(f"[dim]Creating .opencode/agent/ ...[/dim]")
+                console.print("[dim]Updating .opencode/agent/ ...[/dim]")
             if opencode_target.exists() and force:
                 shutil.rmtree(opencode_target)
-            shutil.copytree(opencode_source, opencode_target)
+            if not opencode_target.exists():
+                shutil.copytree(opencode_source, opencode_target)
 
         if not quiet:
             console.print()
@@ -90,6 +91,39 @@ def install_framework(
         if not quiet:
             console.print(f"[red]Error: {e}[/red]")
         return InstallResult.ERROR
+
+
+def _copy_preserving_sessions(source: Path, target: Path, force: bool) -> None:
+    """Copy .context-harness directory while preserving sessions/.
+
+    Args:
+        source: Source template directory
+        target: Target installation directory
+        force: Whether to overwrite existing files
+    """
+    sessions_dir = target / "sessions"
+    sessions_backup = None
+
+    # Backup sessions if they exist
+    if sessions_dir.exists():
+        sessions_backup = target / "sessions.backup"
+        shutil.move(str(sessions_dir), str(sessions_backup))
+
+    # Remove existing .context-harness (except sessions which we backed up)
+    if target.exists() and force:
+        shutil.rmtree(target)
+
+    # Copy fresh template
+    if not target.exists():
+        shutil.copytree(source, target)
+
+    # Restore sessions
+    if sessions_backup and sessions_backup.exists():
+        # Remove empty sessions dir from template if it exists
+        new_sessions_dir = target / "sessions"
+        if new_sessions_dir.exists():
+            shutil.rmtree(new_sessions_dir)
+        shutil.move(str(sessions_backup), str(new_sessions_dir))
 
 
 def _print_created_files(target_path: Path) -> None:

@@ -91,14 +91,22 @@ jobs:
 
       - name: Test idempotency with --force
         run: |
-          # Run init again with --force (should succeed)
+          # Create a session that should be preserved
+          mkdir -p /tmp/test-project/.context-harness/sessions/my-feature
+          echo "# Important session data" > /tmp/test-project/.context-harness/sessions/my-feature/SESSION.md
+          
+          # Run init again with --force (should succeed and preserve sessions)
           uvx --from dist/*.whl context-harness init --target /tmp/test-project --force
           
-          # Verify files still exist
+          # Verify framework files were updated
           test -f /tmp/test-project/.context-harness/README.md
           test -f /tmp/test-project/.opencode/agent/context-harness.md
           
-          echo "✅ Idempotency test passed!"
+          # Verify session was preserved
+          test -f /tmp/test-project/.context-harness/sessions/my-feature/SESSION.md
+          grep -q "Important session data" /tmp/test-project/.context-harness/sessions/my-feature/SESSION.md
+          
+          echo "✅ Idempotency test passed - sessions preserved!"
 
       - name: Test failure without --force
         run: |

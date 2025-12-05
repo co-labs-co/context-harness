@@ -125,3 +125,44 @@ class TestInitCommand:
         assert "ContextHarness" in result.output
         assert "successfully" in result.output
         assert "Next steps" in result.output
+
+    def test_init_force_preserves_sessions(self, runner, tmp_path):
+        """Test that init --force preserves existing sessions."""
+        # First init
+        result = runner.invoke(main, ["init", "--target", str(tmp_path)])
+        assert result.exit_code == 0
+
+        # Create a session with some content
+        sessions_dir = tmp_path / ".context-harness" / "sessions" / "my-feature"
+        sessions_dir.mkdir(parents=True)
+        session_file = sessions_dir / "SESSION.md"
+        session_file.write_text("# My important session data\n", encoding="utf-8")
+
+        # Run init --force (should preserve sessions)
+        result = runner.invoke(main, ["init", "--force", "--target", str(tmp_path)])
+        assert result.exit_code == 0
+
+        # Verify session was preserved
+        assert sessions_dir.is_dir()
+        assert session_file.is_file()
+        content = session_file.read_text(encoding="utf-8")
+        assert "My important session data" in content
+
+    def test_init_force_updates_agent_files(self, runner, tmp_path):
+        """Test that init --force updates agent files to latest version."""
+        # First init
+        result = runner.invoke(main, ["init", "--target", str(tmp_path)])
+        assert result.exit_code == 0
+
+        # Modify an agent file (simulating old version)
+        agent_file = tmp_path / ".opencode" / "agent" / "context-harness.md"
+        agent_file.write_text("# Old agent content\n", encoding="utf-8")
+
+        # Run init --force (should update agent files)
+        result = runner.invoke(main, ["init", "--force", "--target", str(tmp_path)])
+        assert result.exit_code == 0
+
+        # Verify agent file was updated
+        content = agent_file.read_text(encoding="utf-8")
+        assert "Old agent content" not in content
+        assert "ContextHarness" in content
