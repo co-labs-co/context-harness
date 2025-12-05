@@ -153,12 +153,49 @@ Analyzes current work and recommends what to preserve during compaction. **Advis
 
 - [OpenCode.ai](https://opencode.ai) with agent support
 - GitHub CLI (`gh`) for repository operations (optional)
+- **Context7 MCP** (required for grounded research capabilities)
+
+### Context7 MCP Setup
+
+The research and documentation subagents require [Context7 MCP](https://github.com/upstash/context7) for accurate, up-to-date library documentation. Add the following to your `opencode.json`:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp"
+    }
+  }
+}
+```
+
+**With API key** (optional, for higher rate limits):
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp",
+      "headers": {
+        "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+Sign up for a free Context7 API key at [context7.com](https://context7.com) for increased rate limits.
 
 ## Installation
 
 1. Clone this repository into your project or use it as a template
-2. The `.opencode/agent/` directory contains the agent definitions
-3. Invoke `@context-harness` to start working
+2. Add Context7 MCP to your `opencode.json` (see above)
+3. The `.opencode/agent/` directory contains the agent definitions
+4. Invoke `@context-harness` to start working
 
 ## How It Differs from Other Approaches
 
