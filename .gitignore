@@ -16,9 +16,9 @@ Thumbs.db
 *.log
 npm-debug.log*
 
-# Lock files (keep bun.lock if using bun)
-package-lock.json
+# Lock files (keep package-lock.json for CI reproducibility)
 yarn.lock
+pnpm-lock.yaml
 
 # Environment files
 .env

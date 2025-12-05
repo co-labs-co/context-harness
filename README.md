@@ -17,11 +17,21 @@ ContextHarness solves this by:
 
 ## Quick Start
 
+### Install
+
+Requires [uv](https://docs.astral.sh/uv/). Run this in your project directory:
+
+```bash
+uvx --from "git+https://github.com/cmtzco/context-harness.git" context-harness init
+```
+
+This creates the `.context-harness/` and `.opencode/agent/` directories with all framework files.
+
 ### 1. Start a Session
 
 ```
-@context-harness /session login-feature
-@context-harness /session TICKET-1234
+@context-harness /ctx login-feature
+@context-harness /ctx TICKET-1234
 ```
 
 ### 2. Work Normally
@@ -40,8 +50,8 @@ Or select the compaction option from "What's Next?" suggestions.
 ### 4. Switch Sessions
 
 ```
-/session api-rate-limiting
-/sessions  # List all sessions
+/ctx api-rate-limiting
+/contexts  # List all sessions
 ```
 
 ## Architecture
@@ -73,34 +83,31 @@ Or select the compaction option from "What's Next?" suggestions.
 
 ## Directory Structure
 
+After installation, your project will have:
+
 ```
-context-harness/
+your-project/
 ├── .context-harness/
 │   ├── sessions/                  # Named session directories
-│   │   ├── login-feature/
-│   │   │   └── SESSION.md
-│   │   ├── TICKET-1234/
-│   │   │   └── SESSION.md
-│   │   └── api-rate-limiting/
+│   │   └── {session-name}/
 │   │       └── SESSION.md
 │   ├── templates/
 │   │   └── session-template.md    # Template for new sessions
 │   └── README.md                  # Framework documentation
-├── .opencode/
-│   └── agent/
-│       ├── context-harness.md     # Primary executor agent
-│       ├── compaction-guide.md    # Compaction advisory subagent
-│       ├── docs-subagent.md       # Documentation advisory subagent
-│       └── research-subagent.md   # Research advisory subagent
-└── README.md                      # This file
+└── .opencode/
+    └── agent/
+        ├── context-harness.md     # Primary executor agent
+        ├── compaction-guide.md    # Compaction advisory subagent
+        ├── docs-subagent.md       # Documentation advisory subagent
+        └── research-subagent.md   # Research advisory subagent
 ```
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `/session {name}` | Switch to or create a named session |
-| `/sessions` | List all available sessions |
+| `/ctx {name}` | Switch to or create a named session |
+| `/contexts` | List all available sessions |
 | `/compact` | Save current context to SESSION.md |
 
 ## Session Naming
@@ -140,6 +147,21 @@ Provides documentation summaries, framework guides, and API references. **Adviso
 
 ### @compaction-guide
 Analyzes current work and recommends what to preserve during compaction. **Advisory only—does not execute.**
+
+## Customization
+
+All agent behaviors are defined in markdown files. Customize them to fit your workflow:
+
+| Agent | Source File | Purpose |
+|-------|-------------|---------|
+| Primary Agent | [`context-harness.md`](src/context_harness/templates/.opencode/agent/context-harness.md) | Main executor, session management, compaction triggers |
+| Research Subagent | [`research-subagent.md`](src/context_harness/templates/.opencode/agent/research-subagent.md) | API lookups, best practices, grounded research |
+| Docs Subagent | [`docs-subagent.md`](src/context_harness/templates/.opencode/agent/docs-subagent.md) | Documentation summaries, framework guides |
+| Compaction Guide | [`compaction-guide.md`](src/context_harness/templates/.opencode/agent/compaction-guide.md) | Context preservation recommendations |
+
+**Other customizable files:**
+- [`session-template.md`](src/context_harness/templates/.context-harness/templates/session-template.md) - Template for new SESSION.md files
+- [`.context-harness/README.md`](src/context_harness/templates/.context-harness/README.md) - Framework documentation installed with each project
 
 ## Best Practices
 
@@ -193,9 +215,22 @@ Sign up for a free Context7 API key at [context7.com](https://context7.com) for 
 
 ## Installation
 
-1. Clone this repository into your project or use it as a template
-2. Add Context7 MCP to your `opencode.json` (see above)
-3. The `.opencode/agent/` directory contains the agent definitions
+The easiest way to install ContextHarness is with the CLI:
+
+```bash
+uvx --from "git+https://github.com/cmtzco/context-harness.git" context-harness init
+```
+
+This will create all necessary directories and files in your project.
+
+### Manual Installation
+
+Alternatively, you can:
+1. Clone this repository
+2. Copy the template directories from `src/context_harness/templates/` to your project:
+   - `.context-harness/` - Framework configuration and session templates
+   - `.opencode/agent/` - Agent definitions
+3. Add Context7 MCP to your `opencode.json` (see above)
 4. Invoke `@context-harness` to start working
 
 ## How It Differs from Other Approaches

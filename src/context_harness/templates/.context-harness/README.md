@@ -72,8 +72,8 @@ ContextHarness solves the problem of context loss in long development sessions b
 Invoke the Primary Agent with a session identifier:
 
 ```
-@context-harness /session login-feature
-@context-harness /session TICKET-1234
+@context-harness /ctx login-feature
+@context-harness /ctx TICKET-1234
 @context-harness Let's work on the api-rate-limiting feature
 ```
 
@@ -115,8 +115,8 @@ Type `/compact` anytime to immediately save context:
 
 | Command | Description |
 |---------|-------------|
-| `/session {name}` | Switch to or create a named session |
-| `/sessions` | List all available sessions |
+| `/ctx {name}` | Switch to or create a named session |
+| `/contexts` | List all available sessions |
 | `/compact` | Save current context to SESSION.md immediately |
 
 ## Agents
@@ -280,11 +280,11 @@ If a subagent is asked to execute, it responds:
 ### For Session Continuity
 
 1. **Use meaningful session names**: Match feature names or ticket IDs for easy reference
-2. **Start with @context-harness /session {name}**: It reads/creates SESSION.md on activation
+2. **Start with @context-harness /ctx {name}**: It reads/creates SESSION.md on activation
 3. **Don't delete SESSION.md**: It's your context lifeline for that session
 4. **Compact before switching sessions**: Ensures context is preserved
 5. **Check "Next Steps"**: Resume work from where you left off
-6. **Use `/sessions` to see all work**: View all active sessions at a glance
+6. **Use `/contexts` to see all work**: View all active sessions at a glance
 
 ### When to Compact
 
