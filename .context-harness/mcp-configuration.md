@@ -1,73 +1,112 @@
-# MCP Configuration Example
+# Context7 MCP Configuration
 
-This file documents how Context7 MCP would be configured for the enhanced research subagent.
+This file documents how to configure Context7 MCP for ContextHarness agents.
 
-## MCP Server Configuration
+## OpenCode Configuration
+
+Add the following to your `opencode.json` to enable Context7 MCP:
+
+### Basic Configuration
 
 ```json
 {
-  "mcpServers": {
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
     "context7": {
-      "command": "npx",
-      "args": ["@upstash/context7-mcp"],
-      "env": {
-        "UPSTASH_REDIS_REST_URL": "your-redis-url",
-        "UPSTASH_REDIS_REST_TOKEN": "your-redis-token"
-      }
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp"
     }
   }
 }
 ```
 
-## Available MCP Tools
+### With API Key (Higher Rate Limits)
 
-### context7_search
-Search for documentation in Context7's indexed libraries.
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp",
+      "headers": {
+        "CONTEXT7_API_KEY": "YOUR_API_KEY"
+      },
+      "enabled": true
+    }
+  }
+}
+```
+
+Sign up for a free API key at [context7.com](https://context7.com).
+
+## Tool Access in Agents
+
+MCP tools are exposed using the MCP server name as a prefix. Since we name our MCP `context7`, all its tools are available as `context7_*`.
+
+In agent definitions, use glob patterns to enable all Context7 tools:
+
+```yaml
+tools:
+  "context7*": true
+```
+
+Or enable specific tools:
+
+```yaml
+tools:
+  context7_resolve-library-id: true
+  context7_get-library-docs: true
+```
+
+## Available Context7 Tools
+
+Context7 MCP provides these tools:
+
+### context7_resolve-library-id
+Resolves a library name to its Context7 library ID.
+
+**Use case**: Find the correct ID before fetching documentation.
+
+### context7_get-library-docs
+Fetches documentation for a specific library.
 
 **Parameters**:
-- `query`: Search query string
-- `library`: Optional library filter
-- `version`: Optional version filter
+- `libraryId`: The Context7 library ID
+- `topic`: Optional topic filter
 
 **Returns**:
 - Relevant documentation sections
 - Code examples
 - API references
-- Version-specific information
 
-### context7_list_libraries
-List all libraries available in Context7.
+## Integration with ContextHarness Agents
 
-**Returns**:
-- Array of supported libraries
-- Latest versions
-- Documentation coverage
+The research and documentation subagents are configured to use Context7:
 
-## Integration Notes
+| Agent | Tool Config | Purpose |
+|-------|-------------|---------|
+| `research-subagent` | `"context7*": true` | Grounded research with verified docs |
+| `docs-subagent` | `"context7*": true` | Documentation lookup and summarization |
 
-The research subagent automatically:
-1. Attempts Context7 MCP first for supported libraries
-2. Falls back to web search if MCP unavailable
-3. Cross-references information from multiple sources
-4. Cites all sources with verification dates
+## Supported Libraries
 
-## Supported Libraries (Partial List)
+Context7 provides documentation for popular libraries including:
 
-- **JavaScript/TypeScript**: React, Next.js, Express, Node.js
-- **Python**: Flask, Django, FastAPI, SQLAlchemy
-- **Databases**: PostgreSQL, MongoDB, Redis
-- **Cloud**: AWS SDK v3, Google Cloud, Azure
-- **Tools**: Docker, Kubernetes, Terraform
+- **JavaScript/TypeScript**: React, Next.js, Express, Node.js, Vue, Angular
+- **Python**: Flask, Django, FastAPI, SQLAlchemy, Pandas
+- **Databases**: PostgreSQL, MongoDB, Redis, MySQL
+- **Cloud**: AWS SDK, Google Cloud, Azure SDK
+- **Tools**: Docker, Kubernetes, Terraform, GitHub Actions
 
-## Example MCP Query
+## Usage Tips
 
-```javascript
-// Internal query example
-const result = await mcp.context7_search({
-  query: "JWT authentication middleware",
-  library: "express",
-  version: "4.18"
-});
-```
+1. **Invoke Context7 explicitly**: Add "use context7" to prompts for explicit usage
+2. **Library resolution**: Always resolve library ID first for best results
+3. **Version awareness**: Context7 tracks library versions for accurate docs
 
-This documentation is for reference only. The actual MCP server must be configured separately in the OpenCode.ai environment.
+## References
+
+- [OpenCode MCP Servers Documentation](https://opencode.ai/docs/mcp-servers/)
+- [Context7 GitHub Repository](https://github.com/upstash/context7)
+- [Context7 MCP Example](https://opencode.ai/docs/mcp-servers/#context7)
