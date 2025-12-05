@@ -17,6 +17,16 @@ ContextHarness solves this by:
 
 ## Quick Start
 
+### Install
+
+Requires [uv](https://docs.astral.sh/uv/). Run this in your project directory:
+
+```bash
+uvx --from "git+https://github.com/cmtzco/context-harness.git#subdirectory=scripts/context-harness-cli" context-harness init
+```
+
+This creates the `.context-harness/` and `.opencode/agent/` directories with all framework files.
+
 ### 1. Start a Session
 
 ```
@@ -193,9 +203,20 @@ Sign up for a free Context7 API key at [context7.com](https://context7.com) for 
 
 ## Installation
 
-1. Clone this repository into your project or use it as a template
-2. Add Context7 MCP to your `opencode.json` (see above)
-3. The `.opencode/agent/` directory contains the agent definitions
+The easiest way to install ContextHarness is with the CLI:
+
+```bash
+uvx --from "git+https://github.com/cmtzco/context-harness.git#subdirectory=scripts/context-harness-cli" context-harness init
+```
+
+This will create all necessary directories and files in your project.
+
+### Manual Installation
+
+Alternatively, you can:
+1. Clone this repository
+2. Copy `.context-harness/` and `.opencode/agent/` to your project
+3. Add Context7 MCP to your `opencode.json` (see above)
 4. Invoke `@context-harness` to start working
 
 ## How It Differs from Other Approaches
