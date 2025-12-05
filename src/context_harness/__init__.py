@@ -1,3 +1,9 @@
 """ContextHarness CLI - Initialize agent frameworks in your project."""
 
-__version__ = "1.4.0"
+from importlib.metadata import version, PackageNotFoundError
+
+try:
+    __version__ = version("context-harness")
+except PackageNotFoundError:
+    # Package is not installed (running from source without install)
+    __version__ = "0.0.0+unknown"
