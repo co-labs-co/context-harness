@@ -4,17 +4,10 @@ CLI installer for the [ContextHarness](https://github.com/cmtzco/context-harness
 
 ## Installation
 
-### Using uvx (recommended)
+Requires [uv](https://docs.astral.sh/uv/) to be installed.
 
 ```bash
 uvx --from "git+https://github.com/cmtzco/context-harness.git#subdirectory=scripts/context-harness-cli" context-harness init
-```
-
-### Using pip
-
-```bash
-pip install "git+https://github.com/cmtzco/context-harness.git#subdirectory=scripts/context-harness-cli"
-context-harness init
 ```
 
 ## Usage
