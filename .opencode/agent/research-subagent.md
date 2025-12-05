@@ -312,20 +312,20 @@ def resource():
 ```
 Step 1: Resolve library ID
 → context7_resolve-library-id("flask-limiter")
-← Returns: library ID for flask-limiter
+← Returns: 'flask-limiter-v3.5.0'
 
 Step 2: Fetch documentation  
-→ context7_get-library-docs(libraryId, topic="rate limiting")
+→ context7_get-library-docs("flask-limiter-v3.5.0", topic="rate limiting")
 ← Returns: Relevant documentation sections
 ```
 
 ### Supported Libraries
 Context7 provides documentation for popular libraries including:
-- **Web Frameworks**: Flask, Django, FastAPI, Express, Next.js, React
-- **Databases**: PostgreSQL, MongoDB, Redis, SQLAlchemy
+- **Web Frameworks**: Flask, Django, FastAPI, Express, Next.js, React, Vue, Angular
+- **Databases**: PostgreSQL, MongoDB, Redis, SQLAlchemy, Prisma
 - **Cloud Services**: AWS SDK, Google Cloud, Azure SDK
 - **Languages**: Python, JavaScript/TypeScript, Go, Rust
-- **Tools**: Docker, Kubernetes, Terraform
+- **Tools**: Docker, Kubernetes, Terraform, GitHub Actions
 
 ### When Context7 is Not Available
 - Fall back to web search for recent or unsupported libraries
