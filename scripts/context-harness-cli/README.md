@@ -6,14 +6,32 @@ CLI installer for the [ContextHarness](https://github.com/cmtzco/context-harness
 
 ### Using uvx (recommended)
 
+Once published to PyPI:
 ```bash
 uvx context-harness init
 ```
 
 ### Using pip
 
+Once published to PyPI:
 ```bash
 pip install context-harness
+context-harness init
+```
+
+### Install from GitHub (for testing)
+
+To install directly from the GitHub repository (e.g., to test a branch or before PyPI publication):
+
+```bash
+# Install from main branch
+uvx --from "git+https://github.com/cmtzco/context-harness.git#subdirectory=scripts/context-harness-cli" context-harness init
+
+# Install from a specific branch
+uvx --from "git+https://github.com/cmtzco/context-harness.git@feature/cli-installer#subdirectory=scripts/context-harness-cli" context-harness init
+
+# Or using pip
+pip install "git+https://github.com/cmtzco/context-harness.git#subdirectory=scripts/context-harness-cli"
 context-harness init
 ```
 
