@@ -181,8 +181,9 @@ The research and documentation subagents require [Context7 MCP](https://github.c
       "type": "remote",
       "url": "https://mcp.context7.com/mcp",
       "headers": {
-        "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}"
-      }
+        "CONTEXT7_API_KEY": "YOUR_API_KEY"
+      },
+      "enabled": true
     }
   }
 }
