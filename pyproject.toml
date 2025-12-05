@@ -1,6 +1,6 @@
 [project]
 name = "context-harness"
-version = "1.4.0"
+dynamic = ["version"]
 description = "CLI installer for the ContextHarness agent framework for OpenCode.ai"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -35,8 +35,14 @@ Repository = "https://github.com/cmtzco/context-harness"
 Issues = "https://github.com/cmtzco/context-harness/issues"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.version.raw-options]
+fallback_version = "0.0.0+unknown"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/context_harness"]
