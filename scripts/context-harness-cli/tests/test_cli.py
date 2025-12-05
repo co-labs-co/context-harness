@@ -77,14 +77,18 @@ class TestInitCommand:
         """Test that init --force overwrites existing files."""
         # Create the directory first
         (tmp_path / ".context-harness").mkdir()
-        (tmp_path / ".context-harness" / "README.md").write_text("old content")
+        (tmp_path / ".context-harness" / "README.md").write_text(
+            "old content", encoding="utf-8"
+        )
 
         result = runner.invoke(main, ["init", "--force", "--target", str(tmp_path)])
         assert result.exit_code == 0
         assert "successfully" in result.output
 
-        # Verify the file was overwritten
-        content = (tmp_path / ".context-harness" / "README.md").read_text()
+        # Verify the file was overwritten (use utf-8 encoding for Windows compatibility)
+        content = (tmp_path / ".context-harness" / "README.md").read_text(
+            encoding="utf-8"
+        )
         assert "old content" not in content
         assert "ContextHarness" in content
 
