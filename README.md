@@ -215,7 +215,9 @@ This will create all necessary directories and files in your project.
 
 Alternatively, you can:
 1. Clone this repository
-2. Copy `.context-harness/` and `.opencode/agent/` to your project
+2. Copy the template directories from `scripts/context-harness-cli/src/context_harness/templates/` to your project:
+   - `.context-harness/` - Framework configuration and session templates
+   - `.opencode/agent/` - Agent definitions
 3. Add Context7 MCP to your `opencode.json` (see above)
 4. Invoke `@context-harness` to start working
 
