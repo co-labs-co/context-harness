@@ -25,7 +25,7 @@ Requires [uv](https://docs.astral.sh/uv/). Run this in your project directory:
 uvx --from "git+https://github.com/cmtzco/context-harness.git" context-harness init
 ```
 
-This creates the `.context-harness/` and `.opencode/agent/` directories with all framework files.
+This creates the `.context-harness/`, `.opencode/agent/`, and `.opencode/command/` directories with all framework files.
 
 ### 1. Start a Session
 
@@ -95,20 +95,28 @@ your-project/
 │   │   └── session-template.md    # Template for new sessions
 │   └── README.md                  # Framework documentation
 └── .opencode/
-    └── agent/
-        ├── context-harness.md     # Primary executor agent
-        ├── compaction-guide.md    # Compaction advisory subagent
-        ├── docs-subagent.md       # Documentation advisory subagent
-        └── research-subagent.md   # Research advisory subagent
+    ├── agent/
+    │   ├── context-harness.md     # Primary executor agent
+    │   ├── compaction-guide.md    # Compaction advisory subagent
+    │   ├── docs-subagent.md       # Documentation advisory subagent
+    │   └── research-subagent.md   # Research advisory subagent
+    └── command/
+        ├── ctx.md                 # /ctx command - switch/create sessions
+        ├── compact.md             # /compact command - save context
+        └── contexts.md            # /contexts command - list sessions
 ```
 
 ## Commands
+
+These slash commands are installed as OpenCode custom commands in `.opencode/command/`:
 
 | Command | Description |
 |---------|-------------|
 | `/ctx {name}` | Switch to or create a named session |
 | `/contexts` | List all available sessions |
 | `/compact` | Save current context to SESSION.md |
+
+Commands automatically route to the `@context-harness` agent and show descriptions when typing `/` in the OpenCode TUI.
 
 ## Session Naming
 
@@ -162,6 +170,11 @@ All agent behaviors are defined in markdown files. Customize them to fit your wo
 **Other customizable files:**
 - [`session-template.md`](src/context_harness/templates/.context-harness/templates/session-template.md) - Template for new SESSION.md files
 - [`.context-harness/README.md`](src/context_harness/templates/.context-harness/README.md) - Framework documentation installed with each project
+
+**Command files** (`.opencode/command/`):
+- [`ctx.md`](src/context_harness/templates/.opencode/command/ctx.md) - Session switching command
+- [`compact.md`](src/context_harness/templates/.opencode/command/compact.md) - Manual compaction command
+- [`contexts.md`](src/context_harness/templates/.opencode/command/contexts.md) - List sessions command
 
 ## Best Practices
 
@@ -230,6 +243,7 @@ Alternatively, you can:
 2. Copy the template directories from `src/context_harness/templates/` to your project:
    - `.context-harness/` - Framework configuration and session templates
    - `.opencode/agent/` - Agent definitions
+   - `.opencode/command/` - Slash commands
 3. Add Context7 MCP to your `opencode.json` (see above)
 4. Invoke `@context-harness` to start working
 

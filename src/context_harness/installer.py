@@ -30,6 +30,9 @@ REQUIRED_TEMPLATE_FILES = [
     ".opencode/agent/compaction-guide.md",
     ".opencode/agent/docs-subagent.md",
     ".opencode/agent/research-subagent.md",
+    ".opencode/command/ctx.md",
+    ".opencode/command/compact.md",
+    ".opencode/command/contexts.md",
 ]
 
 
@@ -109,7 +112,9 @@ def install_framework(
         opencode_source = templates_dir / ".opencode"
         if opencode_source.exists():
             if not quiet:
-                console.print("[dim]Updating .opencode/agent/ ...[/dim]")
+                console.print(
+                    "[dim]Updating .opencode/agent/ and .opencode/command/ ...[/dim]"
+                )
             if opencode_target.exists() and force:
                 shutil.rmtree(opencode_target)
             if not opencode_target.exists():
@@ -209,6 +214,9 @@ def verify_installation(target: str) -> bool:
         ".opencode/agent/compaction-guide.md",
         ".opencode/agent/docs-subagent.md",
         ".opencode/agent/research-subagent.md",
+        ".opencode/command/ctx.md",
+        ".opencode/command/compact.md",
+        ".opencode/command/contexts.md",
     ]
 
     for file_path in expected_files:

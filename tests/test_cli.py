@@ -50,6 +50,7 @@ class TestInitCommand:
         assert (tmp_path / ".context-harness").is_dir()
         assert (tmp_path / ".opencode").is_dir()
         assert (tmp_path / ".opencode" / "agent").is_dir()
+        assert (tmp_path / ".opencode" / "command").is_dir()
 
     def test_init_creates_files(self, runner, tmp_path):
         """Test that init creates the expected files."""
@@ -67,6 +68,11 @@ class TestInitCommand:
         assert (tmp_path / ".opencode" / "agent" / "compaction-guide.md").is_file()
         assert (tmp_path / ".opencode" / "agent" / "docs-subagent.md").is_file()
         assert (tmp_path / ".opencode" / "agent" / "research-subagent.md").is_file()
+
+        # Check .opencode/command files
+        assert (tmp_path / ".opencode" / "command" / "ctx.md").is_file()
+        assert (tmp_path / ".opencode" / "command" / "compact.md").is_file()
+        assert (tmp_path / ".opencode" / "command" / "contexts.md").is_file()
 
     def test_init_fails_if_exists(self, runner, tmp_path):
         """Test that init fails if directories already exist."""
@@ -167,6 +173,33 @@ class TestInitCommand:
         content = agent_file.read_text(encoding="utf-8")
         assert "Old agent content" not in content
         assert "ContextHarness" in content
+
+    def test_init_command_files_have_correct_frontmatter(self, runner, tmp_path):
+        """Test that command files have correct frontmatter for OpenCode."""
+        result = runner.invoke(main, ["init", "--target", str(tmp_path)])
+        assert result.exit_code == 0
+
+        # Check ctx.md
+        ctx_content = (tmp_path / ".opencode" / "command" / "ctx.md").read_text(
+            encoding="utf-8"
+        )
+        assert "description:" in ctx_content
+        assert "agent: context-harness" in ctx_content
+        assert "$ARGUMENTS" in ctx_content  # Uses arguments placeholder
+
+        # Check compact.md
+        compact_content = (tmp_path / ".opencode" / "command" / "compact.md").read_text(
+            encoding="utf-8"
+        )
+        assert "description:" in compact_content
+        assert "agent: context-harness" in compact_content
+
+        # Check contexts.md
+        contexts_content = (
+            tmp_path / ".opencode" / "command" / "contexts.md"
+        ).read_text(encoding="utf-8")
+        assert "description:" in contexts_content
+        assert "agent: context-harness" in contexts_content
 
 
 class TestMCPCommand:
