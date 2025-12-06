@@ -102,9 +102,11 @@ your-project/
     │   ├── docs-subagent.md       # Documentation advisory subagent
     │   └── research-subagent.md   # Research advisory subagent
     └── command/
-        ├── ctx.md                 # /ctx command - switch/create sessions
+        ├── ctx.md                 # /ctx command - switch/create sessions + branch
         ├── compact.md             # /compact command - save context
-        └── contexts.md            # /contexts command - list sessions
+        ├── contexts.md            # /contexts command - list sessions
+        ├── issue.md               # /issue command - GitHub issue management
+        └── pr.md                  # /pr command - pull request creation
 ```
 
 ## Commands
@@ -113,11 +115,26 @@ These slash commands are installed as OpenCode custom commands in `.opencode/com
 
 | Command | Description |
 |---------|-------------|
-| `/ctx {name}` | Switch to or create a named session |
+| `/ctx {name}` | Switch to or create a named session (with optional GitHub branch) |
 | `/contexts` | List all available sessions |
 | `/compact` | Save current context to SESSION.md |
+| `/issue` | Create or manage GitHub issues for the current session |
+| `/pr` | Create a pull request for the current session's branch |
 
 Commands automatically route to the appropriate agent (`@context-harness` or `@contexts-subagent`) and show descriptions when typing `/` in the OpenCode TUI.
+
+### GitHub Integration
+
+ContextHarness integrates with GitHub for a seamless development workflow:
+
+1. **Automatic branch creation**: `/ctx login-feature` creates a `feature/login-feature` branch
+2. **Issue tracking**: `/issue` creates a GitHub issue with gathered context
+3. **Issue updates**: `/issue update` adds progress comments to the linked issue
+4. **PR creation**: `/pr` creates a pull request linked to the issue
+
+**Requirements**: GitHub CLI (`gh`) installed and authenticated
+
+**Graceful degradation**: If `gh` is not available, GitHub features are skipped and sessions work locally only.
 
 ## Session Naming
 
@@ -177,9 +194,11 @@ All agent behaviors are defined in markdown files. Customize them to fit your wo
 - [`.context-harness/README.md`](src/context_harness/templates/.context-harness/README.md) - Framework documentation installed with each project
 
 **Command files** (`.opencode/command/`):
-- [`ctx.md`](src/context_harness/templates/.opencode/command/ctx.md) - Session switching command
+- [`ctx.md`](src/context_harness/templates/.opencode/command/ctx.md) - Session switching command with GitHub branch creation
 - [`compact.md`](src/context_harness/templates/.opencode/command/compact.md) - Manual compaction command
 - [`contexts.md`](src/context_harness/templates/.opencode/command/contexts.md) - List sessions command
+- [`issue.md`](src/context_harness/templates/.opencode/command/issue.md) - GitHub issue management command
+- [`pr.md`](src/context_harness/templates/.opencode/command/pr.md) - Pull request creation command
 
 ## Best Practices
 
