@@ -307,7 +307,7 @@ Based on this discovery, the question generation phase should focus on:
 ### Safe Operations Only
 - Read files only - never write
 - List directories - never create
-- Use bash only for read operations (ls, cat, find for counting)
+- Use `bash` only for read operations (ls, cat, find for counting)
 - Never execute build commands or scripts
 
 ---
