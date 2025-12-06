@@ -1,7 +1,7 @@
 # ContextHarness Session
 
 **Session**: commands
-**Last Updated**: 2025-12-05  
+**Last Updated**: 2025-12-06  
 **Compaction Cycle**: #1  
 **Session Started**: 2025-12-05
 
@@ -10,11 +10,18 @@
 ## Active Work
 
 **Current Task**: Implement OpenCode slash commands for session management  
-**Status**: Completed  
+**Status**: ✅ Completed  
 **Description**: Create actual OpenCode custom commands (/ctx, /compact, /contexts) that get installed during `context-harness init`  
 **Blockers**: None
 
-**GitHub Issue**: https://github.com/cmtzco/context-harness/issues/17
+---
+
+## GitHub Integration
+
+**Branch**: feature/opencode-slash-commands (merged)
+**Issue**: #17 - https://github.com/cmtzco/context-harness/issues/17 (CLOSED)
+**PR**: #20 - https://github.com/cmtzco/context-harness/pull/20 (MERGED)
+**Release**: v2.2.0
 
 ---
 
@@ -47,19 +54,14 @@
 |-------|-----|-----------|
 | OpenCode Commands Docs | https://opencode.ai/docs/commands/ | Reference for command format, frontmatter options, $ARGUMENTS usage |
 | GitHub Issue #17 | https://github.com/cmtzco/context-harness/issues/17 | Feature specification and acceptance criteria |
+| PR #20 | https://github.com/cmtzco/context-harness/pull/20 | Feature implementation |
+| Release v2.2.0 | https://github.com/cmtzco/context-harness/releases/tag/v2.2.0 | Release notes |
 
 ---
 
 ## Next Steps
 
-1. ~~Create `.opencode/command/` directory in templates~~ ✅
-2. ~~Create `ctx.md` command file~~ ✅
-3. ~~Create `compact.md` command file~~ ✅
-4. ~~Create `contexts.md` command file~~ ✅
-5. ~~Update `installer.py` to copy command directory~~ ✅
-6. ~~Update README documentation~~ ✅
-7. ~~Add tests for command installation~~ ✅
-8. Create PR and merge to main
+All tasks completed. Feature released in v2.2.0.
 
 ---
 
@@ -118,4 +120,4 @@ Command prompt template with $ARGUMENTS placeholder
 
 ---
 
-_Auto-updated by ContextHarness Primary Agent every 2nd user interaction_
+_Session completed - Feature released in v2.2.0_
