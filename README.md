@@ -98,6 +98,7 @@ your-project/
     ├── agent/
     │   ├── context-harness.md     # Primary executor agent
     │   ├── compaction-guide.md    # Compaction advisory subagent
+    │   ├── contexts-subagent.md   # Session listing subagent
     │   ├── docs-subagent.md       # Documentation advisory subagent
     │   └── research-subagent.md   # Research advisory subagent
     └── command/
@@ -116,7 +117,7 @@ These slash commands are installed as OpenCode custom commands in `.opencode/com
 | `/contexts` | List all available sessions |
 | `/compact` | Save current context to SESSION.md |
 
-Commands automatically route to the `@context-harness` agent and show descriptions when typing `/` in the OpenCode TUI.
+Commands automatically route to the appropriate agent (`@context-harness` or `@contexts-subagent`) and show descriptions when typing `/` in the OpenCode TUI.
 
 ## Session Naming
 
@@ -141,6 +142,9 @@ Each session maintains a `SESSION.md` file with:
 
 ## Subagents
 
+### @contexts-subagent
+Handles session discovery and listing. When you run `/contexts`, this subagent scans all sessions, extracts metadata, and returns a formatted summary—keeping the primary agent's context clean. **Read-only—does not execute.**
+
 ### @research-subagent
 Provides grounded research guidance using Context7 MCP and web search for accurate, up-to-date API documentation, best practices, and implementation approaches. **Advisory only—does not execute.**
 
@@ -163,6 +167,7 @@ All agent behaviors are defined in markdown files. Customize them to fit your wo
 | Agent | Source File | Purpose |
 |-------|-------------|---------|
 | Primary Agent | [`context-harness.md`](src/context_harness/templates/.opencode/agent/context-harness.md) | Main executor, session management, compaction triggers |
+| Contexts Subagent | [`contexts-subagent.md`](src/context_harness/templates/.opencode/agent/contexts-subagent.md) | Session discovery and listing |
 | Research Subagent | [`research-subagent.md`](src/context_harness/templates/.opencode/agent/research-subagent.md) | API lookups, best practices, grounded research |
 | Docs Subagent | [`docs-subagent.md`](src/context_harness/templates/.opencode/agent/docs-subagent.md) | Documentation summaries, framework guides |
 | Compaction Guide | [`compaction-guide.md`](src/context_harness/templates/.opencode/agent/compaction-guide.md) | Context preservation recommendations |
