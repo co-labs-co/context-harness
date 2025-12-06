@@ -31,11 +31,15 @@ REQUIRED_TEMPLATE_FILES = [
     ".opencode/agent/contexts-subagent.md",
     ".opencode/agent/docs-subagent.md",
     ".opencode/agent/research-subagent.md",
+    ".opencode/agent/baseline-discovery.md",
+    ".opencode/agent/baseline-questions.md",
+    ".opencode/agent/baseline-answers.md",
     ".opencode/command/ctx.md",
     ".opencode/command/compact.md",
     ".opencode/command/contexts.md",
     ".opencode/command/issue.md",
     ".opencode/command/pr.md",
+    ".opencode/command/baseline.md",
 ]
 
 
@@ -218,11 +222,15 @@ def verify_installation(target: str) -> bool:
         ".opencode/agent/contexts-subagent.md",
         ".opencode/agent/docs-subagent.md",
         ".opencode/agent/research-subagent.md",
+        ".opencode/agent/baseline-discovery.md",
+        ".opencode/agent/baseline-questions.md",
+        ".opencode/agent/baseline-answers.md",
         ".opencode/command/ctx.md",
         ".opencode/command/compact.md",
         ".opencode/command/contexts.md",
         ".opencode/command/issue.md",
         ".opencode/command/pr.md",
+        ".opencode/command/baseline.md",
     ]
 
     for file_path in expected_files:
