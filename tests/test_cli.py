@@ -66,6 +66,7 @@ class TestInitCommand:
         # Check .opencode/agent files
         assert (tmp_path / ".opencode" / "agent" / "context-harness.md").is_file()
         assert (tmp_path / ".opencode" / "agent" / "compaction-guide.md").is_file()
+        assert (tmp_path / ".opencode" / "agent" / "contexts-subagent.md").is_file()
         assert (tmp_path / ".opencode" / "agent" / "docs-subagent.md").is_file()
         assert (tmp_path / ".opencode" / "agent" / "research-subagent.md").is_file()
 
@@ -194,12 +195,12 @@ class TestInitCommand:
         assert "description:" in compact_content
         assert "agent: context-harness" in compact_content
 
-        # Check contexts.md
+        # Check contexts.md (routes to contexts-subagent for context efficiency)
         contexts_content = (
             tmp_path / ".opencode" / "command" / "contexts.md"
         ).read_text(encoding="utf-8")
         assert "description:" in contexts_content
-        assert "agent: context-harness" in contexts_content
+        assert "agent: contexts-subagent" in contexts_content
 
 
 class TestMCPCommand:
