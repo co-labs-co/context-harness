@@ -34,6 +34,8 @@ REQUIRED_TEMPLATE_FILES = [
     ".opencode/command/ctx.md",
     ".opencode/command/compact.md",
     ".opencode/command/contexts.md",
+    ".opencode/command/issue.md",
+    ".opencode/command/pr.md",
 ]
 
 
@@ -219,6 +221,8 @@ def verify_installation(target: str) -> bool:
         ".opencode/command/ctx.md",
         ".opencode/command/compact.md",
         ".opencode/command/contexts.md",
+        ".opencode/command/issue.md",
+        ".opencode/command/pr.md",
     ]
 
     for file_path in expected_files:

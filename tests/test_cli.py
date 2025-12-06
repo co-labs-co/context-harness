@@ -74,6 +74,8 @@ class TestInitCommand:
         assert (tmp_path / ".opencode" / "command" / "ctx.md").is_file()
         assert (tmp_path / ".opencode" / "command" / "compact.md").is_file()
         assert (tmp_path / ".opencode" / "command" / "contexts.md").is_file()
+        assert (tmp_path / ".opencode" / "command" / "issue.md").is_file()
+        assert (tmp_path / ".opencode" / "command" / "pr.md").is_file()
 
     def test_init_fails_if_exists(self, runner, tmp_path):
         """Test that init fails if directories already exist."""
@@ -201,6 +203,20 @@ class TestInitCommand:
         ).read_text(encoding="utf-8")
         assert "description:" in contexts_content
         assert "agent: contexts-subagent" in contexts_content
+
+        # Check issue.md (GitHub issue management)
+        issue_content = (tmp_path / ".opencode" / "command" / "issue.md").read_text(
+            encoding="utf-8"
+        )
+        assert "description:" in issue_content
+        assert "agent: context-harness" in issue_content
+
+        # Check pr.md (Pull request creation)
+        pr_content = (tmp_path / ".opencode" / "command" / "pr.md").read_text(
+            encoding="utf-8"
+        )
+        assert "description:" in pr_content
+        assert "agent: context-harness" in pr_content
 
 
 class TestMCPCommand:
