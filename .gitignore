@@ -33,3 +33,6 @@ out/
 # Session files are intentionally tracked (they're the core of the framework)
 # But you may want to ignore them in projects that use this as a template:
 # .context-harness/sessions/
+
+# Snyk Security Extension - AI Rules (auto-generated)
+.github/instructions/snyk_rules.instructions.md
