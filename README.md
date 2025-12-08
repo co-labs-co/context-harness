@@ -1,298 +1,58 @@
 # ContextHarness
 
-> A context-aware agent framework for OpenCode.ai that maintains session continuity through user-driven compaction cycles.
+> Context-aware agent framework for [OpenCode.ai](https://opencode.ai) that maintains session continuity.
 
-## Problem
+## Install
 
-Long development sessions with AI assistants suffer from context loss. As conversations grow, important decisions, file changes, and work progress get pushed out of the context window. Starting fresh means losing valuable continuity.
-
-## Solution
-
-ContextHarness solves this by:
-
-1. **Named Sessions**: Work on multiple features/tickets simultaneously, each with its own persistent context
-2. **User-Driven Compaction**: Save context when you need it with `/compact` or choose it from options
-3. **SESSION.md**: A living document that preserves decisions, file changes, and next steps
-4. **Single Executor Pattern**: One primary agent executes all work; specialized subagents provide guidance only
-
-## Quick Start
-
-### Install
-
-Requires [uv](https://docs.astral.sh/uv/). Run this in your project directory:
+Requires [uv](https://docs.astral.sh/uv/):
 
 ```bash
 uvx --from "git+https://github.com/cmtzco/context-harness.git" context-harness init
 ```
 
-This creates the `.context-harness/`, `.opencode/agent/`, and `.opencode/command/` directories with all framework files.
+## Usage
 
-### 1. Start a Session
-
+**Start a session:**
 ```
-@context-harness /ctx login-feature
-@context-harness /ctx TICKET-1234
+/ctx login-feature
+/ctx TICKET-1234
 ```
 
-### 2. Work Normally
-
-The primary agent handles all execution—writing code, modifying files, running commands.
-
-### 3. Compact When Ready
-
-Save your context at any time:
+**Save context:**
 ```
 /compact
 ```
 
-Or select the compaction option from "What's Next?" suggestions.
-
-### 4. Switch Sessions
-
+**Switch sessions:**
 ```
-/ctx api-rate-limiting
-/contexts  # List all sessions
-```
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                  CONTEXT-HARNESS AGENT                  │
-│  - Executes ALL work (code, files, commands)            │
-│  - Manages named sessions                               │
-│  - Reads/writes SESSION.md                              │
-│  - Invokes subagents for guidance only                  │
-└────────────┬──────────────────────────────────┬─────────┘
-             │                                  │
-    @research-subagent                  @compaction-guide
-    @docs-subagent                             │
-             │                                  │
-             ▼                                  ▼
-┌──────────────────────────┐      ┌─────────────────────────┐
-│ Grounded Research        │      │ Compaction Guide        │
-│ & Docs Subagents         │      │ Subagent                │
-│                          │      │                         │
-│ - Context7 MCP access    │      │ - Analyze session       │
-│ - Web search verification│      │ - Recommend what to     │
-│ - Provide guidance       │      │   preserve              │
-│ - Return recommendations │      │ - NO execution          │
-│ - NO execution           │      │                         │
-└──────────────────────────┘      └─────────────────────────┘
-```
-
-## Directory Structure
-
-After installation, your project will have:
-
-```
-your-project/
-├── .context-harness/
-│   ├── sessions/                  # Named session directories
-│   │   └── {session-name}/
-│   │       └── SESSION.md
-│   ├── templates/
-│   │   └── session-template.md    # Template for new sessions
-│   └── README.md                  # Framework documentation
-└── .opencode/
-    ├── agent/
-    │   ├── context-harness.md     # Primary executor agent
-    │   ├── compaction-guide.md    # Compaction advisory subagent
-    │   ├── contexts-subagent.md   # Session listing subagent
-    │   ├── docs-subagent.md       # Documentation advisory subagent
-    │   └── research-subagent.md   # Research advisory subagent
-    └── command/
-        ├── ctx.md                 # /ctx command - switch/create sessions + branch
-        ├── compact.md             # /compact command - save context
-        ├── contexts.md            # /contexts command - list sessions
-        ├── issue.md               # /issue command - GitHub issue management
-        └── pr.md                  # /pr command - pull request creation
+/ctx other-feature
+/contexts  # list all
 ```
 
 ## Commands
 
-These slash commands are installed as OpenCode custom commands in `.opencode/command/`:
-
 | Command | Description |
 |---------|-------------|
-| `/ctx {name}` | Switch to or create a named session (with optional GitHub branch) |
-| `/contexts` | List all available sessions |
-| `/compact` | Save current context to SESSION.md |
-| `/issue` | Create or manage GitHub issues for the current session |
-| `/pr` | Create a pull request for the current session's branch |
-
-Commands automatically route to the appropriate agent (`@context-harness` or `@contexts-subagent`) and show descriptions when typing `/` in the OpenCode TUI.
-
-### GitHub Integration
-
-ContextHarness integrates with GitHub for a seamless development workflow:
-
-1. **Automatic branch creation**: `/ctx login-feature` creates a `feature/login-feature` branch
-2. **Issue tracking**: `/issue` creates a GitHub issue with gathered context
-3. **Issue updates**: `/issue update` adds progress comments to the linked issue
-4. **PR creation**: `/pr` creates a pull request linked to the issue
-
-**Requirements**: GitHub CLI (`gh`) installed and authenticated
-
-**Graceful degradation**: If `gh` is not available, GitHub features are skipped and sessions work locally only.
-
-## Session Naming
-
-Use meaningful names that match your workflow:
-
-- **Feature names**: `login-feature`, `oauth-integration`, `dashboard-redesign`
-- **Ticket IDs**: `TICKET-1234`, `JIRA-567`, `GH-89`
-- **Story IDs**: `STORY-456`, `US-789`
-
-## How SESSION.md Works
-
-Each session maintains a `SESSION.md` file with:
-
-| Section | Purpose |
-|---------|---------|
-| **Active Work** | Current task, status, blockers |
-| **Key Files** | Files being modified with purposes |
-| **Decisions Made** | Important decisions with rationale |
-| **Documentation References** | Relevant docs with links |
-| **Next Steps** | Prioritized action items |
-| **Completed This Session** | Archived completed work |
-
-## Subagents
-
-### @contexts-subagent
-Handles session discovery and listing. When you run `/contexts`, this subagent scans all sessions, extracts metadata, and returns a formatted summary—keeping the primary agent's context clean. **Read-only—does not execute.**
-
-### @research-subagent
-Provides grounded research guidance using Context7 MCP and web search for accurate, up-to-date API documentation, best practices, and implementation approaches. **Advisory only—does not execute.**
-
-**Enhanced Capabilities**:
-- **Context7 MCP Integration**: Access to up-to-date documentation for popular libraries and frameworks
-- **Web Search Verification**: Real-time information lookup and fact verification
-- **Grounded Responses**: All research is cross-referenced and sourced
-- **Version Awareness**: Tracks library versions and compatibility
-
-### @docs-subagent
-Provides documentation summaries, framework guides, and API references. **Advisory only—does not execute.**
-
-### @compaction-guide
-Analyzes current work and recommends what to preserve during compaction. **Advisory only—does not execute.**
-
-## Customization
-
-All agent behaviors are defined in markdown files. Customize them to fit your workflow:
-
-| Agent | Source File | Purpose |
-|-------|-------------|---------|
-| Primary Agent | [`context-harness.md`](src/context_harness/templates/.opencode/agent/context-harness.md) | Main executor, session management, compaction triggers |
-| Contexts Subagent | [`contexts-subagent.md`](src/context_harness/templates/.opencode/agent/contexts-subagent.md) | Session discovery and listing |
-| Research Subagent | [`research-subagent.md`](src/context_harness/templates/.opencode/agent/research-subagent.md) | API lookups, best practices, grounded research |
-| Docs Subagent | [`docs-subagent.md`](src/context_harness/templates/.opencode/agent/docs-subagent.md) | Documentation summaries, framework guides |
-| Compaction Guide | [`compaction-guide.md`](src/context_harness/templates/.opencode/agent/compaction-guide.md) | Context preservation recommendations |
-
-**Other customizable files:**
-- [`session-template.md`](src/context_harness/templates/.context-harness/templates/session-template.md) - Template for new SESSION.md files
-- [`.context-harness/README.md`](src/context_harness/templates/.context-harness/README.md) - Framework documentation installed with each project
-
-**Command files** (`.opencode/command/`):
-- [`ctx.md`](src/context_harness/templates/.opencode/command/ctx.md) - Session switching command with GitHub branch creation
-- [`compact.md`](src/context_harness/templates/.opencode/command/compact.md) - Manual compaction command
-- [`contexts.md`](src/context_harness/templates/.opencode/command/contexts.md) - List sessions command
-- [`issue.md`](src/context_harness/templates/.opencode/command/issue.md) - GitHub issue management command
-- [`pr.md`](src/context_harness/templates/.opencode/command/pr.md) - Pull request creation command
-
-## Best Practices
-
-1. **Use meaningful session names** - Makes it easy to find and resume work
-2. **Compact regularly** - Before breaks, after completing tasks, when conversations get long
-3. **Trust the primary agent** - It's the sole executor; subagents only advise
-4. **Check Next Steps** - Resume work exactly where you left off
-5. **Don't delete SESSION.md** - It's your context lifeline
+| `/ctx {name}` | Switch to or create a session (creates git branch) |
+| `/contexts` | List all sessions |
+| `/compact` | Save context to SESSION.md |
+| `/issue` | Create/manage GitHub issues |
+| `/pr` | Create pull request |
 
 ## Requirements
 
-- [OpenCode.ai](https://opencode.ai) with agent support
-- GitHub CLI (`gh`) for repository operations (optional)
-- **Context7 MCP** (required for grounded research capabilities)
+- [OpenCode.ai](https://opencode.ai)
+- [Context7 MCP](DOCS.md#context7-mcp-setup) (for research features)
+- GitHub CLI `gh` (optional, for GitHub integration)
 
-### Context7 MCP Setup
+## Documentation
 
-The research and documentation subagents require [Context7 MCP](https://github.com/upstash/context7) for accurate, up-to-date library documentation. Add the following to your `opencode.json`:
-
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "mcp": {
-    "context7": {
-      "type": "remote",
-      "url": "https://mcp.context7.com/mcp"
-    }
-  }
-}
-```
-
-**With API key** (optional, for higher rate limits):
-
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "mcp": {
-    "context7": {
-      "type": "remote",
-      "url": "https://mcp.context7.com/mcp",
-      "headers": {
-        "CONTEXT7_API_KEY": "YOUR_API_KEY"
-      },
-      "enabled": true
-    }
-  }
-}
-```
-
-Sign up for a free Context7 API key at [context7.com](https://context7.com) for increased rate limits.
-
-## Installation
-
-The easiest way to install ContextHarness is with the CLI:
-
-```bash
-uvx --from "git+https://github.com/cmtzco/context-harness.git" context-harness init
-```
-
-This will create all necessary directories and files in your project.
-
-### Manual Installation
-
-Alternatively, you can:
-1. Clone this repository
-2. Copy the template directories from `src/context_harness/templates/` to your project:
-   - `.context-harness/` - Framework configuration and session templates
-   - `.opencode/agent/` - Agent definitions
-   - `.opencode/command/` - Slash commands
-3. Add Context7 MCP to your `opencode.json` (see above)
-4. Invoke `@context-harness` to start working
-
-## How It Differs from Other Approaches
-
-| Approach | Limitation | ContextHarness Solution |
-|----------|------------|-------------------------|
-| Single long conversation | Context window overflow | Incremental compaction to SESSION.md |
-| Starting fresh each time | Lose all context | Named sessions persist across conversations |
-| Manual note-taking | Easy to forget, inconsistent | Structured SESSION.md with guided compaction |
-| Multiple agents executing | Conflicts, confusion | Single executor with advisory subagents |
+See [DOCS.md](DOCS.md) for architecture, customization, and advanced usage.
 
 ## Contributing
 
-Contributions welcome! Key areas:
-
-- Additional subagent types
-- SESSION.md section improvements
-- Compaction strategy refinements
-- Documentation
+Contributions welcome! See [DOCS.md](DOCS.md) for details.
 
 ## License
 
-MIT
-
----
-
-**ContextHarness** - Harness your context, maintain your flow.
+[GNU AGPLv3](LICENSE)
