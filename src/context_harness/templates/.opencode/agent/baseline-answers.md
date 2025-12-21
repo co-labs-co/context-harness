@@ -54,9 +54,22 @@ You receive two inputs:
   "frameworks_and_libraries": {...},
   "build_toolchain": {...},
   "external_dependencies": {...},
-  "project_patterns": {...}
+  "project_patterns": {...},
+  "design_system": {
+    "has_frontend": true | false,
+    "ui_framework": "...",
+    "styling_approach": "...",
+    "component_library": "...",
+    "design_tokens": {...},
+    "color_system": {...},
+    "typography": {...},
+    "spacing": {...},
+    "icons": {...}
+  }
 }
 ```
+
+**NOTE**: If `design_system.has_frontend` is `false`, skip the "Design System & UI" section entirely in the output.
 
 ### 2. Validated Questions (from Phase 2)
 ```json
@@ -261,6 +274,54 @@ You MUST generate markdown content in this exact structure:
 
 ---
 
+## Design System & UI
+
+**NOTE**: This section is only included if the project has frontend/UI components. Skip this section entirely for backend-only projects.
+
+### Design System Overview
+
+| Aspect | Value |
+|--------|-------|
+| **UI Framework** | {React/Vue/Angular/Svelte/none} |
+| **Styling Approach** | {Tailwind/CSS Modules/styled-components/etc.} |
+| **Component Library** | {Chakra/MUI/Radix/Shadcn/custom/none} |
+| **Design Tokens** | {CSS variables/Tailwind config/JS theme/none} |
+| **Dark Mode** | {Yes (strategy)/No} |
+| **Icon Library** | {Lucide/Heroicons/custom/none} |
+
+### Q: {Question about design tokens}
+
+**Answer**: {Detailed answer}
+
+**Evidence**:
+- `{file_path}:{line_number}` - {relevant code or quote}
+
+**Confidence**: {High|Medium|Low}
+
+---
+
+### Q: {Question about color system}
+
+**Answer**: {Detailed answer}
+
+**Evidence**:
+- `{file_path}:{line_number}` - {relevant code or quote}
+
+**Confidence**: {High|Medium|Low}
+
+---
+
+### Q: {Question about typography}
+
+**Answer**: {Detailed answer}
+
+**Evidence**:
+- `{file_path}:{line_number}` - {relevant code or quote}
+
+**Confidence**: {High|Medium|Low}
+
+---
+
 ## Unanswered Questions
 
 The following questions could not be answered from the codebase:
@@ -328,6 +389,7 @@ Answered [X]/[Y] questions with [Z] high confidence answers.
 | Build/Distribution | X | X | X | X | X |
 | Security/Auth | X | X | X | X | X |
 | Performance | X | X | X | X | X |
+| Design System & UI | X | X | X | X | X |
 | **Total** | X | X | X | X | X |
 
 ## Key Insights

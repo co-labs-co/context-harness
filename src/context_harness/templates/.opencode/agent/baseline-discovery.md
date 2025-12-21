@@ -138,6 +138,75 @@ Detection Method:
 5. Look for infrastructure directories (terraform/, k8s/)
 ```
 
+### Phase 5: Design System & UI Detection (Conditional)
+
+**ONLY execute this phase if frontend/UI presence is detected** (React, Vue, Angular, Svelte, CSS files, etc.)
+
+```
+Design Token Sources:
+├── CSS Custom Properties:
+│   ├── :root { --color-*, --font-*, --spacing-* }
+│   ├── Global CSS files (globals.css, variables.css, tokens.css)
+│   └── CSS Modules with custom properties
+├── Tailwind CSS:
+│   ├── tailwind.config.js/ts
+│   ├── theme.extend.colors, theme.extend.fontFamily
+│   └── Custom plugins and presets
+├── CSS-in-JS Themes:
+│   ├── styled-components: ThemeProvider, DefaultTheme
+│   ├── Emotion: ThemeProvider, @emotion/react
+│   ├── Stitches: createStitches, theme tokens
+│   └── Vanilla Extract: createTheme, style contracts
+├── Design Token Files:
+│   ├── tokens.json, design-tokens.json
+│   ├── tokens/, design-tokens/, design-system/
+│   ├── Style Dictionary configurations
+│   └── Figma token exports
+└── Component Libraries:
+    ├── Chakra UI: @chakra-ui/*, extendTheme
+    ├── Material UI: @mui/*, createTheme
+    ├── Radix UI: @radix-ui/*
+    ├── Shadcn/ui: components.json, cn() utility
+    ├── Ant Design: antd, ConfigProvider
+    └── Headless UI: @headlessui/*
+
+Color System Detection:
+├── Semantic colors: primary, secondary, accent, success, warning, error
+├── Color scales: gray-50 to gray-900, blue-100 to blue-900
+├── Brand colors: brand-*, logo-*, company-specific
+├── Dark mode: prefers-color-scheme, .dark class, data-theme
+└── Color formats: hex, rgb, hsl, oklch, CSS variables
+
+Typography Detection:
+├── Font families: sans, serif, mono, display, body, heading
+├── Font scales: xs, sm, base, lg, xl, 2xl... or numeric
+├── Line heights: tight, normal, relaxed, loose
+├── Font weights: thin to black, 100-900
+└── Font sources: Google Fonts, local fonts, @font-face
+
+Spacing & Layout Detection:
+├── Spacing scales: 0, 1, 2, 4, 8, 16... or semantic (xs, sm, md)
+├── Grid systems: CSS Grid, Flexbox patterns, 12-column
+├── Breakpoints: sm, md, lg, xl, 2xl or pixel values
+├── Container widths: max-w-*, container queries
+└── Z-index scales: modal, dropdown, tooltip layers
+
+Icon System Detection:
+├── Icon libraries: lucide-react, heroicons, @phosphor-icons
+├── Icon sprites: SVG sprites, icon fonts
+├── Custom icons: icons/, assets/icons/
+└── Icon components: Icon.tsx, SvgIcon patterns
+
+Detection Method:
+1. Check for UI framework dependencies in package.json
+2. Search for tailwind.config.* files
+3. Glob for CSS/SCSS files with :root or custom properties
+4. Look for theme.ts/js files or ThemeProvider usage
+5. Check for design-tokens/ or tokens/ directories
+6. Parse component library configurations
+7. Search for color/font/spacing patterns in styles
+```
+
 ---
 
 ## Output Format
@@ -238,6 +307,46 @@ You MUST output a valid JSON object with this structure:
     "code_organization": "feature-based | layer-based | domain-driven",
     "api_style": "REST | GraphQL | gRPC | none",
     "authentication_pattern": "JWT | session | OAuth | none detected"
+  },
+  
+  "design_system": {
+    "has_frontend": true | false,
+    "detection_skipped_reason": "No frontend/UI detected | null",
+    "ui_framework": "React | Vue | Angular | Svelte | null",
+    "styling_approach": "Tailwind | CSS Modules | styled-components | Emotion | Vanilla CSS | null",
+    "component_library": "Chakra UI | Material UI | Radix | Shadcn | Ant Design | custom | null",
+    "design_tokens": {
+      "source": "CSS custom properties | Tailwind config | Theme file | tokens.json | none",
+      "location": "path/to/tokens or config file",
+      "format": "CSS variables | JS object | JSON | Style Dictionary"
+    },
+    "color_system": {
+      "approach": "semantic | scale-based | brand-focused | minimal",
+      "dark_mode": true | false,
+      "dark_mode_strategy": "CSS variables | class toggle | media query | none",
+      "colors_detected": ["primary", "secondary", "accent", "gray scale", etc.]
+    },
+    "typography": {
+      "font_source": "Google Fonts | local | system | mixed",
+      "font_families": ["sans-serif family name", "mono family name"],
+      "scale_type": "modular | linear | custom",
+      "heading_font": "font name or null",
+      "body_font": "font name or null"
+    },
+    "spacing": {
+      "scale_type": "4px base | 8px base | rem-based | custom",
+      "uses_design_tokens": true | false
+    },
+    "icons": {
+      "library": "Lucide | Heroicons | Phosphor | custom | none",
+      "format": "React components | SVG sprites | icon font"
+    },
+    "evidence": {
+      "config_files": ["tailwind.config.js", "theme.ts", etc.],
+      "style_files": ["globals.css", "variables.scss", etc.],
+      "token_files": ["tokens.json", "design-tokens/", etc.]
+    },
+    "confidence": 0.0-1.0
   },
   
   "analysis_metadata": {
