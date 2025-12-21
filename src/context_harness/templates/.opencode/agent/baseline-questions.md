@@ -55,9 +55,22 @@ You receive a discovery report JSON from @baseline-discovery:
   "build_toolchain": {...},
   "external_dependencies": {...},
   "project_patterns": {...},
+  "design_system": {
+    "has_frontend": true | false,
+    "ui_framework": "...",
+    "styling_approach": "...",
+    "component_library": "...",
+    "design_tokens": {...},
+    "color_system": {...},
+    "typography": {...},
+    "spacing": {...},
+    "icons": {...}
+  },
   "analysis_metadata": {...}
 }
 ```
+
+**NOTE**: If `design_system.has_frontend` is `false`, skip generating questions for the "Design System & UI" category entirely.
 
 ---
 
@@ -132,6 +145,35 @@ Questions about performance considerations:
 - "Are there any known performance bottlenecks documented?"
 - "What monitoring and alerting is in place?"
 - "How would this application scale horizontally?"
+
+### 8. Design System & UI (Conditional)
+
+**ONLY generate questions in this category if `design_system.has_frontend` is `true` in the discovery report.**
+
+Questions about visual design, styling, and UI consistency:
+
+**Examples:**
+- "What design token system is used and how are colors organized?"
+- "How is the color palette structured (semantic vs scale-based)?"
+- "What typography scale is used and how are font sizes determined?"
+- "How does dark mode switching work and what strategy is used?"
+- "What component library was chosen and why?"
+- "How are design tokens maintained and distributed across the codebase?"
+- "What is the spacing scale based on (4px, 8px, or custom)?"
+- "How are icons managed and what library is used?"
+- "Is there a design system documentation or Storybook instance?"
+- "How do CSS custom properties integrate with the JavaScript framework?"
+- "What approach is used for responsive breakpoints?"
+- "How is visual consistency enforced across components?"
+
+**Evidence locations to check:**
+- `tailwind.config.js/ts` - Tailwind theme configuration
+- `theme.ts/js` - CSS-in-JS theme definitions
+- `tokens.json`, `design-tokens/` - Design token files
+- `globals.css`, `variables.css` - CSS custom properties
+- `components.json` - Shadcn/ui configuration
+- `.storybook/` - Storybook configuration
+- `styled.d.ts` - styled-components type definitions
 
 ---
 
@@ -253,7 +295,8 @@ You MUST output a valid JSON object with this structure:
     "language_framework_choice": 4,
     "build_distribution": 5,
     "security_authentication": 4,
-    "performance_scaling": 3
+    "performance_scaling": 3,
+    "design_system_ui": 4
   },
   
   "regeneration_needed": false,
@@ -292,6 +335,7 @@ Generated [X] questions, [Y] passed validation (score >= 8.0).
 | Build & Distribution | X | Y | Z% |
 | Security & Auth | X | Y | Z% |
 | Performance & Scaling | X | Y | Z% |
+| Design System & UI | X | Y | Z% |
 
 ## Top 5 Questions (Highest Score)
 1. **[Q###]** (Score: X.XX): [Question text]
