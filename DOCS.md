@@ -127,10 +127,10 @@ For advanced users who want different models for different agents (e.g., a more 
   "model": "anthropic/claude-sonnet-4-20250514",
   "agent": {
     "context-harness": {
-      "model": "anthropic/claude-opus-4"
+      "model": "anthropic/claude-opus-4-20250514"
     },
     "research-subagent": {
-      "model": "anthropic/claude-opus-4"
+      "model": "anthropic/claude-opus-4-20250514"
     },
     "compaction-guide": {
       "model": "anthropic/claude-haiku-4-20250514"
