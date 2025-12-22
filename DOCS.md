@@ -100,6 +100,62 @@ ContextHarness integrates with GitHub for a seamless development workflow:
 
 **Graceful degradation**: If `gh` is not available, GitHub features are skipped and sessions work locally only.
 
+## Model Configuration
+
+ContextHarness agents are **model-agnostic**. They do not specify a model, allowing you to use any provider and model supported by OpenCode.
+
+### Default Model
+
+Set your default model in `opencode.json`:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-sonnet-4-20250514"
+}
+```
+
+All agents will inherit this model unless overridden.
+
+### Per-Agent Model Configuration
+
+For advanced users who want different models for different agents (e.g., a more capable model for the primary agent, a lighter model for simple subagents):
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-sonnet-4-20250514",
+  "agent": {
+    "context-harness": {
+      "model": "anthropic/claude-opus-4-20250514"
+    },
+    "research-subagent": {
+      "model": "anthropic/claude-opus-4-20250514"
+    },
+    "compaction-guide": {
+      "model": "anthropic/claude-haiku-4-20250514"
+    }
+  }
+}
+```
+
+### Model Loading Priority
+
+OpenCode determines which model to use in this order:
+
+1. **Command-line flag** (`--model` or `-m`) - Highest priority
+2. **Agent-specific config** (`agent.{name}.model` in JSON)
+3. **Default model** (`model` key in `opencode.json`)
+4. **Last used model** (from previous session)
+5. **Internal priority** (first available model)
+
+### Recommended Models
+
+For optimal ContextHarness performance, we recommend models with strong reasoning capabilities:
+
+- **Primary agent**: Claude Opus, Claude Sonnet, GPT-4o, or similar high-capability models
+- **Subagents**: Claude Sonnet, Claude Haiku, or similar for routine advisory tasks
+
 ## Context7 MCP Setup
 
 The research and documentation subagents require [Context7 MCP](https://github.com/upstash/context7) for accurate, up-to-date library documentation. Add to your `opencode.json`:
