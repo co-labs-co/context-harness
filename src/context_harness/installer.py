@@ -40,6 +40,13 @@ REQUIRED_TEMPLATE_FILES = [
     ".opencode/command/issue.md",
     ".opencode/command/pr.md",
     ".opencode/command/baseline.md",
+    # Skill: skill-creator (for deriving project-specific skills)
+    ".opencode/skill/skill-creator/SKILL.md",
+    ".opencode/skill/skill-creator/references/workflows.md",
+    ".opencode/skill/skill-creator/references/output-patterns.md",
+    ".opencode/skill/skill-creator/scripts/init_skill.py",
+    ".opencode/skill/skill-creator/scripts/package_skill.py",
+    ".opencode/skill/skill-creator/scripts/quick_validate.py",
 ]
 
 
@@ -120,7 +127,7 @@ def install_framework(
         if opencode_source.exists():
             if not quiet:
                 console.print(
-                    "[dim]Updating .opencode/agent/ and .opencode/command/ ...[/dim]"
+                    "[dim]Updating .opencode/agent/, .opencode/command/, and .opencode/skill/ ...[/dim]"
                 )
             if opencode_target.exists() and force:
                 shutil.rmtree(opencode_target)
@@ -231,6 +238,13 @@ def verify_installation(target: str) -> bool:
         ".opencode/command/issue.md",
         ".opencode/command/pr.md",
         ".opencode/command/baseline.md",
+        # Skill: skill-creator
+        ".opencode/skill/skill-creator/SKILL.md",
+        ".opencode/skill/skill-creator/references/workflows.md",
+        ".opencode/skill/skill-creator/references/output-patterns.md",
+        ".opencode/skill/skill-creator/scripts/init_skill.py",
+        ".opencode/skill/skill-creator/scripts/package_skill.py",
+        ".opencode/skill/skill-creator/scripts/quick_validate.py",
     ]
 
     for file_path in expected_files:
