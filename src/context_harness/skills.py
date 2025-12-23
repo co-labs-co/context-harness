@@ -18,6 +18,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import yaml
 from rich.console import Console
 from rich.table import Table
 
@@ -61,17 +62,23 @@ def check_gh_auth(quiet: bool = False) -> bool:
     Returns:
         True if authenticated, False otherwise
     """
-    result = subprocess.run(
-        ["gh", "auth", "status"],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
+    try:
+        result = subprocess.run(
+            ["gh", "auth", "status"],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            if not quiet:
+                console.print("[red]Error: GitHub CLI is not authenticated.[/red]")
+                console.print("[dim]Run 'gh auth login' to authenticate.[/dim]")
+            return False
+        return True
+    except FileNotFoundError:
         if not quiet:
-            console.print("[red]Error: GitHub CLI is not authenticated.[/red]")
-            console.print("[dim]Run 'gh auth login' to authenticate.[/dim]")
+            console.print("[red]Error: GitHub CLI (gh) is not installed.[/red]")
+            console.print("[dim]Install it from https://cli.github.com[/dim]")
         return False
-    return True
 
 
 def check_repo_access(repo: str = SKILLS_REPO, quiet: bool = False) -> bool:
@@ -391,22 +398,29 @@ def _validate_skill(skill_path: Path, quiet: bool = False) -> bool:
             console.print("[red]Error: SKILL.md missing YAML frontmatter[/red]")
         return False
 
-    # Check for name and description in frontmatter
+    # Check for complete frontmatter
     frontmatter_end = content.find("---", 3)
     if frontmatter_end == -1:
         if not quiet:
             console.print("[red]Error: SKILL.md has incomplete frontmatter[/red]")
         return False
 
-    frontmatter = content[3:frontmatter_end]
-    if "name:" not in frontmatter:
-        if not quiet:
-            console.print("[red]Error: SKILL.md frontmatter missing 'name' field[/red]")
-        return False
-    if "description:" not in frontmatter:
+    # Parse frontmatter fields and ensure required ones are present and non-empty
+    frontmatter_data = _parse_skill_frontmatter(skill_path)
+
+    name = frontmatter_data.get("name", "").strip()
+    if not name:
         if not quiet:
             console.print(
-                "[red]Error: SKILL.md frontmatter missing 'description' field[/red]"
+                "[red]Error: SKILL.md frontmatter missing or empty 'name' field[/red]"
+            )
+        return False
+
+    description = frontmatter_data.get("description", "").strip()
+    if not description:
+        if not quiet:
+            console.print(
+                "[red]Error: SKILL.md frontmatter missing or empty 'description' field[/red]"
             )
         return False
 
@@ -414,7 +428,7 @@ def _validate_skill(skill_path: Path, quiet: bool = False) -> bool:
 
 
 def _parse_skill_frontmatter(skill_path: Path) -> Dict[str, str]:
-    """Parse skill frontmatter from SKILL.md.
+    """Parse skill frontmatter from SKILL.md using YAML parser.
 
     Args:
         skill_path: Path to the skill directory
@@ -426,15 +440,22 @@ def _parse_skill_frontmatter(skill_path: Path) -> Dict[str, str]:
     content = skill_md.read_text()
 
     frontmatter_end = content.find("---", 3)
-    frontmatter = content[3:frontmatter_end].strip()
+    frontmatter_str = content[3:frontmatter_end].strip()
 
-    result = {}
-    for line in frontmatter.split("\n"):
-        if ":" in line:
-            key, value = line.split(":", 1)
-            result[key.strip()] = value.strip()
-
-    return result
+    try:
+        result = yaml.safe_load(frontmatter_str)
+        if result is None:
+            return {}
+        # Convert all values to strings for consistency
+        return {k: str(v) if v is not None else "" for k, v in result.items()}
+    except yaml.YAMLError:
+        # Fallback to simple parsing if YAML parsing fails
+        result = {}
+        for line in frontmatter_str.split("\n"):
+            if ":" in line:
+                key, value = line.split(":", 1)
+                result[key.strip()] = value.strip()
+        return result
 
 
 def extract_skill(
@@ -528,8 +549,8 @@ def extract_skill(
 
             skill_entry = {
                 "name": skill_name,
-                "description": skill_description[:200],  # Truncate long descriptions
-                "version": frontmatter.get("version", "1.0.0"),
+                "description": _truncate_description(skill_description, 200),
+                "version": frontmatter.get("version", "0.1.0"),
                 "author": _get_github_username(),
                 "tags": [],  # Can be expanded later
                 "path": f"{SKILLS_DIR}/{skill_name}",
@@ -622,16 +643,42 @@ _Extracted via ContextHarness skill extractor_
             return SkillResult.SUCCESS, pr_url
 
     except subprocess.CalledProcessError as e:
+        error_msg = (
+            getattr(e, "stderr", None) or getattr(e, "output", None) or "Unknown error"
+        )
         if not quiet:
-            console.print(f"[red]Error during extraction: {e.stderr}[/red]")
+            console.print(f"[red]Error during extraction: {error_msg}[/red]")
         return SkillResult.ERROR, None
+
+
+def _truncate_description(text: str, max_length: int) -> str:
+    """Truncate description at word boundary with ellipsis.
+
+    Args:
+        text: Text to truncate
+        max_length: Maximum length
+
+    Returns:
+        Truncated text with ellipsis if needed
+    """
+    if len(text) <= max_length:
+        return text
+
+    # Find the last space before max_length to avoid breaking mid-word
+    truncated = text[: max_length - 3]  # Leave room for "..."
+    last_space = truncated.rfind(" ")
+
+    if last_space > max_length // 2:  # Only use space if it's reasonably far in
+        truncated = truncated[:last_space]
+
+    return truncated + "..."
 
 
 def _get_github_username() -> str:
     """Get the current GitHub username.
 
     Returns:
-        GitHub username or 'unknown'
+        GitHub username or descriptive placeholder
     """
     try:
         result = subprocess.run(
@@ -641,5 +688,5 @@ def _get_github_username() -> str:
             check=True,
         )
         return result.stdout.strip()
-    except subprocess.CalledProcessError:
-        return "unknown"
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return "github-user-unknown"

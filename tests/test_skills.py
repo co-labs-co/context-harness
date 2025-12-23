@@ -1,7 +1,6 @@
 """Tests for the skills module."""
 
 import json
-from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -14,6 +13,7 @@ from context_harness.skills import (
     parse_skill_info,
     _validate_skill,
     _parse_skill_frontmatter,
+    _truncate_description,
 )
 
 
@@ -362,6 +362,43 @@ class TestSkillInstallation:
         assert result == SkillResult.SUCCESS
         # Old file should be gone after force reinstall
         assert not (skill_dir / "old-file.txt").exists()
+
+
+class TestTruncateDescription:
+    """Tests for description truncation."""
+
+    def test_truncate_short_text(self):
+        """Test that short text is not truncated."""
+        result = _truncate_description("Short text", 50)
+        assert result == "Short text"
+
+    def test_truncate_exact_length(self):
+        """Test text at exact max length is not truncated."""
+        text = "A" * 50
+        result = _truncate_description(text, 50)
+        assert result == text
+
+    def test_truncate_long_text_at_word_boundary(self):
+        """Test truncation at word boundary."""
+        text = "This is a longer text that needs to be truncated at a word boundary"
+        result = _truncate_description(text, 30)
+        assert result.endswith("...")
+        assert len(result) <= 30
+        assert "truncat" not in result  # Shouldn't cut mid-word
+
+    def test_truncate_preserves_word_boundary(self):
+        """Test that truncation respects word boundaries."""
+        text = "Word1 Word2 Word3 Word4 Word5"
+        result = _truncate_description(text, 20)
+        assert result.endswith("...")
+        assert " " not in result[-4:]  # No space right before ellipsis
+
+    def test_truncate_no_spaces(self):
+        """Test truncation when no suitable word boundary exists."""
+        text = "Verylongwordwithoutanyspaces"
+        result = _truncate_description(text, 15)
+        assert result.endswith("...")
+        assert len(result) <= 15
 
 
 class TestSkillExtraction:
