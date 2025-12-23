@@ -177,6 +177,54 @@ class TestInitCommand:
         assert "Old agent content" not in content
         assert "ContextHarness" in content
 
+    def test_init_force_preserves_user_skills(self, runner, tmp_path):
+        """Test that init --force preserves user-created skills."""
+        # First init
+        result = runner.invoke(main, ["init", "--target", str(tmp_path)])
+        assert result.exit_code == 0
+
+        # Create a user skill (not part of template)
+        user_skill_dir = tmp_path / ".opencode" / "skill" / "my-custom-skill"
+        user_skill_dir.mkdir(parents=True)
+        skill_file = user_skill_dir / "SKILL.md"
+        skill_file.write_text(
+            "---\nname: my-custom-skill\ndescription: My custom skill\n---\n# My Custom Skill\n",
+            encoding="utf-8",
+        )
+
+        # Run init --force (should preserve user skill)
+        result = runner.invoke(main, ["init", "--force", "--target", str(tmp_path)])
+        assert result.exit_code == 0
+
+        # Verify user skill was preserved
+        assert user_skill_dir.is_dir()
+        assert skill_file.is_file()
+        content = skill_file.read_text(encoding="utf-8")
+        assert "my-custom-skill" in content
+
+        # Verify template skill was updated
+        template_skill = tmp_path / ".opencode" / "skill" / "skill-creator" / "SKILL.md"
+        assert template_skill.is_file()
+
+    def test_init_force_updates_template_skills(self, runner, tmp_path):
+        """Test that init --force updates template skills to latest version."""
+        # First init
+        result = runner.invoke(main, ["init", "--target", str(tmp_path)])
+        assert result.exit_code == 0
+
+        # Modify a template skill (simulating old version)
+        skill_file = tmp_path / ".opencode" / "skill" / "skill-creator" / "SKILL.md"
+        skill_file.write_text("# Old skill content\n", encoding="utf-8")
+
+        # Run init --force (should update template skill)
+        result = runner.invoke(main, ["init", "--force", "--target", str(tmp_path)])
+        assert result.exit_code == 0
+
+        # Verify template skill was updated
+        content = skill_file.read_text(encoding="utf-8")
+        assert "Old skill content" not in content
+        assert "skill-creator" in content.lower() or "Skill Creator" in content
+
     def test_init_command_files_have_correct_frontmatter(self, runner, tmp_path):
         """Test that command files have correct frontmatter for OpenCode."""
         result = runner.invoke(main, ["init", "--target", str(tmp_path)])
