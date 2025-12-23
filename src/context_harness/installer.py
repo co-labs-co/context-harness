@@ -123,17 +123,14 @@ def install_framework(
                 context_harness_source, context_harness_target, force
             )
 
-        # Copy .opencode directory (full replacement is safe - no user data)
+        # Copy .opencode directory (preserving user-created skills)
         opencode_source = templates_dir / ".opencode"
         if opencode_source.exists():
             if not quiet:
                 console.print(
                     "[dim]Updating .opencode/agent/, .opencode/command/, and .opencode/skill/ ...[/dim]"
                 )
-            if opencode_target.exists() and force:
-                shutil.rmtree(opencode_target)
-            if not opencode_target.exists():
-                shutil.copytree(opencode_source, opencode_target)
+            _copy_preserving_user_skills(opencode_source, opencode_target, force)
 
         if not quiet:
             console.print()
@@ -186,6 +183,75 @@ def _copy_preserving_sessions(source: Path, target: Path, force: bool) -> None:
         if new_sessions_dir.exists():
             shutil.rmtree(new_sessions_dir)
         shutil.move(str(sessions_backup), str(new_sessions_dir))
+
+
+def _get_template_skill_names(source: Path) -> set[str]:
+    """Get the names of skills included in the template.
+
+    Args:
+        source: Source template .opencode directory
+
+    Returns:
+        Set of skill directory names from the template
+    """
+    skill_dir = source / "skill"
+    if not skill_dir.exists():
+        return set()
+    return {d.name for d in skill_dir.iterdir() if d.is_dir()}
+
+
+def _copy_preserving_user_skills(source: Path, target: Path, force: bool) -> None:
+    """Copy .opencode directory while preserving user-created skills.
+
+    Template skills (like skill-creator) are updated, but user-created skills
+    are preserved.
+
+    Args:
+        source: Source template directory
+        target: Target installation directory
+        force: Whether to overwrite existing files
+    """
+    skill_dir = target / "skill"
+    template_skills = _get_template_skill_names(source)
+    user_skills_backup = None
+
+    # Backup user-created skills (skills not in template)
+    if skill_dir.exists():
+        user_skills = []
+        for skill_path in skill_dir.iterdir():
+            if skill_path.is_dir() and skill_path.name not in template_skills:
+                user_skills.append(skill_path)
+
+        if user_skills:
+            user_skills_backup = target.parent / ".user_skills.backup"
+            if user_skills_backup.exists():
+                shutil.rmtree(user_skills_backup)
+            user_skills_backup.mkdir()
+
+            for skill_path in user_skills:
+                shutil.move(str(skill_path), str(user_skills_backup / skill_path.name))
+
+    # Remove existing .opencode and copy fresh template
+    if target.exists() and force:
+        shutil.rmtree(target)
+
+    if not target.exists():
+        shutil.copytree(source, target)
+
+    # Restore user-created skills
+    if user_skills_backup and user_skills_backup.exists():
+        skill_dir = target / "skill"
+        skill_dir.mkdir(parents=True, exist_ok=True)
+
+        for skill_path in user_skills_backup.iterdir():
+            if skill_path.is_dir():
+                dest = skill_dir / skill_path.name
+                if dest.exists():
+                    shutil.rmtree(dest)
+                shutil.move(str(skill_path), str(dest))
+
+        # Clean up backup directory
+        shutil.rmtree(user_skills_backup)
 
 
 def _print_created_files(target_path: Path) -> None:
