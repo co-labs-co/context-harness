@@ -14,6 +14,7 @@ from context_harness.skills import (
     _validate_skill,
     _parse_skill_frontmatter,
     _truncate_description,
+    _fetch_directory_recursive,
 )
 
 
@@ -399,6 +400,252 @@ class TestTruncateDescription:
         result = _truncate_description(text, 15)
         assert result.endswith("...")
         assert len(result) <= 15
+
+
+class TestFetchDirectoryRecursive:
+    """Tests for recursive directory fetching from GitHub."""
+
+    @patch("context_harness.skills.subprocess.run")
+    def test_fetch_single_file(self, mock_run, tmp_path):
+        """Test fetching when API returns a single file (not in array)."""
+        # GitHub API returns a dict (not list) when path points to a file
+        single_file_response = {
+            "name": "SKILL.md",
+            "path": "skill/test/SKILL.md",
+            "type": "file",
+            "url": "https://api.github.com/repos/test/test/contents/skill/test/SKILL.md",
+        }
+
+        file_content = b"# Test Skill\n\nThis is test content."
+
+        def mock_subprocess_run(args, **kwargs):
+            result = MagicMock()
+            result.returncode = 0
+            # First call uses text=True for JSON response
+            if kwargs.get("text"):
+                result.stdout = json.dumps(single_file_response)
+            else:
+                # File content call returns bytes
+                result.stdout = file_content
+            return result
+
+        mock_run.side_effect = mock_subprocess_run
+
+        dest = tmp_path / "skill"
+        success = _fetch_directory_recursive(
+            "test/repo", "skill/test", dest, quiet=True
+        )
+
+        assert success is True
+        assert (dest / "SKILL.md").exists()
+        assert (dest / "SKILL.md").read_bytes() == file_content
+
+    @patch("context_harness.skills.subprocess.run")
+    def test_fetch_directory_with_files(self, mock_run, tmp_path):
+        """Test fetching a directory containing multiple files."""
+        directory_response = [
+            {
+                "name": "SKILL.md",
+                "path": "skill/test/SKILL.md",
+                "type": "file",
+                "url": "https://api.github.com/repos/test/repo/contents/skill/test/SKILL.md",
+            },
+            {
+                "name": "README.md",
+                "path": "skill/test/README.md",
+                "type": "file",
+                "url": "https://api.github.com/repos/test/repo/contents/skill/test/README.md",
+            },
+        ]
+
+        file_call_count = [0]
+
+        def mock_subprocess_run(args, **kwargs):
+            result = MagicMock()
+            result.returncode = 0
+
+            if kwargs.get("text"):
+                # Directory listing call
+                result.stdout = json.dumps(directory_response)
+            else:
+                # File content calls
+                file_call_count[0] += 1
+                if file_call_count[0] == 1:
+                    result.stdout = b"# SKILL content"
+                else:
+                    result.stdout = b"# README content"
+            return result
+
+        mock_run.side_effect = mock_subprocess_run
+
+        dest = tmp_path / "skill"
+        success = _fetch_directory_recursive(
+            "test/repo", "skill/test", dest, quiet=True
+        )
+
+        assert success is True
+        assert (dest / "SKILL.md").exists()
+        assert (dest / "README.md").exists()
+
+    @patch("context_harness.skills.subprocess.run")
+    def test_fetch_nested_directory(self, mock_run, tmp_path):
+        """Test fetching a directory containing subdirectories."""
+        # Main directory contains a file and a subdirectory
+        main_dir_response = [
+            {
+                "name": "SKILL.md",
+                "path": "skill/test/SKILL.md",
+                "type": "file",
+                "url": "https://api.github.com/repos/test/repo/contents/skill/test/SKILL.md",
+            },
+            {
+                "name": "scripts",
+                "path": "skill/test/scripts",
+                "type": "dir",
+            },
+        ]
+
+        scripts_dir_response = [
+            {
+                "name": "helper.py",
+                "path": "skill/test/scripts/helper.py",
+                "type": "file",
+                "url": "https://api.github.com/repos/test/repo/contents/skill/test/scripts/helper.py",
+            },
+        ]
+
+        text_call_count = [0]
+
+        def mock_subprocess_run(args, **kwargs):
+            result = MagicMock()
+            result.returncode = 0
+
+            if kwargs.get("text"):
+                # Directory listing calls
+                text_call_count[0] += 1
+                api_path = args[2] if len(args) > 2 else ""
+
+                if "scripts" in api_path:
+                    result.stdout = json.dumps(scripts_dir_response)
+                else:
+                    result.stdout = json.dumps(main_dir_response)
+            else:
+                # File content calls - just return generic content
+                result.stdout = b"# File content"
+            return result
+
+        mock_run.side_effect = mock_subprocess_run
+
+        dest = tmp_path / "skill"
+        success = _fetch_directory_recursive(
+            "test/repo", "skill/test", dest, quiet=True
+        )
+
+        assert success is True
+        assert (dest / "SKILL.md").exists()
+        assert (dest / "scripts").is_dir()
+        assert (dest / "scripts" / "helper.py").exists()
+
+    @patch("context_harness.skills.subprocess.run")
+    def test_fetch_api_error(self, mock_run, tmp_path):
+        """Test handling of GitHub API errors."""
+        import subprocess
+
+        mock_run.side_effect = subprocess.CalledProcessError(
+            returncode=1, cmd=["gh"], stderr="Not found"
+        )
+
+        dest = tmp_path / "skill"
+        success = _fetch_directory_recursive(
+            "test/repo", "skill/test", dest, quiet=True
+        )
+
+        assert success is False
+
+    @patch("context_harness.skills.subprocess.run")
+    def test_fetch_json_decode_error(self, mock_run, tmp_path):
+        """Test handling of invalid JSON response."""
+        result = MagicMock()
+        result.returncode = 0
+        result.stdout = "not valid json {"
+        mock_run.return_value = result
+
+        dest = tmp_path / "skill"
+        success = _fetch_directory_recursive(
+            "test/repo", "skill/test", dest, quiet=True
+        )
+
+        assert success is False
+
+    @patch("context_harness.skills.subprocess.run")
+    def test_fetch_creates_destination_directory(self, mock_run, tmp_path):
+        """Test that destination directory is created if it doesn't exist."""
+        single_file_response = {
+            "name": "SKILL.md",
+            "path": "skill/test/SKILL.md",
+            "type": "file",
+            "url": "https://api.github.com/repos/test/repo/contents/skill/test/SKILL.md",
+        }
+
+        def mock_subprocess_run(args, **kwargs):
+            result = MagicMock()
+            result.returncode = 0
+            if kwargs.get("text"):
+                result.stdout = json.dumps(single_file_response)
+            else:
+                result.stdout = b"content"
+            return result
+
+        mock_run.side_effect = mock_subprocess_run
+
+        # Use a nested path that doesn't exist
+        dest = tmp_path / "deep" / "nested" / "path"
+        assert not dest.exists()
+
+        success = _fetch_directory_recursive(
+            "test/repo", "skill/test", dest, quiet=True
+        )
+
+        assert success is True
+        assert dest.exists()
+
+    @patch("context_harness.skills.subprocess.run")
+    def test_fetch_subdirectory_failure_propagates(self, mock_run, tmp_path):
+        """Test that failure in subdirectory fetch propagates correctly."""
+        import subprocess
+
+        main_dir_response = [
+            {
+                "name": "scripts",
+                "path": "skill/test/scripts",
+                "type": "dir",
+            },
+        ]
+
+        call_count = [0]
+
+        def mock_subprocess_run(args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                # First call succeeds with directory listing
+                result = MagicMock()
+                result.returncode = 0
+                result.stdout = json.dumps(main_dir_response)
+                return result
+            else:
+                # Second call (recursive) fails
+                raise subprocess.CalledProcessError(
+                    returncode=1, cmd=["gh"], stderr="Permission denied"
+                )
+
+        mock_run.side_effect = mock_subprocess_run
+
+        dest = tmp_path / "skill"
+        success = _fetch_directory_recursive(
+            "test/repo", "skill/test", dest, quiet=True
+        )
+
+        assert success is False
 
 
 class TestSkillExtraction:
