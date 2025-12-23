@@ -40,6 +40,7 @@ REQUIRED_TEMPLATE_FILES = [
     ".opencode/command/issue.md",
     ".opencode/command/pr.md",
     ".opencode/command/baseline.md",
+    ".opencode/command/extract-skills.md",
     # Skill: skill-creator (for deriving project-specific skills)
     ".opencode/skill/skill-creator/SKILL.md",
     ".opencode/skill/skill-creator/references/workflows.md",
@@ -238,6 +239,7 @@ def verify_installation(target: str) -> bool:
         ".opencode/command/issue.md",
         ".opencode/command/pr.md",
         ".opencode/command/baseline.md",
+        ".opencode/command/extract-skills.md",
         # Skill: skill-creator
         ".opencode/skill/skill-creator/SKILL.md",
         ".opencode/skill/skill-creator/references/workflows.md",
