@@ -203,9 +203,7 @@ def list_skills(
         for skill in skills:
             table.add_row(
                 skill.name,
-                skill.description[:50] + "..."
-                if len(skill.description) > 50
-                else skill.description,
+                _truncate_description(skill.description, 50),
                 skill.version,
                 ", ".join(skill.tags[:3]),
             )
@@ -392,7 +390,7 @@ def _validate_skill(skill_path: Path, quiet: bool = False) -> bool:
         return False
 
     # Check for required frontmatter
-    content = skill_md.read_text()
+    content = skill_md.read_text(encoding="utf-8")
     if not content.startswith("---"):
         if not quiet:
             console.print("[red]Error: SKILL.md missing YAML frontmatter[/red]")
@@ -427,6 +425,23 @@ def _validate_skill(skill_path: Path, quiet: bool = False) -> bool:
     return True
 
 
+def _validate_skill_name(skill_name: str) -> bool:
+    """Validate that a skill name contains only safe characters.
+
+    Safe characters: alphanumeric, hyphens, underscores.
+    This prevents potential shell injection when used in commands.
+
+    Args:
+        skill_name: Name to validate
+
+    Returns:
+        True if valid, False otherwise
+    """
+    import re
+
+    return bool(re.match(r"^[a-zA-Z0-9_-]+$", skill_name))
+
+
 def _parse_skill_frontmatter(skill_path: Path) -> Dict[str, str]:
     """Parse skill frontmatter from SKILL.md using YAML parser.
 
@@ -437,7 +452,7 @@ def _parse_skill_frontmatter(skill_path: Path) -> Dict[str, str]:
         Dict with frontmatter fields
     """
     skill_md = skill_path / "SKILL.md"
-    content = skill_md.read_text()
+    content = skill_md.read_text(encoding="utf-8")
 
     frontmatter_end = content.find("---", 3)
     frontmatter_str = content[3:frontmatter_end].strip()
@@ -473,6 +488,15 @@ def extract_skill(
     Returns:
         Tuple of (SkillResult, PR URL or None)
     """
+    # Validate skill name contains only safe characters
+    if not _validate_skill_name(skill_name):
+        if not quiet:
+            console.print(
+                f"[red]Error: Invalid skill name '{skill_name}'. "
+                "Only alphanumeric characters, hyphens, and underscores are allowed.[/red]"
+            )
+        return SkillResult.ERROR, None
+
     if not check_gh_auth(quiet=quiet):
         return SkillResult.AUTH_ERROR, None
 
@@ -536,7 +560,7 @@ def extract_skill(
             # Update or create skills.json registry
             registry_path = tmppath / SKILLS_REGISTRY_PATH
             if registry_path.exists():
-                registry = json.loads(registry_path.read_text())
+                registry = json.loads(registry_path.read_text(encoding="utf-8"))
             else:
                 registry = {"schema_version": "1.0", "skills": []}
 
@@ -646,6 +670,8 @@ _Extracted via ContextHarness skill extractor_
         error_msg = (
             getattr(e, "stderr", None) or getattr(e, "output", None) or "Unknown error"
         )
+        if isinstance(error_msg, bytes):
+            error_msg = error_msg.decode("utf-8", errors="replace")
         if not quiet:
             console.print(f"[red]Error during extraction: {error_msg}[/red]")
         return SkillResult.ERROR, None

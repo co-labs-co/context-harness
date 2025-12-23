@@ -259,7 +259,11 @@ def init_skill(skill_name, path):
         scripts_dir.mkdir(exist_ok=True)
         example_script = scripts_dir / "example.py"
         example_script.write_text(EXAMPLE_SCRIPT.format(skill_name=skill_name))
-        example_script.chmod(0o755)
+        # Set executable permission (may fail on Windows, which is okay)
+        try:
+            example_script.chmod(0o755)
+        except OSError:
+            pass  # chmod not supported on this platform
         print("✅ Created scripts/example.py")
 
         # Create references/ directory with example reference doc
@@ -298,7 +302,7 @@ def main():
         print("\nSkill name requirements:")
         print("  - Hyphen-case identifier (e.g., 'data-analyzer')")
         print("  - Lowercase letters, digits, and hyphens only")
-        print("  - Max 40 characters")
+        print("  - Max 64 characters")
         print("  - Must match directory name exactly")
         print("\nExamples:")
         print("  init_skill.py my-new-skill --path skills/public")

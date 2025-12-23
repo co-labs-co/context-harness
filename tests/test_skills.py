@@ -652,6 +652,54 @@ class TestSkillExtraction:
     """Tests for skill extraction functionality."""
 
     @patch("context_harness.skills.check_gh_auth")
+    @patch("context_harness.skills.check_repo_access")
+    @patch("context_harness.skills.subprocess.run")
+    def test_extract_skill_success(
+        self, mock_run, mock_access, mock_auth, sample_skill_dir, tmp_path
+    ):
+        """Test successful skill extraction creates a PR."""
+        from context_harness.skills import extract_skill
+
+        mock_auth.return_value = True
+        mock_access.return_value = True
+
+        # Track subprocess calls
+        call_sequence = []
+
+        def mock_subprocess_run(args, **kwargs):
+            call_sequence.append(args[0] if args else "unknown")
+            result = MagicMock()
+            result.returncode = 0
+            result.stdout = ""
+            result.stderr = ""
+
+            # Handle gh pr create - returns the PR URL
+            if args[:2] == ["gh", "pr"]:
+                result.stdout = (
+                    "https://github.com/cmtzco/context-harness-skills/pull/42"
+                )
+
+            return result
+
+        mock_run.side_effect = mock_subprocess_run
+
+        # source_path is the root containing .opencode/skill/test-skill
+        source_path = sample_skill_dir.parent.parent.parent
+
+        result, pr_url = extract_skill(
+            "test-skill",
+            source_path=str(source_path),
+            quiet=True,
+        )
+
+        assert result == SkillResult.SUCCESS
+        assert pr_url == "https://github.com/cmtzco/context-harness-skills/pull/42"
+
+        # Verify key subprocess calls were made
+        assert "gh" in call_sequence  # gh repo clone, gh pr create
+        assert "git" in call_sequence  # git checkout, git add, git commit, git push
+
+    @patch("context_harness.skills.check_gh_auth")
     def test_extract_skill_auth_failure(self, mock_auth, sample_skill_dir):
         """Test extract skill handles auth failure."""
         from context_harness.skills import extract_skill
