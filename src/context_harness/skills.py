@@ -25,7 +25,7 @@ from rich.table import Table
 console = Console()
 
 # Central skills repository
-SKILLS_REPO = "cmtzco/context-harness-skills"
+SKILLS_REPO = "co-labs-co/context-harness-skills"
 SKILLS_REGISTRY_PATH = "skills.json"
 SKILLS_DIR = "skill"  # singular, matching OpenCode standard
 
@@ -675,6 +675,126 @@ _Extracted via ContextHarness skill extractor_
         if not quiet:
             console.print(f"[red]Error during extraction: {error_msg}[/red]")
         return SkillResult.ERROR, None
+
+
+@dataclass
+class LocalSkillInfo:
+    """Information about a locally installed skill."""
+
+    name: str
+    description: str
+    path: Path
+    version: Optional[str] = None
+    is_valid: bool = True
+
+
+def list_local_skills(
+    source_path: str = ".",
+    quiet: bool = False,
+) -> List[LocalSkillInfo]:
+    """List skills installed in the local .opencode/skill/ directory.
+
+    Args:
+        source_path: Directory containing .opencode/skill/ (default: current directory)
+        quiet: If True, suppress output messages
+
+    Returns:
+        List of LocalSkillInfo objects
+    """
+    source = Path(source_path).resolve()
+    skills_dir = source / ".opencode" / "skill"
+
+    if not skills_dir.exists():
+        if not quiet:
+            console.print("[yellow]No skills directory found.[/yellow]")
+            console.print(f"[dim]Expected location: {skills_dir}[/dim]")
+            console.print()
+            console.print(
+                "[dim]Run 'context-harness init' to initialize ContextHarness.[/dim]"
+            )
+        return []
+
+    skills: List[LocalSkillInfo] = []
+
+    # Iterate over subdirectories in .opencode/skill/
+    for skill_dir in sorted(skills_dir.iterdir()):
+        if not skill_dir.is_dir():
+            continue
+
+        skill_name = skill_dir.name
+        skill_md = skill_dir / "SKILL.md"
+
+        if not skill_md.exists():
+            # Skill directory exists but no SKILL.md - mark as invalid
+            skills.append(
+                LocalSkillInfo(
+                    name=skill_name,
+                    description="(missing SKILL.md)",
+                    path=skill_dir,
+                    is_valid=False,
+                )
+            )
+            continue
+
+        # Parse frontmatter for description
+        try:
+            frontmatter = _parse_skill_frontmatter(skill_dir)
+        except Exception as exc:
+            # Skill has a SKILL.md but it could not be read or parsed
+            skills.append(
+                LocalSkillInfo(
+                    name=skill_name,
+                    description=f"(error reading SKILL.md: {exc})",
+                    path=skill_dir,
+                    is_valid=False,
+                )
+            )
+            continue
+
+        description = frontmatter.get("description", "No description")
+        version = frontmatter.get("version")
+
+        skills.append(
+            LocalSkillInfo(
+                name=skill_name,
+                description=description,
+                path=skill_dir,
+                version=version,
+                is_valid=True,
+            )
+        )
+
+    if not quiet:
+        if not skills:
+            console.print("[dim]No skills found in .opencode/skill/[/dim]")
+            console.print()
+            console.print(
+                "[dim]Create a skill with the skill-creator or install one from the repository.[/dim]"
+            )
+        else:
+            table = Table(title="Local Skills")
+            table.add_column("Name", style="cyan")
+            table.add_column("Description")
+            table.add_column("Version", style="green")
+            table.add_column("Status", style="dim")
+
+            for skill in skills:
+                status = "✓" if skill.is_valid else "⚠ invalid"
+                table.add_row(
+                    skill.name,
+                    _truncate_description(skill.description, 50),
+                    skill.version or "-",
+                    status,
+                )
+
+            console.print(table)
+            console.print()
+            console.print(
+                "[dim]Extract a skill to share: "
+                "[cyan]context-harness skill extract <name>[/cyan][/dim]"
+            )
+
+    return skills
 
 
 def _truncate_description(text: str, max_length: int) -> str:

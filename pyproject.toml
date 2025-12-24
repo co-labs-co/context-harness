@@ -31,9 +31,9 @@ dependencies = [
 context-harness = "context_harness.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/cmtzco/context-harness"
-Repository = "https://github.com/cmtzco/context-harness"
-Issues = "https://github.com/cmtzco/context-harness/issues"
+Homepage = "https://github.com/co-labs-co/context-harness"
+Repository = "https://github.com/co-labs-co/context-harness"
+Issues = "https://github.com/co-labs-co/context-harness/issues"
 
 [build-system]
 requires = ["hatchling", "hatch-vcs"]
