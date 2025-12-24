@@ -888,6 +888,27 @@ description: {name} description
         assert skills[1].name == "middle-skill"
         assert skills[2].name == "zebra-skill"
 
+    def test_list_local_skills_malformed_frontmatter(self, tmp_path):
+        """Test listing local skills with malformed SKILL.md frontmatter."""
+        skill_dir = tmp_path / ".opencode" / "skill" / "malformed-skill"
+        skill_dir.mkdir(parents=True)
+        # SKILL.md exists but has incomplete/malformed frontmatter
+        (skill_dir / "SKILL.md").write_text(
+            """---
+name: malformed
+# Missing closing frontmatter delimiter
+This is not valid YAML: [unclosed bracket
+""",
+            encoding="utf-8",
+        )
+
+        skills = list_local_skills(source_path=str(tmp_path), quiet=True)
+
+        assert len(skills) == 1
+        assert skills[0].name == "malformed-skill"
+        # Should still be marked as valid since _parse_skill_frontmatter has fallback
+        # The YAML parser will fail but fallback to simple parsing
+
 
 class TestListLocalSkillsCLI:
     """Tests for skill list-local CLI command."""

@@ -737,7 +737,20 @@ def list_local_skills(
             continue
 
         # Parse frontmatter for description
-        frontmatter = _parse_skill_frontmatter(skill_dir)
+        try:
+            frontmatter = _parse_skill_frontmatter(skill_dir)
+        except Exception as exc:
+            # Skill has a SKILL.md but it could not be read or parsed
+            skills.append(
+                LocalSkillInfo(
+                    name=skill_name,
+                    description=f"(error reading SKILL.md: {exc})",
+                    path=skill_dir,
+                    is_valid=False,
+                )
+            )
+            continue
+
         description = frontmatter.get("description", "No description")
         version = frontmatter.get("version")
 
