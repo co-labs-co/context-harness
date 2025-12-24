@@ -10,7 +10,9 @@ from context_harness.cli import main
 from context_harness.skills import (
     SkillResult,
     SkillInfo,
+    LocalSkillInfo,
     parse_skill_info,
+    list_local_skills,
     _validate_skill,
     _parse_skill_frontmatter,
     _truncate_description,
@@ -752,3 +754,163 @@ class TestSkillExtraction:
         )
         assert result == SkillResult.ERROR
         assert pr_url is None
+
+
+class TestListLocalSkills:
+    """Tests for list_local_skills function."""
+
+    def test_list_local_skills_with_valid_skills(self, sample_skill_dir):
+        """Test listing local skills with valid skills present."""
+        source_path = sample_skill_dir.parent.parent.parent
+        skills = list_local_skills(source_path=str(source_path), quiet=True)
+
+        assert len(skills) == 1
+        assert skills[0].name == "test-skill"
+        assert skills[0].description == "A test skill for unit testing"
+        assert skills[0].version == "1.0.0"
+        assert skills[0].is_valid is True
+
+    def test_list_local_skills_empty_directory(self, tmp_path):
+        """Test listing local skills when no skills exist."""
+        # Create empty .opencode/skill directory
+        skills_dir = tmp_path / ".opencode" / "skill"
+        skills_dir.mkdir(parents=True)
+
+        skills = list_local_skills(source_path=str(tmp_path), quiet=True)
+        assert len(skills) == 0
+
+    def test_list_local_skills_no_directory(self, tmp_path):
+        """Test listing local skills when .opencode/skill doesn't exist."""
+        skills = list_local_skills(source_path=str(tmp_path), quiet=True)
+        assert len(skills) == 0
+
+    def test_list_local_skills_invalid_skill(self, tmp_path):
+        """Test listing local skills with invalid skill (missing SKILL.md)."""
+        skill_dir = tmp_path / ".opencode" / "skill" / "invalid-skill"
+        skill_dir.mkdir(parents=True)
+        # No SKILL.md file
+
+        skills = list_local_skills(source_path=str(tmp_path), quiet=True)
+
+        assert len(skills) == 1
+        assert skills[0].name == "invalid-skill"
+        assert skills[0].is_valid is False
+        assert "missing SKILL.md" in skills[0].description
+
+    def test_list_local_skills_multiple_skills(self, tmp_path):
+        """Test listing multiple local skills."""
+        skills_dir = tmp_path / ".opencode" / "skill"
+
+        # Create first skill
+        skill1_dir = skills_dir / "skill-one"
+        skill1_dir.mkdir(parents=True)
+        (skill1_dir / "SKILL.md").write_text(
+            """---
+name: skill-one
+description: First skill
+version: 1.0.0
+---
+# Skill One
+""",
+            encoding="utf-8",
+        )
+
+        # Create second skill
+        skill2_dir = skills_dir / "skill-two"
+        skill2_dir.mkdir(parents=True)
+        (skill2_dir / "SKILL.md").write_text(
+            """---
+name: skill-two
+description: Second skill
+version: 2.0.0
+---
+# Skill Two
+""",
+            encoding="utf-8",
+        )
+
+        skills = list_local_skills(source_path=str(tmp_path), quiet=True)
+
+        assert len(skills) == 2
+        skill_names = [s.name for s in skills]
+        assert "skill-one" in skill_names
+        assert "skill-two" in skill_names
+
+    def test_list_local_skills_ignores_files(self, tmp_path):
+        """Test that list_local_skills ignores non-directory entries."""
+        skills_dir = tmp_path / ".opencode" / "skill"
+        skills_dir.mkdir(parents=True)
+
+        # Create a file (not a directory) in the skills folder
+        (skills_dir / "README.md").write_text("# Skills\n", encoding="utf-8")
+
+        # Create a valid skill directory
+        skill_dir = skills_dir / "valid-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text(
+            """---
+name: valid-skill
+description: Valid skill
+---
+# Valid
+""",
+            encoding="utf-8",
+        )
+
+        skills = list_local_skills(source_path=str(tmp_path), quiet=True)
+
+        # Should only return the skill directory, not the README.md file
+        assert len(skills) == 1
+        assert skills[0].name == "valid-skill"
+
+    def test_list_local_skills_sorted_alphabetically(self, tmp_path):
+        """Test that skills are sorted alphabetically."""
+        skills_dir = tmp_path / ".opencode" / "skill"
+
+        # Create skills in non-alphabetical order
+        for name in ["zebra-skill", "alpha-skill", "middle-skill"]:
+            skill_dir = skills_dir / name
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text(
+                f"""---
+name: {name}
+description: {name} description
+---
+# {name}
+""",
+                encoding="utf-8",
+            )
+
+        skills = list_local_skills(source_path=str(tmp_path), quiet=True)
+
+        assert len(skills) == 3
+        assert skills[0].name == "alpha-skill"
+        assert skills[1].name == "middle-skill"
+        assert skills[2].name == "zebra-skill"
+
+
+class TestListLocalSkillsCLI:
+    """Tests for skill list-local CLI command."""
+
+    def test_skill_list_local_help(self, runner):
+        """Test that skill list-local --help works."""
+        result = runner.invoke(main, ["skill", "list-local", "--help"])
+        assert result.exit_code == 0
+        assert "List skills installed" in result.output
+        assert "--source" in result.output
+
+    def test_skill_list_local_with_skills(self, runner, sample_skill_dir):
+        """Test skill list-local with valid skills."""
+        source_path = sample_skill_dir.parent.parent.parent
+        result = runner.invoke(
+            main, ["skill", "list-local", "--source", str(source_path)]
+        )
+        assert result.exit_code == 0
+        assert "Local Skills" in result.output
+        assert "test-skill" in result.output
+
+    def test_skill_list_local_no_directory(self, runner, tmp_path):
+        """Test skill list-local when no skills directory exists."""
+        result = runner.invoke(main, ["skill", "list-local", "--source", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "No skills directory found" in result.output

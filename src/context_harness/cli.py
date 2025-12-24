@@ -14,6 +14,7 @@ from context_harness.mcp_config import (
 )
 from context_harness.skills import (
     list_skills,
+    list_local_skills,
     get_skill_info,
     install_skill,
     extract_skill,
@@ -248,6 +249,38 @@ def skill_list(tags: tuple):
         console.print("[dim]No skills found.[/dim]")
         console.print()
         console.print("[dim]The skills repository may be empty or inaccessible.[/dim]")
+
+
+@skill.command("list-local")
+@click.option(
+    "--source",
+    "-s",
+    default=".",
+    type=click.Path(exists=True),
+    help="Source directory containing .opencode/skill/ (default: current directory).",
+)
+def skill_list_local(source: str):
+    """List skills installed in your local project.
+
+    Discovers all skills in the .opencode/skill/ directory and displays
+    their name, description, and version. Useful for finding skills to extract.
+
+    Examples:
+
+        context-harness skill list-local
+
+        context-harness skill list-local --source ./my-project
+    """
+    console.print()
+    console.print(
+        Panel.fit(
+            "[bold blue]ContextHarness[/bold blue] Local Skills",
+            subtitle=f"v{__version__}",
+        )
+    )
+    console.print()
+
+    list_local_skills(source_path=source)
 
 
 @skill.command("info")
