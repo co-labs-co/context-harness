@@ -12,6 +12,7 @@ uv tool install "git+https://github.com/co-labs-co/context-harness.git"
 context-harness init
 
 # Open OpenCode and start working
+/baseline              # Analyze project (first time)
 /ctx my-feature        # Create session + branch
 # ... do your work ...
 /compact               # Save context
