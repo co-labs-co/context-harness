@@ -678,7 +678,7 @@ class TestSkillExtraction:
             # Handle gh pr create - returns the PR URL
             if args[:2] == ["gh", "pr"]:
                 result.stdout = (
-                    "https://github.com/cmtzco/context-harness-skills/pull/42"
+                    "https://github.com/co-labs-co/context-harness-skills/pull/42"
                 )
 
             return result
@@ -695,7 +695,7 @@ class TestSkillExtraction:
         )
 
         assert result == SkillResult.SUCCESS
-        assert pr_url == "https://github.com/cmtzco/context-harness-skills/pull/42"
+        assert pr_url == "https://github.com/co-labs-co/context-harness-skills/pull/42"
 
         # Verify key subprocess calls were made
         assert "gh" in call_sequence  # gh repo clone, gh pr create

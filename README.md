@@ -8,10 +8,10 @@ Requires [uv](https://docs.astral.sh/uv/):
 
 ```bash
 # Run directly (recommended)
-uvx --from "git+https://github.com/cmtzco/context-harness.git" context-harness init
+uvx --from "git+https://github.com/co-labs-co/context-harness.git" context-harness init
 
 # Or install globally
-uv tool install "git+https://github.com/cmtzco/context-harness.git"
+uv tool install "git+https://github.com/co-labs-co/context-harness.git"
 context-harness init
 ```
 

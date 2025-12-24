@@ -410,10 +410,10 @@ context-harness/
 
 ### Q027: What is the recommended installation method?
 
-**Answer**: The recommended method is `uvx --from "git+https://github.com/cmtzco/context-harness.git" context-harness init`, which installs and runs in one command without polluting global packages. Manual installation involves cloning and copying template directories.
+**Answer**: The recommended method is `uvx --from "git+https://github.com/co-labs-co/context-harness.git" context-harness init`, which installs and runs in one command without polluting global packages. Manual installation involves cloning and copying template directories.
 
 **Evidence**:
-- `README.md:24-25` - `uvx --from "git+https://github.com/cmtzco/context-harness.git" context-harness init`
+- `README.md:24-25` - `uvx --from "git+https://github.com/co-labs-co/context-harness.git" context-harness init`
 - `README.md:263-271` - Manual installation instructions
 
 **Confidence**: High

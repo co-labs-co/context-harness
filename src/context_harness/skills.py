@@ -25,7 +25,7 @@ from rich.table import Table
 console = Console()
 
 # Central skills repository
-SKILLS_REPO = "cmtzco/context-harness-skills"
+SKILLS_REPO = "co-labs-co/context-harness-skills"
 SKILLS_REGISTRY_PATH = "skills.json"
 SKILLS_DIR = "skill"  # singular, matching OpenCode standard
 

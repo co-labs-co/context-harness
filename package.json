@@ -5,7 +5,7 @@
   "description": "Context-aware agent framework for OpenCode.ai",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/cmtzco/context-harness.git"
+    "url": "git+https://github.com/co-labs-co/context-harness.git"
   },
   "author": "Chris Martinez",
   "license": "MIT",
