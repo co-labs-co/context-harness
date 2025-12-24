@@ -5,11 +5,11 @@
 ## Quickstart
 
 ```bash
-# Install and initialize
-uvx --from "git+https://github.com/co-labs-co/context-harness.git" context-harness init
+# Install (one-time)
+uv tool install "git+https://github.com/co-labs-co/context-harness.git"
 
-# Add documentation lookup (optional)
-context-harness mcp add context7
+# Initialize in your project
+context-harness init
 
 # Start working
 /ctx my-feature        # Create session + branch
@@ -54,12 +54,11 @@ That's it. Your context persists across sessions.
 ### Installation
 
 ```bash
-# One-time run (recommended)
-uvx --from "git+https://github.com/co-labs-co/context-harness.git" context-harness init
-
-# Or install globally
+# Install globally (recommended)
 uv tool install "git+https://github.com/co-labs-co/context-harness.git"
-context-harness init
+
+# Or run without installing
+uvx --from "git+https://github.com/co-labs-co/context-harness.git" context-harness init
 ```
 
 ### Core Commands
