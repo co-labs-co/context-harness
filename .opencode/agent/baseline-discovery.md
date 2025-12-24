@@ -137,7 +137,48 @@ Detection Method:
 5. Look for infrastructure directories (terraform/, k8s/)
 ```
 
-### Phase 5: Design System & UI Detection (Conditional)
+### Phase 5: Skill Opportunity Detection
+
+Identify patterns that could become reusable skills:
+
+```
+Skill Pattern Detection:
+├── Repeated Code Structures:
+│   ├── Similar file patterns across modules
+│   ├── Boilerplate that gets copied frequently
+│   ├── Utility functions with complex logic
+│   └── Template files or generators
+├── Complex Workflows:
+│   ├── Multi-step processes in scripts/
+│   ├── Build and deployment configurations
+│   ├── Data transformation pipelines
+│   └── Testing patterns and fixtures
+├── External Integration Patterns:
+│   ├── API client implementations
+│   ├── Database access patterns (ORMs, queries)
+│   ├── Cloud service integrations
+│   └── Third-party SDK wrappers
+├── Domain-Specific Logic:
+│   ├── Business rule implementations
+│   ├── Validation logic patterns
+│   ├── Industry-specific calculations
+│   └── Company conventions/standards
+└── Infrastructure Patterns:
+    ├── Dockerfile patterns
+    ├── CI/CD workflow configurations
+    ├── Kubernetes/container orchestration
+    └── Monitoring and logging setups
+
+Detection Method:
+1. Scan for similar file structures in different directories
+2. Look for TODO/FIXME comments mentioning repetition
+3. Check for generator scripts or templates
+4. Identify wrapper classes around external services
+5. Find complex regex or parsing logic
+6. Detect configuration-heavy integrations
+```
+
+### Phase 6: Design System & UI Detection (Conditional)
 
 **ONLY execute this phase if frontend/UI presence is detected** (React, Vue, Angular, Svelte, CSS files, etc.)
 
@@ -306,6 +347,35 @@ You MUST output a valid JSON object with this structure:
     "code_organization": "feature-based | layer-based | domain-driven",
     "api_style": "REST | GraphQL | gRPC | none",
     "authentication_pattern": "JWT | session | OAuth | none detected"
+  },
+  
+  "skill_opportunities": {
+    "detected_patterns": [
+      {
+        "name": "suggested-skill-name",
+        "category": "repeated_code | complex_workflow | external_integration | domain_logic | infrastructure",
+        "description": "Brief description of the pattern",
+        "evidence": [
+          {
+            "file": "path/to/file",
+            "pattern": "what was found",
+            "frequency": "how often it appears"
+          }
+        ],
+        "potential_value": "high | medium | low",
+        "suggested_resources": {
+          "scripts": ["potential scripts to create"],
+          "references": ["documentation to add"],
+          "assets": ["templates or assets"]
+        }
+      }
+    ],
+    "existing_skills": {
+      "found": true | false,
+      "location": ".opencode/skill/",
+      "skills": ["list of existing skill names"]
+    },
+    "recommendation": "Number of skills recommended for creation"
   },
   
   "design_system": {

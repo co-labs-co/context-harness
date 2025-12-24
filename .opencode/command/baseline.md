@@ -30,6 +30,13 @@ Execute the 3-phase baseline analysis pipeline to generate `PROJECT-CONTEXT.md`:
 │  PHASE 3: @baseline-answers         │
 │  Answer questions with evidence     │
 │  → PROJECT-CONTEXT.md               │
+└────────────────┬────────────────────┘
+                 │
+                 ▼
+┌─────────────────────────────────────┐
+│  PHASE 4: @baseline-skills          │
+│  Identify skill opportunities       │
+│  → skeleton skills in .opencode/    │
 └─────────────────────────────────────┘
 ```
 
@@ -40,7 +47,7 @@ Execute the 3-phase baseline analysis pipeline to generate `PROJECT-CONTEXT.md`:
    🔍 Starting baseline analysis...
    
    This will analyze your project and generate PROJECT-CONTEXT.md
-   Phases: Discovery → Questions → Answers
+   Phases: Discovery → Questions → Answers → Skills
    
    Estimated time: 2-5 minutes depending on project size
    ```
@@ -84,7 +91,23 @@ Execute the 3-phase baseline analysis pipeline to generate `PROJECT-CONTEXT.md`:
         - Unanswered: [count]
      ```
 
-5. **Write Output**
+5. **Phase 4: Skills** (unless `--skip-skills` flag)
+   - Invoke `@baseline-skills` subagent via Task tool
+   - Prompt: Include the `discovery_report` JSON
+   - Request: "Analyze skill opportunities and generate skeleton SKILL.md content for recommended skills."
+   - Store result as `skill_skeletons`
+   - For each skeleton skill:
+     - Create directory `.opencode/skill/{skill-name}/`
+     - Write SKILL.md from skeleton content
+   - Display progress:
+     ```
+     ✅ Phase 4 Complete: Skills
+        - Opportunities identified: [count]
+        - Skills created: [count]
+        - Location: .opencode/skill/
+     ```
+
+6. **Write Output**
    - Write `project_context_content` to `PROJECT-CONTEXT.md` in project root
    - Display completion:
      ```
@@ -97,10 +120,16 @@ Execute the 3-phase baseline analysis pipeline to generate `PROJECT-CONTEXT.md`:
      - Primary Language: [language]
      - Framework: [framework]
      - Questions Answered: [count]/[total]
+     - Skills Created: [count] skeleton skills
      
      The PROJECT-CONTEXT.md file provides comprehensive context about this codebase.
      Share it with new team members or use it as a reference.
      
+     Skills created in .opencode/skill/:
+     - [skill-name-1] (skeleton - needs refinement)
+     - [skill-name-2] (skeleton - needs refinement)
+     
+     To refine skills: /skill refine [name]
      To regenerate: /baseline
      ```
 
@@ -111,7 +140,9 @@ Parse from $ARGUMENTS:
 | Flag | Effect |
 |------|--------|
 | `--discovery-only` | Run only Phase 1, output discovery report |
-| `--questions-only` | Run Phases 1-2, output questions (skip answers) |
+| `--questions-only` | Run Phases 1-2, output questions (skip answers and skills) |
+| `--skip-skills` | Run Phases 1-3, skip skill extraction |
+| `--skills-only` | Run only Phase 4 with existing discovery report |
 | `--output [path]` | Write to custom path instead of PROJECT-CONTEXT.md |
 | `--json` | Output raw JSON instead of markdown |
 | `--verbose` | Show detailed progress for each phase |
@@ -119,9 +150,11 @@ Parse from $ARGUMENTS:
 ### Example Invocations
 
 ```
-/baseline                           # Full analysis
+/baseline                           # Full analysis (all 4 phases)
 /baseline --verbose                 # Full analysis with details
 /baseline --discovery-only          # Just discovery phase
+/baseline --skip-skills             # Generate PROJECT-CONTEXT.md without skills
+/baseline --skills-only             # Only generate skills (uses cached discovery)
 /baseline --output docs/CONTEXT.md  # Custom output location
 ```
 
@@ -156,6 +189,26 @@ Parse from $ARGUMENTS:
    
    Discovery and questions are cached.
    Fix the issue and run: /baseline --skip-discovery
+```
+
+**Phase 4 Failure** (skill extraction):
+```
+⚠️ Skill extraction warning
+   
+   [error message]
+   
+   PROJECT-CONTEXT.md was generated successfully.
+   Skills can be generated later with: /baseline --skills-only
+```
+
+**No Skills Identified**:
+```
+ℹ️ No skill opportunities identified
+   
+   No patterns in the codebase met the threshold for skill creation.
+   This is normal for simple projects or highly unique codebases.
+   
+   You can manually create skills using the skill-creator skill.
 ```
 
 ### Caching (Future Enhancement)
