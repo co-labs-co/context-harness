@@ -7,7 +7,6 @@ when using the `context-harness skill install` command.
 from __future__ import annotations
 
 import json
-import os
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional
@@ -243,3 +242,68 @@ def clear_skills_cache() -> bool:
         except OSError:
             pass
     return False
+
+
+def interactive_skill_picker(console) -> Optional[str]:
+    """Show an interactive fuzzy-searchable skill picker.
+
+    Args:
+        console: Rich console for status messages
+
+    Returns:
+        Selected skill name, or None if cancelled/no skills available
+    """
+    import questionary
+    from questionary import Style
+
+    # Fetch skills with a loading indicator
+    with console.status("[bold blue]Fetching available skills...[/bold blue]"):
+        skills = _fetch_skills_for_completion()
+
+    if not skills:
+        console.print("[yellow]No skills available.[/yellow]")
+        console.print("[dim]The skills repository may be empty or inaccessible.[/dim]")
+        return None
+
+    # Build choices with name and description
+    choices = []
+    for skill in skills:
+        name = skill.get("name", "")
+        description = skill.get("description", "")
+        if name:
+            # Format: "skill-name - Description"
+            if description:
+                display = f"{name} - {description[:60]}{'...' if len(description) > 60 else ''}"
+            else:
+                display = name
+            choices.append(questionary.Choice(title=display, value=name))
+
+    if not choices:
+        console.print("[yellow]No valid skills found.[/yellow]")
+        return None
+
+    # Custom style for the picker
+    custom_style = Style(
+        [
+            ("qmark", "fg:cyan bold"),
+            ("question", "fg:white bold"),
+            ("answer", "fg:cyan bold"),
+            ("pointer", "fg:cyan bold"),
+            ("highlighted", "fg:cyan bold"),
+            ("selected", "fg:green"),
+            ("instruction", "fg:gray"),
+        ]
+    )
+
+    # Show the interactive picker
+    console.print()
+    result = questionary.select(
+        "Select a skill to install:",
+        choices=choices,
+        style=custom_style,
+        instruction="(Use arrow keys to navigate, type to filter)",
+        use_shortcuts=False,
+        use_indicator=True,
+    ).ask()
+
+    return result

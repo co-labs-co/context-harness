@@ -228,9 +228,38 @@ Alternatively to the CLI:
 
 ## Shell Completion
 
-ContextHarness supports tab completion for skill names when using `context-harness skill install`. This enables fuzzy finding to quickly locate and install skills.
+ContextHarness provides an interactive skill picker with fuzzy search when installing skills.
 
-### Enabling Shell Completion
+### Interactive Skill Selection
+
+Simply run `skill install` without a skill name to see the interactive picker:
+
+```bash
+$ context-harness skill install
+
+? Select a skill to install: (Use arrow keys to navigate, type to filter)
+ » react-forms - React form handling with validation
+   react-router - React routing patterns
+   django-auth - Django authentication patterns
+   fastapi-crud - FastAPI CRUD patterns
+```
+
+- **Arrow keys**: Navigate up/down through the list
+- **Type to filter**: Start typing to fuzzy-search skills
+- **Enter**: Select the highlighted skill
+- **Ctrl+C**: Cancel
+
+### Direct Installation
+
+If you know the skill name, you can specify it directly:
+
+```bash
+context-harness skill install react-forms
+```
+
+### Optional: Traditional Shell Completion
+
+For traditional tab completion (requires shell configuration):
 
 #### Bash
 
@@ -242,9 +271,10 @@ eval "$(_CONTEXT_HARNESS_COMPLETE=bash_source context-harness)"
 
 #### Zsh
 
-Add to your `~/.zshrc`:
+Add to your `~/.zshrc` (after `compinit`):
 
 ```zsh
+autoload -Uz compinit && compinit
 eval "$(_CONTEXT_HARNESS_COMPLETE=zsh_source context-harness)"
 ```
 
@@ -254,42 +284,6 @@ Add to your `~/.config/fish/completions/context-harness.fish`:
 
 ```fish
 _CONTEXT_HARNESS_COMPLETE=fish_source context-harness | source
-```
-
-After adding the appropriate line, restart your shell or run `source ~/.bashrc` (or equivalent).
-
-### Using Skill Completion
-
-Once enabled, you can use tab completion when installing skills:
-
-```bash
-# Press Tab to see all available skills
-context-harness skill install <Tab>
-
-# Type partial name and press Tab for fuzzy matching
-context-harness skill install react<Tab>
-# Shows: react-forms, react-router, react-hooks, etc.
-
-# Fuzzy matching works with non-contiguous characters
-context-harness skill install rf<Tab>
-# Shows: react-forms (matches r...f)
-```
-
-### Completion Features
-
-- **Fuzzy matching**: Type partial characters (e.g., `rf` matches `react-forms`)
-- **Case insensitive**: `REACT` matches `react-forms`
-- **Description hints**: Completions show skill descriptions for context
-- **Caching**: Skills list is cached for 5 minutes for fast completions
-- **Graceful degradation**: Works offline if skills were previously cached
-
-### Clearing the Cache
-
-If you need to refresh the skills list before the cache expires:
-
-```python
-from context_harness.completion import clear_skills_cache
-clear_skills_cache()
 ```
 
 ## How It Differs from Other Approaches

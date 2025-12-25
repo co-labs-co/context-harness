@@ -387,3 +387,75 @@ class TestShellCompletionIntegration:
         skill_name_param = next(p for p in params if p.name == "skill_name")
 
         assert skill_name_param.shell_complete is not None
+
+    def test_skill_install_argument_is_optional(self):
+        """Test that skill_name argument is optional for interactive mode."""
+        from context_harness.cli import skill_install_cmd
+
+        params = skill_install_cmd.params
+        skill_name_param = next(p for p in params if p.name == "skill_name")
+
+        assert skill_name_param.required is False
+
+
+class TestInteractiveSkillPicker:
+    """Tests for interactive skill picker."""
+
+    def test_interactive_picker_returns_none_on_no_skills(self, monkeypatch):
+        """Test picker returns None when no skills available."""
+        from io import StringIO
+        from unittest.mock import MagicMock
+
+        from context_harness.completion import interactive_skill_picker
+
+        # Mock fetch to return empty list
+        monkeypatch.setattr(
+            "context_harness.completion._fetch_skills_for_completion",
+            lambda: [],
+        )
+
+        # Mock console
+        mock_console = MagicMock()
+        mock_console.status.return_value.__enter__ = MagicMock()
+        mock_console.status.return_value.__exit__ = MagicMock()
+
+        result = interactive_skill_picker(mock_console)
+
+        assert result is None
+
+    def test_interactive_picker_builds_choices(self, monkeypatch):
+        """Test picker builds correct choices from skills."""
+        from unittest.mock import MagicMock, patch
+
+        from context_harness.completion import interactive_skill_picker
+
+        skills = [
+            {"name": "skill-one", "description": "First skill"},
+            {"name": "skill-two", "description": "Second skill"},
+        ]
+
+        monkeypatch.setattr(
+            "context_harness.completion._fetch_skills_for_completion",
+            lambda: skills,
+        )
+
+        mock_console = MagicMock()
+        mock_console.status.return_value.__enter__ = MagicMock()
+        mock_console.status.return_value.__exit__ = MagicMock()
+
+        # Mock questionary at the module level (it's imported inside the function)
+        with patch.dict("sys.modules", {"questionary": MagicMock()}) as mock_modules:
+            import sys
+
+            mock_q = sys.modules["questionary"]
+            mock_select = MagicMock()
+            mock_select.ask.return_value = "skill-one"
+            mock_q.select.return_value = mock_select
+            mock_q.Choice = lambda title, value: {"title": title, "value": value}
+            mock_q.Style = MagicMock()
+
+            result = interactive_skill_picker(mock_console)
+
+            # Verify questionary.select was called
+            mock_q.select.assert_called_once()
+            assert result == "skill-one"

@@ -20,7 +20,7 @@ from context_harness.skills import (
     extract_skill,
     SkillResult,
 )
-from context_harness.completion import complete_skill_names
+from context_harness.completion import complete_skill_names, interactive_skill_picker
 
 console = Console()
 
@@ -305,7 +305,9 @@ def skill_info_cmd(skill_name: str):
 
 
 @skill.command("install")
-@click.argument("skill_name", shell_complete=complete_skill_names)
+@click.argument(
+    "skill_name", required=False, default=None, shell_complete=complete_skill_names
+)
 @click.option(
     "--target",
     "-t",
@@ -319,24 +321,24 @@ def skill_info_cmd(skill_name: str):
     is_flag=True,
     help="Overwrite existing skill if already installed.",
 )
-def skill_install_cmd(skill_name: str, target: str, force: bool):
+def skill_install_cmd(skill_name: str | None, target: str, force: bool):
     """Install a skill from the central repository.
 
     Downloads and installs the specified skill to .opencode/skill/ in the
-    target directory. Supports tab completion with fuzzy matching.
+    target directory.
+
+    If no skill name is provided, an interactive picker will be shown
+    with fuzzy search to help you find and select a skill.
 
     Examples:
+
+        context-harness skill install
 
         context-harness skill install react-forms
 
         context-harness skill install django-auth --target ./my-project
 
         context-harness skill install react-forms --force
-
-    Shell Completion:
-
-        Press Tab after 'skill install' to see available skills.
-        Type partial names for fuzzy matching (e.g., 'rf' matches 'react-forms').
     """
     console.print()
     console.print(
@@ -346,6 +348,14 @@ def skill_install_cmd(skill_name: str, target: str, force: bool):
         )
     )
     console.print()
+
+    # If no skill name provided, show interactive picker
+    if skill_name is None:
+        skill_name = interactive_skill_picker(console)
+        if skill_name is None:
+            # User cancelled or no skills available
+            raise SystemExit(0)
+        console.print()
 
     result = install_skill(skill_name, target=target, force=force)
 
