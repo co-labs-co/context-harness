@@ -226,6 +226,72 @@ Alternatively to the CLI:
 3. Add Context7 MCP to your `opencode.json` (see above)
 4. Invoke `@context-harness` to start working
 
+## Shell Completion
+
+ContextHarness supports tab completion for skill names when using `context-harness skill install`. This enables fuzzy finding to quickly locate and install skills.
+
+### Enabling Shell Completion
+
+#### Bash
+
+Add to your `~/.bashrc`:
+
+```bash
+eval "$(_CONTEXT_HARNESS_COMPLETE=bash_source context-harness)"
+```
+
+#### Zsh
+
+Add to your `~/.zshrc`:
+
+```zsh
+eval "$(_CONTEXT_HARNESS_COMPLETE=zsh_source context-harness)"
+```
+
+#### Fish
+
+Add to your `~/.config/fish/completions/context-harness.fish`:
+
+```fish
+_CONTEXT_HARNESS_COMPLETE=fish_source context-harness | source
+```
+
+After adding the appropriate line, restart your shell or run `source ~/.bashrc` (or equivalent).
+
+### Using Skill Completion
+
+Once enabled, you can use tab completion when installing skills:
+
+```bash
+# Press Tab to see all available skills
+context-harness skill install <Tab>
+
+# Type partial name and press Tab for fuzzy matching
+context-harness skill install react<Tab>
+# Shows: react-forms, react-router, react-hooks, etc.
+
+# Fuzzy matching works with non-contiguous characters
+context-harness skill install rf<Tab>
+# Shows: react-forms (matches r...f)
+```
+
+### Completion Features
+
+- **Fuzzy matching**: Type partial characters (e.g., `rf` matches `react-forms`)
+- **Case insensitive**: `REACT` matches `react-forms`
+- **Description hints**: Completions show skill descriptions for context
+- **Caching**: Skills list is cached for 5 minutes for fast completions
+- **Graceful degradation**: Works offline if skills were previously cached
+
+### Clearing the Cache
+
+If you need to refresh the skills list before the cache expires:
+
+```python
+from context_harness.completion import clear_skills_cache
+clear_skills_cache()
+```
+
 ## How It Differs from Other Approaches
 
 | Approach | Limitation | ContextHarness Solution |

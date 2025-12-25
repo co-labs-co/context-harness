@@ -20,6 +20,7 @@ from context_harness.skills import (
     extract_skill,
     SkillResult,
 )
+from context_harness.completion import complete_skill_names
 
 console = Console()
 
@@ -304,7 +305,7 @@ def skill_info_cmd(skill_name: str):
 
 
 @skill.command("install")
-@click.argument("skill_name")
+@click.argument("skill_name", shell_complete=complete_skill_names)
 @click.option(
     "--target",
     "-t",
@@ -322,7 +323,7 @@ def skill_install_cmd(skill_name: str, target: str, force: bool):
     """Install a skill from the central repository.
 
     Downloads and installs the specified skill to .opencode/skill/ in the
-    target directory.
+    target directory. Supports tab completion with fuzzy matching.
 
     Examples:
 
@@ -331,6 +332,11 @@ def skill_install_cmd(skill_name: str, target: str, force: bool):
         context-harness skill install django-auth --target ./my-project
 
         context-harness skill install react-forms --force
+
+    Shell Completion:
+
+        Press Tab after 'skill install' to see available skills.
+        Type partial names for fuzzy matching (e.g., 'rf' matches 'react-forms').
     """
     console.print()
     console.print(
