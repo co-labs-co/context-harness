@@ -226,6 +226,86 @@ Alternatively to the CLI:
 3. Add Context7 MCP to your `opencode.json` (see above)
 4. Invoke `@context-harness` to start working
 
+## Shell Completion
+
+ContextHarness provides interactive skill pickers with fuzzy search for both installing and extracting skills.
+
+### Interactive Skill Selection
+
+#### Installing Skills
+
+Simply run `skill install` without a skill name to see the interactive picker:
+
+```bash
+$ context-harness skill install
+
+? Select a skill to install: (Use arrow keys to navigate, type to filter)
+ » react-forms - React form handling with validation
+   react-router - React routing patterns
+   django-auth - Django authentication patterns
+   fastapi-crud - FastAPI CRUD patterns
+```
+
+#### Extracting Skills
+
+Similarly, run `skill extract` without a skill name to pick from your local skills:
+
+```bash
+$ context-harness skill extract
+
+? Select a skill to extract: (Use arrow keys to navigate, type to filter)
+ » my-custom-skill - Custom workflow automation
+   code-review - Code review guidelines
+```
+
+#### Picker Controls
+
+- **Arrow keys**: Navigate up/down through the list
+- **Type to filter**: Start typing to fuzzy-search skills
+- **Enter**: Select the highlighted skill
+- **Ctrl+C**: Cancel
+
+### Direct Commands
+
+If you know the skill name, you can specify it directly:
+
+```bash
+# Install a specific skill
+context-harness skill install react-forms
+
+# Extract a specific skill
+context-harness skill extract my-custom-skill
+```
+
+### Optional: Traditional Shell Completion
+
+For traditional tab completion (requires shell configuration):
+
+#### Bash
+
+Add to your `~/.bashrc`:
+
+```bash
+eval "$(_CONTEXT_HARNESS_COMPLETE=bash_source context-harness)"
+```
+
+#### Zsh
+
+Add to your `~/.zshrc` (after `compinit`):
+
+```zsh
+autoload -Uz compinit && compinit
+eval "$(_CONTEXT_HARNESS_COMPLETE=zsh_source context-harness)"
+```
+
+#### Fish
+
+Add to your `~/.config/fish/completions/context-harness.fish`:
+
+```fish
+_CONTEXT_HARNESS_COMPLETE=fish_source context-harness | source
+```
+
 ## How It Differs from Other Approaches
 
 | Approach | Limitation | ContextHarness Solution |
