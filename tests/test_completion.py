@@ -459,3 +459,170 @@ class TestInteractiveSkillPicker:
             # Verify questionary.select was called
             mock_q.select.assert_called_once()
             assert result == "skill-one"
+
+
+class TestInteractiveLocalSkillPicker:
+    """Tests for interactive local skill picker."""
+
+    def test_local_picker_returns_none_on_no_skills(self, monkeypatch, tmp_path):
+        """Test picker returns None when no local skills available."""
+        from unittest.mock import MagicMock
+
+        from context_harness.completion import interactive_local_skill_picker
+
+        # Create empty .opencode/skill directory
+        skill_dir = tmp_path / ".opencode" / "skill"
+        skill_dir.mkdir(parents=True, exist_ok=True)
+
+        mock_console = MagicMock()
+
+        result = interactive_local_skill_picker(mock_console, source_path=str(tmp_path))
+
+        assert result is None
+
+    def test_local_picker_returns_none_on_no_directory(self, monkeypatch, tmp_path):
+        """Test picker returns None when skill directory doesn't exist."""
+        from unittest.mock import MagicMock
+
+        from context_harness.completion import interactive_local_skill_picker
+
+        mock_console = MagicMock()
+
+        result = interactive_local_skill_picker(mock_console, source_path=str(tmp_path))
+
+        assert result is None
+
+    def test_local_picker_filters_invalid_skills(self, monkeypatch, tmp_path):
+        """Test picker only shows valid skills."""
+        from unittest.mock import MagicMock, patch
+
+        from context_harness.completion import interactive_local_skill_picker
+
+        # Create skill directory with one valid and one invalid skill
+        skill_dir = tmp_path / ".opencode" / "skill"
+
+        # Valid skill with SKILL.md
+        valid_skill = skill_dir / "valid-skill"
+        valid_skill.mkdir(parents=True, exist_ok=True)
+        (valid_skill / "SKILL.md").write_text(
+            "---\nname: valid-skill\ndescription: A valid skill\n---\n# Valid Skill",
+            encoding="utf-8",
+        )
+
+        # Invalid skill without SKILL.md
+        invalid_skill = skill_dir / "invalid-skill"
+        invalid_skill.mkdir(parents=True, exist_ok=True)
+
+        mock_console = MagicMock()
+
+        with patch.dict("sys.modules", {"questionary": MagicMock()}) as mock_modules:
+            import sys
+
+            mock_q = sys.modules["questionary"]
+            mock_select = MagicMock()
+            mock_select.ask.return_value = "valid-skill"
+            mock_q.select.return_value = mock_select
+            mock_q.Choice = lambda title, value: {"title": title, "value": value}
+            mock_q.Style = MagicMock()
+
+            result = interactive_local_skill_picker(
+                mock_console, source_path=str(tmp_path)
+            )
+
+            # Should return the valid skill
+            assert result == "valid-skill"
+
+            # Verify only one choice was built (the valid skill)
+            call_args = mock_q.select.call_args
+            choices = call_args.kwargs.get(
+                "choices", call_args.args[1] if len(call_args.args) > 1 else []
+            )
+            assert len(choices) == 1
+
+    def test_local_picker_builds_choices_correctly(self, monkeypatch, tmp_path):
+        """Test picker builds correct choices from local skills."""
+        from unittest.mock import MagicMock, patch
+
+        from context_harness.completion import interactive_local_skill_picker
+
+        skill_dir = tmp_path / ".opencode" / "skill"
+
+        # Create two valid skills
+        skill_one = skill_dir / "skill-one"
+        skill_one.mkdir(parents=True, exist_ok=True)
+        (skill_one / "SKILL.md").write_text(
+            "---\nname: skill-one\ndescription: First skill\n---\n# Skill One",
+            encoding="utf-8",
+        )
+
+        skill_two = skill_dir / "skill-two"
+        skill_two.mkdir(parents=True, exist_ok=True)
+        (skill_two / "SKILL.md").write_text(
+            "---\nname: skill-two\ndescription: Second skill\n---\n# Skill Two",
+            encoding="utf-8",
+        )
+
+        mock_console = MagicMock()
+
+        with patch.dict("sys.modules", {"questionary": MagicMock()}) as mock_modules:
+            import sys
+
+            mock_q = sys.modules["questionary"]
+            mock_select = MagicMock()
+            mock_select.ask.return_value = "skill-two"
+            mock_q.select.return_value = mock_select
+            mock_q.Choice = lambda title, value: {"title": title, "value": value}
+            mock_q.Style = MagicMock()
+
+            result = interactive_local_skill_picker(
+                mock_console, source_path=str(tmp_path)
+            )
+
+            # Verify questionary.select was called
+            mock_q.select.assert_called_once()
+            assert result == "skill-two"
+
+    def test_local_picker_returns_none_on_cancel(self, monkeypatch, tmp_path):
+        """Test picker returns None when user cancels."""
+        from unittest.mock import MagicMock, patch
+
+        from context_harness.completion import interactive_local_skill_picker
+
+        skill_dir = tmp_path / ".opencode" / "skill"
+        skill_one = skill_dir / "skill-one"
+        skill_one.mkdir(parents=True, exist_ok=True)
+        (skill_one / "SKILL.md").write_text(
+            "---\nname: skill-one\ndescription: First skill\n---\n# Skill One",
+            encoding="utf-8",
+        )
+
+        mock_console = MagicMock()
+
+        with patch.dict("sys.modules", {"questionary": MagicMock()}) as mock_modules:
+            import sys
+
+            mock_q = sys.modules["questionary"]
+            mock_select = MagicMock()
+            mock_select.ask.return_value = None  # User cancelled
+            mock_q.select.return_value = mock_select
+            mock_q.Choice = lambda title, value: {"title": title, "value": value}
+            mock_q.Style = MagicMock()
+
+            result = interactive_local_skill_picker(
+                mock_console, source_path=str(tmp_path)
+            )
+
+            assert result is None
+
+
+class TestSkillExtractHasOptionalArgument:
+    """Test that skill extract command has optional skill_name argument."""
+
+    def test_skill_extract_argument_is_optional(self):
+        """Test that skill_name argument is optional for interactive mode."""
+        from context_harness.cli import skill_extract_cmd
+
+        params = skill_extract_cmd.params
+        skill_name_param = next(p for p in params if p.name == "skill_name")
+
+        assert skill_name_param.required is False

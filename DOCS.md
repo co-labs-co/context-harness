@@ -228,9 +228,11 @@ Alternatively to the CLI:
 
 ## Shell Completion
 
-ContextHarness provides an interactive skill picker with fuzzy search when installing skills.
+ContextHarness provides interactive skill pickers with fuzzy search for both installing and extracting skills.
 
 ### Interactive Skill Selection
+
+#### Installing Skills
 
 Simply run `skill install` without a skill name to see the interactive picker:
 
@@ -244,17 +246,35 @@ $ context-harness skill install
    fastapi-crud - FastAPI CRUD patterns
 ```
 
+#### Extracting Skills
+
+Similarly, run `skill extract` without a skill name to pick from your local skills:
+
+```bash
+$ context-harness skill extract
+
+? Select a skill to extract: (Use arrow keys to navigate, type to filter)
+ » my-custom-skill - Custom workflow automation
+   code-review - Code review guidelines
+```
+
+#### Picker Controls
+
 - **Arrow keys**: Navigate up/down through the list
 - **Type to filter**: Start typing to fuzzy-search skills
 - **Enter**: Select the highlighted skill
 - **Ctrl+C**: Cancel
 
-### Direct Installation
+### Direct Commands
 
 If you know the skill name, you can specify it directly:
 
 ```bash
+# Install a specific skill
 context-harness skill install react-forms
+
+# Extract a specific skill
+context-harness skill extract my-custom-skill
 ```
 
 ### Optional: Traditional Shell Completion

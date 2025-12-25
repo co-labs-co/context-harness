@@ -304,6 +304,84 @@ def interactive_skill_picker(console) -> Optional[str]:
         instruction="(Use arrow keys to navigate, type to filter)",
         use_shortcuts=False,
         use_indicator=True,
+        use_search_filter=True,
+        use_jk_keys=False,
+    ).ask()
+
+    return result
+
+
+def interactive_local_skill_picker(console, source_path: str = ".") -> Optional[str]:
+    """Show an interactive fuzzy-searchable picker for local skills.
+
+    Args:
+        console: Rich console for status messages
+        source_path: Directory containing .opencode/skill/ (default: current directory)
+
+    Returns:
+        Selected skill name, or None if cancelled/no skills available
+    """
+    import questionary
+    from questionary import Style
+
+    from context_harness.skills import list_local_skills
+
+    # Fetch local skills
+    skills = list_local_skills(source_path=source_path, quiet=True)
+
+    if not skills:
+        console.print("[yellow]No local skills found.[/yellow]")
+        console.print("[dim]Expected location: .opencode/skill/[/dim]")
+        console.print()
+        console.print(
+            "[dim]Create a skill with the skill-creator or install one from the repository.[/dim]"
+        )
+        return None
+
+    # Filter to only valid skills
+    valid_skills = [s for s in skills if s.is_valid]
+
+    if not valid_skills:
+        console.print("[yellow]No valid skills found.[/yellow]")
+        console.print(
+            "[dim]All local skills are missing SKILL.md or have errors.[/dim]"
+        )
+        return None
+
+    # Build choices with name and description
+    choices = []
+    for skill in valid_skills:
+        # Format: "skill-name - Description"
+        if skill.description:
+            display = f"{skill.name} - {skill.description[:60]}{'...' if len(skill.description) > 60 else ''}"
+        else:
+            display = skill.name
+        choices.append(questionary.Choice(title=display, value=skill.name))
+
+    # Custom style for the picker
+    custom_style = Style(
+        [
+            ("qmark", "fg:cyan bold"),
+            ("question", "fg:white bold"),
+            ("answer", "fg:cyan bold"),
+            ("pointer", "fg:cyan bold"),
+            ("highlighted", "fg:cyan bold"),
+            ("selected", "fg:green"),
+            ("instruction", "fg:gray"),
+        ]
+    )
+
+    # Show the interactive picker
+    console.print()
+    result = questionary.select(
+        "Select a skill to extract:",
+        choices=choices,
+        style=custom_style,
+        instruction="(Use arrow keys to navigate, type to filter)",
+        use_shortcuts=False,
+        use_indicator=True,
+        use_search_filter=True,
+        use_jk_keys=False,
     ).ask()
 
     return result

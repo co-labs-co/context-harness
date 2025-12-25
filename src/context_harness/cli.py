@@ -20,7 +20,11 @@ from context_harness.skills import (
     extract_skill,
     SkillResult,
 )
-from context_harness.completion import complete_skill_names, interactive_skill_picker
+from context_harness.completion import (
+    complete_skill_names,
+    interactive_skill_picker,
+    interactive_local_skill_picker,
+)
 
 console = Console()
 
@@ -381,7 +385,7 @@ def skill_install_cmd(skill_name: str | None, target: str, force: bool):
 
 
 @skill.command("extract")
-@click.argument("skill_name")
+@click.argument("skill_name", required=False, default=None)
 @click.option(
     "--source",
     "-s",
@@ -389,13 +393,18 @@ def skill_install_cmd(skill_name: str | None, target: str, force: bool):
     type=click.Path(exists=True),
     help="Source directory containing .opencode/skill/ (default: current directory).",
 )
-def skill_extract_cmd(skill_name: str, source: str):
+def skill_extract_cmd(skill_name: str | None, source: str):
     """Extract a local skill and create a PR to the central repository.
 
     Takes a skill from your local .opencode/skill/ directory and creates
     a pull request to add it to the central skills repository for review.
 
+    If no skill name is provided, an interactive picker will be shown
+    with fuzzy search to help you find and select a skill.
+
     Examples:
+
+        context-harness skill extract
 
         context-harness skill extract my-custom-skill
 
@@ -409,6 +418,14 @@ def skill_extract_cmd(skill_name: str, source: str):
         )
     )
     console.print()
+
+    # If no skill name provided, show interactive picker
+    if skill_name is None:
+        skill_name = interactive_local_skill_picker(console, source_path=source)
+        if skill_name is None:
+            # User cancelled or no skills available
+            raise SystemExit(0)
+        console.print()
 
     result, pr_url = extract_skill(skill_name, source_path=source)
 
