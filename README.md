@@ -85,8 +85,19 @@ context-harness skill list              # List available skills
 context-harness skill list --tags react # Filter by tag
 context-harness skill list-local        # List installed skills
 context-harness skill info <name>       # Show skill details
-context-harness skill install <name>    # Install a skill
-context-harness skill extract <name>    # Share a local skill
+context-harness skill install           # Interactive picker (type to filter)
+context-harness skill install <name>    # Install specific skill
+context-harness skill extract           # Interactive picker for local skills
+context-harness skill extract <name>    # Share a specific local skill
+```
+
+**Interactive skill selection**: Run `skill install` or `skill extract` without a name to get a fuzzy-searchable picker:
+
+```
+? Select a skill to install: (Use arrow keys, type to filter)
+ » react-forms - React form handling with validation
+   django-auth - Django authentication patterns
+   fastapi-crud - FastAPI CRUD patterns
 ```
 
 ---
