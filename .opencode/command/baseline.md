@@ -1,5 +1,5 @@
 ---
-description: Generate comprehensive PROJECT-CONTEXT.md through 3-phase analysis with parallel question answering
+description: Generate comprehensive PROJECT-CONTEXT.md through 4-phase analysis with parallel question answering and skill extraction
 agent: context-harness
 ---
 
@@ -7,7 +7,7 @@ Run baseline project analysis: $ARGUMENTS
 
 ## Instructions
 
-Execute the 3-phase baseline analysis pipeline to generate `PROJECT-CONTEXT.md`:
+Execute the 4-phase baseline analysis pipeline to generate `PROJECT-CONTEXT.md`:
 
 ### Phase Overview
 
@@ -41,8 +41,6 @@ Execute the 3-phase baseline analysis pipeline to generate `PROJECT-CONTEXT.md`:
 │              ┌─────────────────────┐                        │
 │              │ @baseline-answers   │                        │
 │              │ (Coordinator)       │                        │
-│              │ Aggregates answers  │                        │
-│              │ Generates markdown  │                        │
 │              └─────────────────────┘                        │
 │                         │                                   │
 │                         ▼                                   │
@@ -50,11 +48,29 @@ Execute the 3-phase baseline analysis pipeline to generate `PROJECT-CONTEXT.md`:
 └─────────────────────────────────────────────────────────────┘
                  │
                  ▼
-┌─────────────────────────────────────┐
-│  PHASE 4: @baseline-skills          │
-│  Identify skill opportunities       │
-│  → skeleton skills in .opencode/    │
-└─────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│  PHASE 4: PARALLEL SKILL EXTRACTION                         │
+│                                                              │
+│  @baseline-skills (mode: identify)                          │
+│         │                                                   │
+│         ▼                                                   │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐           │
+│  │ S001        │ │ S002        │ │ S003        │  ...      │
+│  │ @baseline-  │ │ @baseline-  │ │ @baseline-  │           │
+│  │ skill-      │ │ skill-      │ │ skill-      │           │
+│  │ answer      │ │ answer      │ │ answer      │           │
+│  └──────┬──────┘ └──────┬──────┘ └──────┬──────┘           │
+│         │               │               │                   │
+│         └───────────────┼───────────────┘                   │
+│                         ▼                                   │
+│              ┌─────────────────────┐                        │
+│              │ @baseline-skills    │                        │
+│              │ (mode: aggregate)   │                        │
+│              └─────────────────────┘                        │
+│                         │                                   │
+│                         ▼                                   │
+│              skeleton skills in .opencode/skill/            │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ### Execution Steps
@@ -64,7 +80,7 @@ Execute the 3-phase baseline analysis pipeline to generate `PROJECT-CONTEXT.md`:
    🔍 Starting baseline analysis...
    
    This will analyze your project and generate PROJECT-CONTEXT.md
-   Phases: Discovery → Questions → Parallel Answers → Skills
+   Phases: Discovery → Questions → Parallel Answers → Parallel Skills
    
    Estimated time: 2-5 minutes depending on project size
    ```
@@ -96,7 +112,7 @@ Execute the 3-phase baseline analysis pipeline to generate `PROJECT-CONTEXT.md`:
 
 4. **Phase 3: Parallel Answer Processing**
    
-   This phase uses a two-step approach:
+   This phase uses a three-step approach:
    
    **Step 3a: Dispatch Questions in Parallel Batches**
    
@@ -111,7 +127,6 @@ Execute the 3-phase baseline analysis pipeline to generate `PROJECT-CONTEXT.md`:
        - discovery_context (condensed project info)
    
    Batch size: 5-10 concurrent questions
-   (Adjust based on question count - smaller projects may do all at once)
    ```
    
    Example parallel invocation:
@@ -129,8 +144,6 @@ Execute the 3-phase baseline analysis pipeline to generate `PROJECT-CONTEXT.md`:
      question_id: "Q002",
      ...
    })
-   
-   // ... more parallel tasks
    ```
    
    Display progress:
@@ -150,12 +163,6 @@ Execute the 3-phase baseline analysis pipeline to generate `PROJECT-CONTEXT.md`:
      - Handle any failures (mark as unanswered)
    
    Store all answers in `answered_questions` array
-   ```
-   
-   Display progress:
-   ```
-   ⏳ Phase 3a: Answering questions...
-      Progress: [X]/[Y] questions answered
    ```
    
    **Step 3c: Aggregate with Coordinator**
@@ -178,21 +185,88 @@ Execute the 3-phase baseline analysis pipeline to generate `PROJECT-CONTEXT.md`:
       - Unanswered: [count]
    ```
 
-5. **Phase 4: Skills** (unless `--skip-skills` flag)
-   - Invoke `@baseline-skills` subagent via Task tool
-   - Prompt: Include the `discovery_report` JSON
-   - Request: "Analyze skill opportunities and generate skeleton SKILL.md content for recommended skills."
+5. **Phase 4: Parallel Skill Extraction** (unless `--skip-skills` flag)
+   
+   This phase uses a three-step approach similar to Phase 3:
+   
+   **Step 4a: Identify Skill Opportunities**
+   
+   - Invoke `@baseline-skills` (coordinator, mode: identify) via Task tool
+   - Prompt: Include `discovery_report` JSON with `mode: "identify"`
+   - Request: "Identify skill opportunities in this codebase. Return JSON with opportunities."
+   - Store result as `skill_opportunities`
+   
+   Display progress:
+   ```
+   ⏳ Phase 4a: Identifying skill opportunities...
+      - Scanning codebase patterns...
+   ```
+   
+   **Step 4b: Dispatch Skills in Parallel**
+   
+   ```
+   For each opportunity in skill_opportunities:
+     - Create a Task invocation for @baseline-skill-answer
+     - Include:
+       - skill_id
+       - skill_name
+       - category
+       - initial_patterns (hints)
+       - discovery_context (condensed project info)
+   
+   Batch size: 5 concurrent (skills are more complex)
+   ```
+   
+   Example parallel invocation:
+   ```
+   // Invoke multiple @baseline-skill-answer subagents in parallel
+   Task(@baseline-skill-answer, {
+     skill_id: "S001",
+     skill_name: "api-integration",
+     category: "external_integrations",
+     initial_patterns: ["src/services/*.ts"],
+     discovery_context: { project_name: "...", ... }
+   })
+   
+   Task(@baseline-skill-answer, {
+     skill_id: "S002",
+     ...
+   })
+   ```
+   
+   Display progress:
+   ```
+   ⏳ Phase 4b: Analyzing skills in parallel...
+      - Opportunities dispatched: [count]
+      - Batch size: [N] concurrent workers
+      - Processing...
+   ```
+   
+   **Step 4c: Aggregate and Filter Skills**
+   
+   - Invoke `@baseline-skills` (coordinator, mode: aggregate) via Task tool
+   - Prompt: Include:
+     - `discovery_report` JSON
+     - `skill_opportunities` JSON
+     - `analyzed_skills` array (all JSON from workers)
+   - Request: "Aggregate analyzed skills, filter by score >= 6.0, and generate final report."
    - Store result as `skill_skeletons`
-   - For each skeleton skill:
-     - Create directory `.opencode/skill/{skill-name}/`
-     - Write SKILL.md from skeleton content
-   - Display progress:
-     ```
-     ✅ Phase 4 Complete: Skills
-        - Opportunities identified: [count]
-        - Skills created: [count]
-        - Location: .opencode/skill/
-     ```
+   
+   **Step 4d: Create Skill Files**
+   
+   For each recommended skeleton skill:
+   - Create directory `.opencode/skill/{skill-name}/`
+   - Write SKILL.md from skeleton content
+   
+   Display progress:
+   ```
+   ✅ Phase 4 Complete: Parallel Skills
+      - Opportunities analyzed: [count]
+      - Workers used: [count] parallel
+      - Skills created: [count] (score >= 6.0)
+      - Skipped: [count] (below threshold)
+      - Location: .opencode/skill/
+   ```
 
 6. **Write Output**
    - Write `project_context_content` to `PROJECT-CONTEXT.md` in project root
@@ -207,7 +281,7 @@ Execute the 3-phase baseline analysis pipeline to generate `PROJECT-CONTEXT.md`:
      - Primary Language: [language]
      - Framework: [framework]
      - Questions Answered: [count]/[total]
-     - Processing Mode: Parallel ([N] workers)
+     - Processing Mode: Parallel
      - Skills Created: [count] skeleton skills
      
      The PROJECT-CONTEXT.md file provides comprehensive context about this codebase.
@@ -223,48 +297,63 @@ Execute the 3-phase baseline analysis pipeline to generate `PROJECT-CONTEXT.md`:
 
 ### Parallel Processing Configuration
 
+**Phase 3 (Questions):**
+
 | Project Size | Question Count | Batch Size | Strategy |
 |--------------|----------------|------------|----------|
 | Small | < 15 questions | All at once | Single batch |
 | Medium | 15-30 questions | 10 concurrent | 2-3 batches |
 | Large | 30-50 questions | 10 concurrent | 4-5 batches |
 
+**Phase 4 (Skills):**
+
+| Project Size | Opportunity Count | Batch Size | Strategy |
+|--------------|-------------------|------------|----------|
+| Small | < 5 opportunities | All at once | Single batch |
+| Medium | 5-10 opportunities | 5 concurrent | 1-2 batches |
+| Large | 10+ opportunities | 5 concurrent | Multiple batches |
+
 **Batching Logic:**
 ```
+// Phase 3: Questions
 if question_count <= 15:
-    batch_size = question_count  # All at once
-elif question_count <= 30:
-    batch_size = 10
+    question_batch_size = question_count
 else:
-    batch_size = 10  # Max 10 concurrent for stability
+    question_batch_size = 10  # Max 10 concurrent
+
+// Phase 4: Skills
+if opportunity_count <= 5:
+    skill_batch_size = opportunity_count
+else:
+    skill_batch_size = 5  # Max 5 concurrent (skills are more complex)
 ```
 
-### Error Handling for Parallel Phase
+### Error Handling for Parallel Phases
 
-**Individual Question Failure:**
+**Individual Worker Failure:**
 ```
-If a @baseline-question-answer worker fails:
-1. Log the failure with question_id
-2. Mark question as unanswered with reason "Worker failed"
-3. Continue processing other questions
-4. Include in final unanswered section
+If a worker (@baseline-question-answer or @baseline-skill-answer) fails:
+1. Log the failure with ID
+2. Mark as unanswered/not_recommended with reason "Worker failed"
+3. Continue processing other items
+4. Include in final report
 ```
 
 **Batch Timeout:**
 ```
 If a batch takes > 2 minutes:
-1. Collect completed answers
+1. Collect completed results
 2. Mark remaining as "timeout"
 3. Proceed with what we have
 ```
 
 **All Workers Fail:**
 ```
-❌ Phase 3 failed: No answers received
+❌ Phase [3|4] failed: No results received
 
-All question workers failed to respond.
-Discovery and questions are cached.
-Try again with: /baseline --skip-discovery --skip-questions
+All workers failed to respond.
+Previous phases cached.
+Try again with appropriate skip flags.
 ```
 
 ### Flags
@@ -280,27 +369,31 @@ Parse from $ARGUMENTS:
 | `--output [path]` | Write to custom path instead of PROJECT-CONTEXT.md |
 | `--json` | Output raw JSON instead of markdown |
 | `--verbose` | Show detailed progress for each phase |
-| `--sequential` | Disable parallel processing (legacy mode) |
-| `--batch-size [N]` | Override automatic batch size (max 10) |
+| `--sequential` | Disable parallel processing (legacy mode for ALL phases) |
+| `--batch-size [N]` | Override automatic batch size for questions (max 10) |
+| `--skill-batch-size [N]` | Override automatic batch size for skills (max 5) |
+| `--skill-threshold [N]` | Override skill score threshold (default 6.0) |
 
 ### Example Invocations
 
 ```
-/baseline                           # Full analysis with parallel answers
+/baseline                           # Full analysis with parallel answers + skills
 /baseline --verbose                 # Full analysis with detailed progress
 /baseline --discovery-only          # Just discovery phase
 /baseline --skip-skills             # Generate PROJECT-CONTEXT.md without skills
 /baseline --skills-only             # Only generate skills (uses cached discovery)
 /baseline --output docs/CONTEXT.md  # Custom output location
-/baseline --sequential              # Use legacy sequential mode
-/baseline --batch-size 5            # Use smaller batches for stability
+/baseline --sequential              # Use legacy sequential mode for all phases
+/baseline --batch-size 5            # Use smaller batches for questions
+/baseline --skill-batch-size 3      # Use smaller batches for skills
+/baseline --skill-threshold 5.0     # Lower threshold for skill creation
 ```
 
 ### Legacy Sequential Mode
 
-If `--sequential` flag is passed, use the original single-worker approach:
-- Invoke `@baseline-answers` with all questions
-- Let it answer questions sequentially
+If `--sequential` flag is passed, use the original single-worker approach for ALL phases:
+- Phase 3: Invoke `@baseline-answers` with all questions (answers them sequentially)
+- Phase 4: Invoke `@baseline-skills` in single-worker mode
 - Slower but uses less parallel resources
 
 ```
@@ -358,7 +451,7 @@ If `--sequential` flag is passed, use the original single-worker approach:
    No patterns in the codebase met the threshold for skill creation.
    This is normal for simple projects or highly unique codebases.
    
-   You can manually create skills using the skill-creator skill.
+   You can manually create skills or lower threshold with --skill-threshold 5.0
 ```
 
 ### Caching (Future Enhancement)
@@ -378,5 +471,5 @@ If running within an active session:
    ## Notes
    
    PROJECT-CONTEXT.md generated via /baseline on [date]
-   Processing mode: Parallel ([N] workers)
+   Processing mode: Parallel (questions: [N] workers, skills: [M] workers)
    ```
