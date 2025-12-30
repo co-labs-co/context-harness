@@ -1,5 +1,5 @@
 ---
-description: Generate comprehensive PROJECT-CONTEXT.md through 3-phase analysis
+description: Generate comprehensive PROJECT-CONTEXT.md through 3-phase analysis with parallel question answering
 agent: context-harness
 ---
 
@@ -26,11 +26,28 @@ Execute the 3-phase baseline analysis pipeline to generate `PROJECT-CONTEXT.md`:
 └────────────────┬────────────────────┘
                  │
                  ▼
-┌─────────────────────────────────────┐
-│  PHASE 3: @baseline-answers         │
-│  Answer questions with evidence     │
-│  → PROJECT-CONTEXT.md               │
-└────────────────┬────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│  PHASE 3: PARALLEL ANSWER PROCESSING                        │
+│                                                              │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐           │
+│  │ Q001        │ │ Q002        │ │ Q003        │  ...      │
+│  │ @baseline-  │ │ @baseline-  │ │ @baseline-  │           │
+│  │ question-   │ │ question-   │ │ question-   │           │
+│  │ answer      │ │ answer      │ │ answer      │           │
+│  └──────┬──────┘ └──────┬──────┘ └──────┬──────┘           │
+│         │               │               │                   │
+│         └───────────────┼───────────────┘                   │
+│                         ▼                                   │
+│              ┌─────────────────────┐                        │
+│              │ @baseline-answers   │                        │
+│              │ (Coordinator)       │                        │
+│              │ Aggregates answers  │                        │
+│              │ Generates markdown  │                        │
+│              └─────────────────────┘                        │
+│                         │                                   │
+│                         ▼                                   │
+│              PROJECT-CONTEXT.md                             │
+└─────────────────────────────────────────────────────────────┘
                  │
                  ▼
 ┌─────────────────────────────────────┐
@@ -47,7 +64,7 @@ Execute the 3-phase baseline analysis pipeline to generate `PROJECT-CONTEXT.md`:
    🔍 Starting baseline analysis...
    
    This will analyze your project and generate PROJECT-CONTEXT.md
-   Phases: Discovery → Questions → Answers → Skills
+   Phases: Discovery → Questions → Parallel Answers → Skills
    
    Estimated time: 2-5 minutes depending on project size
    ```
@@ -77,19 +94,89 @@ Execute the 3-phase baseline analysis pipeline to generate `PROJECT-CONTEXT.md`:
         - Categories covered: [list]
      ```
 
-4. **Phase 3: Answers**
-   - Invoke `@baseline-answers` subagent via Task tool
-   - Prompt: Include the `validated_questions` JSON
-   - Request: "Answer these validated questions with evidence citations and generate PROJECT-CONTEXT.md content."
+4. **Phase 3: Parallel Answer Processing**
+   
+   This phase uses a two-step approach:
+   
+   **Step 3a: Dispatch Questions in Parallel Batches**
+   
+   ```
+   For each question in validated_questions:
+     - Create a Task invocation for @baseline-question-answer
+     - Include:
+       - question_id
+       - category  
+       - question text
+       - expected_evidence_locations
+       - discovery_context (condensed project info)
+   
+   Batch size: 5-10 concurrent questions
+   (Adjust based on question count - smaller projects may do all at once)
+   ```
+   
+   Example parallel invocation:
+   ```
+   // Invoke multiple @baseline-question-answer subagents in parallel
+   Task(@baseline-question-answer, {
+     question_id: "Q001",
+     category: "architecture_decisions",
+     question: "Why was PostgreSQL chosen?",
+     expected_evidence_locations: ["README.md", "config/"],
+     discovery_context: { project_name: "...", primary_language: "...", ... }
+   })
+   
+   Task(@baseline-question-answer, {
+     question_id: "Q002",
+     ...
+   })
+   
+   // ... more parallel tasks
+   ```
+   
+   Display progress:
+   ```
+   ⏳ Phase 3a: Answering questions in parallel...
+      - Questions dispatched: [count]
+      - Batch size: [N] concurrent workers
+      - Processing...
+   ```
+   
+   **Step 3b: Collect and Track Answers**
+   
+   ```
+   As each @baseline-question-answer completes:
+     - Collect the JSON answer
+     - Track completion count
+     - Handle any failures (mark as unanswered)
+   
+   Store all answers in `answered_questions` array
+   ```
+   
+   Display progress:
+   ```
+   ⏳ Phase 3a: Answering questions...
+      Progress: [X]/[Y] questions answered
+   ```
+   
+   **Step 3c: Aggregate with Coordinator**
+   
+   - Invoke `@baseline-answers` (coordinator) subagent via Task tool
+   - Prompt: Include:
+     - `discovery_report` JSON
+     - `validated_questions` JSON
+     - `answered_questions` array (all JSON answers from workers)
+   - Request: "Aggregate these answered questions into PROJECT-CONTEXT.md format."
    - Store result as `project_context_content`
-   - Display progress:
-     ```
-     ✅ Phase 3 Complete: Answers
-        - Questions answered: [count]
-        - High confidence: [count]
-        - Medium confidence: [count]
-        - Unanswered: [count]
-     ```
+   
+   Display progress:
+   ```
+   ✅ Phase 3 Complete: Parallel Answers
+      - Questions processed: [count]
+      - Workers used: [count] parallel
+      - High confidence: [count]
+      - Medium confidence: [count]
+      - Unanswered: [count]
+   ```
 
 5. **Phase 4: Skills** (unless `--skip-skills` flag)
    - Invoke `@baseline-skills` subagent via Task tool
@@ -120,6 +207,7 @@ Execute the 3-phase baseline analysis pipeline to generate `PROJECT-CONTEXT.md`:
      - Primary Language: [language]
      - Framework: [framework]
      - Questions Answered: [count]/[total]
+     - Processing Mode: Parallel ([N] workers)
      - Skills Created: [count] skeleton skills
      
      The PROJECT-CONTEXT.md file provides comprehensive context about this codebase.
@@ -132,6 +220,52 @@ Execute the 3-phase baseline analysis pipeline to generate `PROJECT-CONTEXT.md`:
      To refine skills: /skill refine [name]
      To regenerate: /baseline
      ```
+
+### Parallel Processing Configuration
+
+| Project Size | Question Count | Batch Size | Strategy |
+|--------------|----------------|------------|----------|
+| Small | < 15 questions | All at once | Single batch |
+| Medium | 15-30 questions | 10 concurrent | 2-3 batches |
+| Large | 30-50 questions | 10 concurrent | 4-5 batches |
+
+**Batching Logic:**
+```
+if question_count <= 15:
+    batch_size = question_count  # All at once
+elif question_count <= 30:
+    batch_size = 10
+else:
+    batch_size = 10  # Max 10 concurrent for stability
+```
+
+### Error Handling for Parallel Phase
+
+**Individual Question Failure:**
+```
+If a @baseline-question-answer worker fails:
+1. Log the failure with question_id
+2. Mark question as unanswered with reason "Worker failed"
+3. Continue processing other questions
+4. Include in final unanswered section
+```
+
+**Batch Timeout:**
+```
+If a batch takes > 2 minutes:
+1. Collect completed answers
+2. Mark remaining as "timeout"
+3. Proceed with what we have
+```
+
+**All Workers Fail:**
+```
+❌ Phase 3 failed: No answers received
+
+All question workers failed to respond.
+Discovery and questions are cached.
+Try again with: /baseline --skip-discovery --skip-questions
+```
 
 ### Flags
 
@@ -146,16 +280,32 @@ Parse from $ARGUMENTS:
 | `--output [path]` | Write to custom path instead of PROJECT-CONTEXT.md |
 | `--json` | Output raw JSON instead of markdown |
 | `--verbose` | Show detailed progress for each phase |
+| `--sequential` | Disable parallel processing (legacy mode) |
+| `--batch-size [N]` | Override automatic batch size (max 10) |
 
 ### Example Invocations
 
 ```
-/baseline                           # Full analysis (all 4 phases)
-/baseline --verbose                 # Full analysis with details
+/baseline                           # Full analysis with parallel answers
+/baseline --verbose                 # Full analysis with detailed progress
 /baseline --discovery-only          # Just discovery phase
 /baseline --skip-skills             # Generate PROJECT-CONTEXT.md without skills
 /baseline --skills-only             # Only generate skills (uses cached discovery)
 /baseline --output docs/CONTEXT.md  # Custom output location
+/baseline --sequential              # Use legacy sequential mode
+/baseline --batch-size 5            # Use smaller batches for stability
+```
+
+### Legacy Sequential Mode
+
+If `--sequential` flag is passed, use the original single-worker approach:
+- Invoke `@baseline-answers` with all questions
+- Let it answer questions sequentially
+- Slower but uses less parallel resources
+
+```
+⚠️ Using legacy sequential mode (--sequential flag)
+   This may take longer for large projects.
 ```
 
 ### Error Handling
@@ -188,7 +338,7 @@ Parse from $ARGUMENTS:
 ❌ Answer generation failed: [error]
    
    Discovery and questions are cached.
-   Fix the issue and run: /baseline --skip-discovery
+   Fix the issue and run: /baseline --skip-discovery --skip-questions
 ```
 
 **Phase 4 Failure** (skill extraction):
@@ -228,4 +378,5 @@ If running within an active session:
    ## Notes
    
    PROJECT-CONTEXT.md generated via /baseline on [date]
+   Processing mode: Parallel ([N] workers)
    ```
