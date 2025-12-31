@@ -736,9 +736,7 @@ export function ChatInterface({ session, onError, isMobile = false }: ChatInterf
                   )}
                 </div>
               )}
-              {/* Model Selector */}
-              <ModelSelector sessionId={session.id} compact />
-              <span className="text-xs text-content-tertiary px-2 py-1 bg-surface-tertiary rounded-lg border border-edge-subtle">
+                <span className="text-xs text-content-tertiary px-2 py-1 bg-surface-tertiary rounded-lg border border-edge-subtle">
                 {messages.length} messages
               </span>
             </div>
@@ -845,6 +843,17 @@ export function ChatInterface({ session, onError, isMobile = false }: ChatInterf
 
       {/* Input */}
       <div className="p-3 md:p-4 border-t border-edge-subtle glass-panel flex-shrink-0">
+        {/* Model selector row */}
+        <div className="flex items-center justify-between mb-2 max-w-4xl mx-auto">
+          <ModelSelector sessionId={session.id} />
+          {streaming && (
+            <span className="text-xs text-neon-cyan flex items-center gap-1.5">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Generating...
+            </span>
+          )}
+        </div>
+        
         <div className="flex items-end gap-2 md:gap-3 max-w-4xl mx-auto">
           <div className="flex-1 relative min-w-0">
             <textarea

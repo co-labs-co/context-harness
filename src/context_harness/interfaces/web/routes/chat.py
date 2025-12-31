@@ -131,8 +131,8 @@ _acp_sessions: Dict[str, tuple[str, bool, bool]] = {}
 # Maps session_id -> model_id
 _session_models: Dict[str, str] = {}
 
-# Default model for new sessions
-DEFAULT_MODEL = "github-copilot/claude-opus-4.5"
+# Default model for new sessions (this should match OpenCode's default)
+DEFAULT_MODEL = "github-copilot/claude-sonnet-4"
 
 
 def get_conversation(session_id: str) -> List[Message]:
@@ -220,6 +220,28 @@ async def initialize_session_context(
         pass
 
     logger.info(f"Session context initialized for: {session_id}")
+
+
+async def initialize_session_model(
+    client: "ACPClient", acp_session_id: str, session_id: str
+) -> None:
+    """Send /model command to set the model for a session.
+
+    Args:
+        client: The ACP client
+        acp_session_id: The ACP session ID
+        session_id: The ContextHarness session ID (used to lookup model preference)
+    """
+    model_id = get_session_model(session_id)
+    model_command = f"/model {model_id}"
+    logger.info(f"Initializing session model with: {model_command}")
+
+    # Consume all updates from the /model command
+    async for update in client.prompt(acp_session_id, model_command):
+        # Just drain the updates
+        pass
+
+    logger.info(f"Session model set to: {model_id}")
 
 
 # =============================================================================
@@ -428,6 +450,11 @@ async def generate_sse_response(
         # Initialize session context if needed (separate /ctx command)
         if needs_context:
             await initialize_session_context(client, acp_session_id, session_id)
+
+        # Initialize session model if needed (separate /model command)
+        if needs_model:
+            await initialize_session_model(client, acp_session_id, session_id)
+            mark_acp_session_model_set(session_id)
 
         # Stream updates from ACP to SSE
         async for update in client.prompt(acp_session_id, content):
