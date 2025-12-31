@@ -1,8 +1,8 @@
 # ContextHarness Session
 
 **Session**: primitives-architecture
-**Last Updated**: 2025-12-30T18:30:00Z  
-**Compaction Cycle**: #1  
+**Last Updated**: 2025-12-30T20:00:00Z  
+**Compaction Cycle**: #2  
 **Session Started**: 2025-12-30T17:00:00Z
 **GitHub Issue**: #52
 **GitHub PR**: #53
@@ -12,8 +12,8 @@
 
 ## Active Work
 
-**Current Task**: Phase 1 - Primitives Package (Complete)
-**Status**: Ready for PR  
+**Current Task**: Phase 2 - Services Package (Complete)
+**Status**: Ready for Phase 3  
 **Description**: Establishing primitive-based architecture for multi-interface support (CLI, Web, SDK)
 **Blockers**: None
 
@@ -23,15 +23,26 @@
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `ARCHITECTURE.md` | Full architecture document with migration plan | ✅ Created |
+| **Phase 1: Primitives** | | |
 | `src/context_harness/primitives/__init__.py` | Package exports for all primitives | ✅ Created |
-| `src/context_harness/primitives/result.py` | Result[T], Success, Failure, ErrorCode types | ✅ Created |
+| `src/context_harness/primitives/result.py` | Result[T], Success, Failure, ErrorCode types | ✅ Updated (added TOKEN_EXPIRED, TOKEN_REFRESH_FAILED) |
 | `src/context_harness/primitives/session.py` | Session, SessionStatus, KeyFile, Decision, DocRef | ✅ Created |
 | `src/context_harness/primitives/skill.py` | Skill, SkillMetadata, SkillSource | ✅ Created |
 | `src/context_harness/primitives/mcp.py` | MCPServer, MCPServerConfig, MCPAuthType | ✅ Created |
 | `src/context_harness/primitives/oauth.py` | OAuthTokens, OAuthConfig, PKCEChallenge, AuthStatus | ✅ Created |
 | `src/context_harness/primitives/config.py` | OpenCodeConfig, ProjectConfig, AgentConfig, CommandConfig | ✅ Created |
-| `tests/unit/primitives/test_config.py` | Unit tests for config primitives | ✅ Created |
+| **Phase 2: Services** | | |
+| `src/context_harness/services/__init__.py` | Package exports for all services | ✅ Created |
+| `src/context_harness/services/config_service.py` | opencode.json management (load/save/update) | ✅ Created |
+| `src/context_harness/services/mcp_service.py` | MCP server registry and configuration | ✅ Created |
+| `src/context_harness/services/oauth_service.py` | OAuth 2.1 with PKCE, token storage | ✅ Created |
+| `src/context_harness/services/skill_service.py` | Skill listing, installation, validation | ✅ Created |
+| **Tests** | | |
+| `tests/unit/primitives/test_config.py` | Unit tests for config primitives | ✅ 19 tests |
+| `tests/unit/services/test_config_service.py` | Unit tests for ConfigService | ✅ 13 tests |
+| `tests/unit/services/test_mcp_service.py` | Unit tests for MCPService | ✅ 16 tests |
+| `tests/unit/services/test_oauth_service.py` | Unit tests for OAuthService | ✅ 22 tests |
+| `tests/unit/services/test_skill_service.py` | Unit tests for SkillService | ✅ 28 tests |
 
 ---
 
@@ -42,8 +53,11 @@
 | Primitives as pure dataclasses | frozen=True where practical | Enables reuse across interfaces, easy testing, immutability | 2025-12-30 |
 | Services return Result types | Union[Success[T], Failure] | Explicit error handling, no exceptions for control flow | 2025-12-30 |
 | Storage as protocols | Protocol classes | Allows swapping implementations (file, database, cloud) | 2025-12-30 |
-| MCPServerConfig in mcp.py only | Removed duplicate from config.py | Single source of truth, richer implementation | 2025-12-30 |
-| OpenCodeConfig.from_dict/to_dict | Factory + serializer methods | Clean JSON round-tripping for opencode.json | 2025-12-30 |
+| MCPServer vs MCPServerConfig | Two distinct types | MCPServer (registry) has description/auth_type; MCPServerConfig (opencode.json) has command/args | 2025-12-30 |
+| SkillSource.REMOTE | Use REMOTE not REGISTRY | Clearer naming: LOCAL, REMOTE, BUILTIN | 2025-12-30 |
+| Skill.location required | Non-optional field | Consistent with SKILL.md file path; empty string for uninstalled remote skills | 2025-12-30 |
+| TokenStorageProtocol | Protocol with MemoryTokenStorage for tests | Enables dependency injection and isolated testing | 2025-12-30 |
+| Services don't import Rich/Click | Pure Python only | Interface-agnostic design for CLI, Web, SDK reuse | 2025-12-30 |
 
 ---
 
@@ -65,15 +79,20 @@
 - [x] Add unit tests for primitives
 - [x] Maintain backward compatibility with existing modules
 
-### Phase 2: Services (Next)
-- [ ] Create `services/` package
-- [ ] Extract business logic from existing modules into services
-- [ ] Keep CLI working via shims
+### Phase 2: Services ✅ COMPLETE
+- [x] Create `services/` package
+- [x] ConfigService: opencode.json management
+- [x] MCPService: MCP server registry and configuration
+- [x] OAuthService: OAuth 2.1 with PKCE
+- [x] SkillService: skill listing, installation, extraction
+- [x] Add 79 unit tests for services
+- [x] Fix Skill primitive alignment (location, SkillSource.REMOTE)
 
-### Phase 3: Storage
+### Phase 3: Storage (Next)
 - [ ] Create `storage/` package
 - [ ] Abstract file operations behind storage protocols
 - [ ] Migrate token storage
+- [ ] FileStorage, MemoryStorage implementations
 
 ### Phase 4: CLI Refactor
 - [ ] Move CLI to `interfaces/cli/`
@@ -87,14 +106,31 @@
 
 ---
 
+## Test Coverage Summary
+
+| Module | Tests | Status |
+|--------|-------|--------|
+| Primitives (config) | 19 | ✅ Passing |
+| ConfigService | 13 | ✅ Passing |
+| MCPService | 16 | ✅ Passing |
+| OAuthService | 22 | ✅ Passing |
+| SkillService | 28 | ✅ Passing |
+| **Total New** | **98** | ✅ Passing |
+| **Full Suite** | **311** | ✅ Passing |
+
+---
+
 ## Next Steps
 
-1. ~~Create primitives/config.py~~ ✅
-2. ~~Verify all imports work~~ ✅
-3. ~~Add unit tests~~ ✅
-4. Create GitHub issue for tracking
-5. Create feature branch and PR
-6. Begin Phase 2: Services package
+1. ~~Complete Phase 2 services~~ ✅
+2. ~~Add OAuth and Skill service tests~~ ✅
+3. ~~Fix Skill primitive alignment~~ ✅
+4. ~~Push and update PR~~ ✅
+5. Begin Phase 3: Storage package
+   - Create `storage/` directory structure
+   - Define StorageProtocol for file operations
+   - Implement FileStorage and MemoryStorage
+   - Migrate FileTokenStorage to use storage abstraction
 
 ---
 
@@ -108,6 +144,13 @@
 - 232 tests passing (213 original + 19 new)
 - All primitives importable and functional
 - ARCHITECTURE.md documents full migration plan
+
+### 2025-12-30: Phase 2 Complete
+- Created services package with 4 services
+- 311 tests passing (232 original + 79 new services tests)
+- Fixed Skill primitive: use `location` not `path`, `SkillSource.REMOTE` not `REGISTRY`
+- Added TOKEN_EXPIRED, TOKEN_REFRESH_FAILED error codes
+- Pushed commit 1a5fd59 to feat/primitives-architecture
 
 </details>
 
