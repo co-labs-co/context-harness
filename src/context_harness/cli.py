@@ -1,5 +1,7 @@
 """CLI entry point for ContextHarness."""
 
+from typing import Optional
+
 import click
 from rich.console import Console
 from rich.panel import Panel
@@ -10,7 +12,15 @@ from context_harness.mcp_config import (
     add_mcp_server,
     list_mcp_servers,
     get_available_servers,
+    get_mcp_server_info,
     MCPResult,
+)
+from context_harness.oauth import (
+    get_atlassian_oauth_flow,
+    OAuthError,
+    OAuthTimeoutError,
+    OAuthCancelledError,
+    AuthStatus,
 )
 from context_harness.skills import (
     list_skills,
@@ -208,6 +218,198 @@ def mcp_list(target: str):
     console.print()
     list_mcp_servers(target=target)
     console.print()
+
+
+@mcp.command("auth")
+@click.argument("server", required=True)
+@click.option(
+    "--client-id",
+    "-c",
+    default=None,
+    envvar="ATLASSIAN_CLIENT_ID",
+    help="OAuth client ID (or set ATLASSIAN_CLIENT_ID env var).",
+)
+@click.option(
+    "--status",
+    "-s",
+    is_flag=True,
+    help="Check authentication status without starting a new flow.",
+)
+@click.option(
+    "--logout",
+    is_flag=True,
+    help="Remove stored authentication tokens.",
+)
+def mcp_auth(server: str, client_id: str, status: bool, logout: bool):
+    """Authenticate with an MCP server using OAuth.
+
+    Starts a browser-based OAuth flow to authenticate with servers that
+    require OAuth (like Atlassian). Tokens are stored securely for future use.
+
+    Requires an Atlassian OAuth client ID. Create one at:
+    https://developer.atlassian.com/console/myapps/
+
+    Examples:
+
+        context-harness mcp auth atlassian --client-id YOUR_CLIENT_ID
+
+        export ATLASSIAN_CLIENT_ID=your_client_id
+        context-harness mcp auth atlassian
+
+        context-harness mcp auth atlassian --status
+
+        context-harness mcp auth atlassian --logout
+    """
+    console.print()
+    console.print(
+        Panel.fit(
+            "[bold blue]ContextHarness[/bold blue] MCP Authentication",
+            subtitle=f"v{__version__}",
+        )
+    )
+    console.print()
+
+    # Validate server supports OAuth
+    server_info = get_mcp_server_info(server)
+    if server_info is None:
+        console.print(f"[red]Error: Unknown MCP server '{server}'[/red]")
+        console.print(
+            f"[dim]Available servers: {', '.join(get_available_servers())}[/dim]"
+        )
+        raise SystemExit(1)
+
+    if server_info.auth_type != "oauth":
+        console.print(
+            f"[yellow]Server '{server}' does not use OAuth authentication.[/yellow]"
+        )
+        if server_info.auth_type == "api-key":
+            console.print(
+                f"[dim]Use 'context-harness mcp add {server} --api-key YOUR_KEY' instead.[/dim]"
+            )
+        raise SystemExit(1)
+
+    # Handle Atlassian OAuth
+    if server == "atlassian":
+        _handle_atlassian_auth(client_id, status, logout)
+    else:
+        console.print(f"[yellow]OAuth not yet implemented for '{server}'.[/yellow]")
+        raise SystemExit(1)
+
+
+def _handle_atlassian_auth(
+    client_id: Optional[str], status: bool, logout: bool
+) -> None:
+    """Handle Atlassian OAuth authentication."""
+    try:
+        oauth = get_atlassian_oauth_flow(client_id)
+    except OAuthError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        console.print()
+        console.print("[bold]To get an Atlassian OAuth client ID:[/bold]")
+        console.print("  1. Go to https://developer.atlassian.com/console/myapps/")
+        console.print("  2. Create a new OAuth 2.0 app")
+        console.print("  3. Add callback URL: http://localhost:PORT/callback")
+        console.print("     (any port works, the CLI uses a random available port)")
+        console.print("  4. Enable the required scopes:")
+        console.print("     - read:jira-work")
+        console.print("     - read:jira-user")
+        console.print("     - read:confluence-content.all")
+        console.print("     - read:confluence-space.summary")
+        console.print("     - offline_access (for refresh tokens)")
+        console.print()
+        raise SystemExit(1)
+
+    # Handle --status flag
+    if status:
+        auth_status = oauth.get_auth_status()
+        if auth_status == AuthStatus.AUTHENTICATED:
+            console.print("[green]✓ Authenticated with Atlassian[/green]")
+            tokens = oauth.get_tokens()
+            if tokens and tokens.scope:
+                console.print(f"[dim]Scopes: {tokens.scope}[/dim]")
+            # Try to get accessible resources
+            try:
+                resources = oauth.get_accessible_resources()
+                if resources:
+                    console.print()
+                    console.print("[bold]Accessible sites:[/bold]")
+                    for r in resources:
+                        console.print(f"  • {r.name} ({r.url})")
+            except OAuthError:
+                pass  # Silently ignore if we can't fetch resources
+        elif auth_status == AuthStatus.TOKEN_EXPIRED:
+            console.print("[yellow]⚠ Token expired[/yellow]")
+            console.print(
+                "[dim]Run 'context-harness mcp auth atlassian' to refresh.[/dim]"
+            )
+        else:
+            console.print("[dim]Not authenticated with Atlassian[/dim]")
+            console.print(
+                "[dim]Run 'context-harness mcp auth atlassian' to authenticate.[/dim]"
+            )
+        console.print()
+        return
+
+    # Handle --logout flag
+    if logout:
+        if oauth.logout():
+            console.print("[green]✓ Logged out from Atlassian[/green]")
+            console.print("[dim]Stored tokens have been removed.[/dim]")
+        else:
+            console.print("[dim]Not currently logged in to Atlassian.[/dim]")
+        console.print()
+        return
+
+    # Run OAuth flow
+    try:
+        tokens = oauth.authenticate()
+
+        # Show accessible resources
+        console.print("[bold]Accessible Atlassian sites:[/bold]")
+        try:
+            resources = oauth.get_accessible_resources()
+            if resources:
+                for r in resources:
+                    console.print(f"  • {r.name} ({r.url})")
+            else:
+                console.print("  [yellow]No accessible sites found.[/yellow]")
+                console.print(
+                    "  [dim]Make sure your OAuth app has the correct permissions.[/dim]"
+                )
+        except OAuthError as e:
+            console.print(f"  [yellow]Could not fetch sites: {e}[/yellow]")
+
+        console.print()
+        console.print("[bold]Next steps:[/bold]")
+        console.print(
+            "  • Run 'context-harness mcp add atlassian' to configure the MCP"
+        )
+        console.print("  • The agent will use your stored credentials automatically")
+        console.print()
+
+    except OAuthTimeoutError:
+        console.print()
+        console.print("[yellow]⚠ Authentication timed out.[/yellow]")
+        console.print(
+            "[dim]The browser flow was not completed in time. Please try again.[/dim]"
+        )
+        console.print()
+        raise SystemExit(1)
+
+    except OAuthCancelledError:
+        console.print()
+        console.print("[yellow]⚠ Authentication cancelled.[/yellow]")
+        console.print(
+            "[dim]You denied access in the browser. No tokens were stored.[/dim]"
+        )
+        console.print()
+        raise SystemExit(1)
+
+    except OAuthError as e:
+        console.print()
+        console.print(f"[red]❌ Authentication failed: {e}[/red]")
+        console.print()
+        raise SystemExit(1)
 
 
 def _print_mcp_usage_tips(server: str) -> None:
