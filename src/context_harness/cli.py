@@ -24,6 +24,8 @@ from context_harness.completion import (
     complete_skill_names,
     interactive_skill_picker,
     interactive_local_skill_picker,
+    complete_mcp_servers,
+    interactive_mcp_picker,
 )
 
 console = Console()
@@ -108,7 +110,12 @@ def mcp():
 
 
 @mcp.command("add")
-@click.argument("server", type=click.Choice(get_available_servers()))
+@click.argument(
+    "server",
+    required=False,
+    default=None,
+    shell_complete=complete_mcp_servers,
+)
 @click.option(
     "--api-key",
     "-k",
@@ -122,17 +129,24 @@ def mcp():
     type=click.Path(),
     help="Target directory containing opencode.json (default: current directory).",
 )
-def mcp_add(server: str, api_key: str, target: str):
+def mcp_add(server: str | None, api_key: str, target: str):
     """Add an MCP server to opencode.json.
 
     Configures the specified MCP server in your project's opencode.json file.
     If opencode.json doesn't exist, it will be created.
 
-    Available servers: context7
+    If no server name is provided, an interactive picker will be shown
+    with fuzzy search to help you find and select a server.
+
+    Available servers: context7, atlassian
 
     Examples:
 
+        context-harness mcp add
+
         context-harness mcp add context7
+
+        context-harness mcp add atlassian
 
         context-harness mcp add context7 --api-key YOUR_API_KEY
 
@@ -146,6 +160,14 @@ def mcp_add(server: str, api_key: str, target: str):
         )
     )
     console.print()
+
+    # If no server provided, show interactive picker
+    if server is None:
+        server = interactive_mcp_picker(console)
+        if server is None:
+            # User cancelled or no servers available
+            raise SystemExit(0)
+        console.print()
 
     result = add_mcp_server(server, target=target, api_key=api_key)
 
@@ -200,6 +222,24 @@ def _print_mcp_usage_tips(server: str) -> None:
         console.print("[bold]Available tools:[/bold]")
         console.print("  • resolve-library-id - Find library documentation IDs")
         console.print("  • get-library-docs - Fetch documentation for a library")
+        console.print()
+    elif server == "atlassian":
+        console.print()
+        console.print(
+            "[dim]Atlassian MCP provides Jira, Confluence, and Compass integration.[/dim]"
+        )
+        console.print(
+            "[dim]Authentication uses OAuth 2.1 via browser-based flow.[/dim]"
+        )
+        console.print()
+        console.print("[bold]Capabilities:[/bold]")
+        console.print("  • Access Jira issues and projects")
+        console.print("  • Query Confluence pages and spaces")
+        console.print("  • Interact with Compass components")
+        console.print()
+        console.print(
+            "[dim]On first use, you'll be prompted to authenticate via browser.[/dim]"
+        )
         console.print()
 
 

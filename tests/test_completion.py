@@ -626,3 +626,218 @@ class TestSkillExtractHasOptionalArgument:
         skill_name_param = next(p for p in params if p.name == "skill_name")
 
         assert skill_name_param.required is False
+
+
+# =============================================================================
+# MCP Server Completion Tests
+# =============================================================================
+
+
+class TestMCPServerCompletion:
+    """Tests for MCP server completion functions."""
+
+    def test_get_mcp_servers_for_completion(self):
+        """Test getting MCP servers for completion."""
+        from context_harness.completion import _get_mcp_servers_for_completion
+
+        servers = _get_mcp_servers_for_completion()
+
+        assert len(servers) >= 2  # At least context7 and atlassian
+        names = [s["name"] for s in servers]
+        assert "context7" in names
+        assert "atlassian" in names
+
+    def test_get_mcp_servers_includes_description(self):
+        """Test that MCP servers include descriptions."""
+        from context_harness.completion import _get_mcp_servers_for_completion
+
+        servers = _get_mcp_servers_for_completion()
+
+        for server in servers:
+            assert "name" in server
+            assert "description" in server
+            assert len(server["description"]) > 0
+
+    def test_get_mcp_servers_includes_auth_type(self):
+        """Test that MCP servers include auth_type."""
+        from context_harness.completion import _get_mcp_servers_for_completion
+
+        servers = _get_mcp_servers_for_completion()
+
+        # Find atlassian which should have oauth auth_type
+        atlassian = next((s for s in servers if s["name"] == "atlassian"), None)
+        assert atlassian is not None
+        assert atlassian["auth_type"] == "oauth"
+
+        # Find context7 which should have api-key auth_type
+        context7 = next((s for s in servers if s["name"] == "context7"), None)
+        assert context7 is not None
+        assert context7["auth_type"] == "api-key"
+
+
+class TestCompleteMCPServers:
+    """Tests for complete_mcp_servers function."""
+
+    def test_complete_empty_input(self):
+        """Test completion with empty input returns all servers."""
+        from context_harness.completion import complete_mcp_servers
+
+        completions = complete_mcp_servers(None, None, "")
+
+        assert len(completions) >= 2
+        # Should return CompletionItem objects
+        assert all(isinstance(c, CompletionItem) for c in completions)
+        names = [c.value for c in completions]
+        assert "context7" in names
+        assert "atlassian" in names
+
+    def test_complete_prefix_match(self):
+        """Test completion with prefix match."""
+        from context_harness.completion import complete_mcp_servers
+
+        completions = complete_mcp_servers(None, None, "atl")
+
+        assert len(completions) >= 1
+        names = [c.value for c in completions]
+        assert "atlassian" in names
+        assert "context7" not in names
+
+    def test_complete_fuzzy_match(self):
+        """Test completion with fuzzy match."""
+        from context_harness.completion import complete_mcp_servers
+
+        completions = complete_mcp_servers(None, None, "c7")
+
+        # Should match context7
+        assert len(completions) >= 1
+        names = [c.value for c in completions]
+        assert "context7" in names
+
+    def test_complete_no_match(self):
+        """Test completion with no matching servers."""
+        from context_harness.completion import complete_mcp_servers
+
+        completions = complete_mcp_servers(None, None, "xyz")
+
+        assert len(completions) == 0
+
+    def test_complete_case_insensitive(self):
+        """Test completion is case insensitive."""
+        from context_harness.completion import complete_mcp_servers
+
+        completions_lower = complete_mcp_servers(None, None, "atl")
+        completions_upper = complete_mcp_servers(None, None, "ATL")
+
+        assert len(completions_lower) == len(completions_upper)
+
+    def test_complete_includes_help_text(self):
+        """Test completions include description as help text."""
+        from context_harness.completion import complete_mcp_servers
+
+        completions = complete_mcp_servers(None, None, "context")
+
+        assert len(completions) >= 1
+        context7 = next(c for c in completions if c.value == "context7")
+        assert "documentation" in context7.help.lower() or len(context7.help) > 0
+
+
+class TestInteractiveMCPPicker:
+    """Tests for interactive MCP server picker."""
+
+    def test_interactive_picker_returns_server(self, monkeypatch):
+        """Test picker returns selected server."""
+        from unittest.mock import MagicMock, patch
+
+        from context_harness.completion import interactive_mcp_picker
+
+        mock_console = MagicMock()
+
+        with patch.dict("sys.modules", {"questionary": MagicMock()}) as mock_modules:
+            import sys
+
+            mock_q = sys.modules["questionary"]
+            mock_select = MagicMock()
+            mock_select.ask.return_value = "atlassian"
+            mock_q.select.return_value = mock_select
+            mock_q.Choice = lambda title, value: {"title": title, "value": value}
+            mock_q.Style = MagicMock()
+
+            result = interactive_mcp_picker(mock_console)
+
+            mock_q.select.assert_called_once()
+            assert result == "atlassian"
+
+    def test_interactive_picker_returns_none_on_cancel(self, monkeypatch):
+        """Test picker returns None when user cancels."""
+        from unittest.mock import MagicMock, patch
+
+        from context_harness.completion import interactive_mcp_picker
+
+        mock_console = MagicMock()
+
+        with patch.dict("sys.modules", {"questionary": MagicMock()}) as mock_modules:
+            import sys
+
+            mock_q = sys.modules["questionary"]
+            mock_select = MagicMock()
+            mock_select.ask.return_value = None  # User cancelled
+            mock_q.select.return_value = mock_select
+            mock_q.Choice = lambda title, value: {"title": title, "value": value}
+            mock_q.Style = MagicMock()
+
+            result = interactive_mcp_picker(mock_console)
+
+            assert result is None
+
+    def test_interactive_picker_shows_all_servers(self, monkeypatch):
+        """Test picker displays all available servers."""
+        from unittest.mock import MagicMock, patch, call
+
+        from context_harness.completion import interactive_mcp_picker
+
+        mock_console = MagicMock()
+
+        captured_choices = []
+
+        def capture_choice(title, value):
+            captured_choices.append({"title": title, "value": value})
+            return {"title": title, "value": value}
+
+        with patch.dict("sys.modules", {"questionary": MagicMock()}) as mock_modules:
+            import sys
+
+            mock_q = sys.modules["questionary"]
+            mock_select = MagicMock()
+            mock_select.ask.return_value = "context7"
+            mock_q.select.return_value = mock_select
+            mock_q.Choice = capture_choice
+            mock_q.Style = MagicMock()
+
+            interactive_mcp_picker(mock_console)
+
+            # Should have at least context7 and atlassian
+            choice_values = [c["value"] for c in captured_choices]
+            assert "context7" in choice_values
+            assert "atlassian" in choice_values
+
+
+class TestMCPAddCommandHasOptionalArgument:
+    """Test that mcp add command has optional server argument."""
+
+    def test_mcp_add_argument_is_optional(self):
+        """Test that server argument is optional for interactive mode."""
+        from context_harness.cli import mcp_add
+
+        params = mcp_add.params
+        server_param = next(p for p in params if p.name == "server")
+
+        assert server_param.required is False
+
+    def test_mcp_add_has_completion(self):
+        """Test that mcp add command accepts shell_complete."""
+        from context_harness.cli import mcp_add
+
+        params = mcp_add.params
+        server_param = next(p for p in params if p.name == "server")
+
+        assert server_param.shell_complete is not None
