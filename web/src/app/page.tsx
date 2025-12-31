@@ -3,8 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { SessionList } from '@/components/SessionList';
 import { ChatInterface } from '@/components/ChatInterface';
-import ThemePicker from '@/components/ThemePicker';
-import { MessageSquare, Sparkles, Terminal, AlertCircle, X, RefreshCw, WifiOff, Menu, ChevronLeft } from 'lucide-react';
+import { SettingsModal } from '@/components/SettingsModal';
+import { MessageSquare, Sparkles, Terminal, AlertCircle, X, RefreshCw, WifiOff, Menu, ChevronLeft, Settings } from 'lucide-react';
 
 interface GitHubLink {
   url: string | null;
@@ -35,6 +35,8 @@ interface Toast {
 }
 
 const STORAGE_KEY = 'contextharness_active_session';
+const THEME_STORAGE_KEY = 'selectedTheme';
+const DEFAULT_MODEL_STORAGE_KEY = 'contextharness_default_model';
 
 export default function Home() {
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -43,9 +45,11 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [showNewSessionModal, setShowNewSessionModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [currentTheme, setCurrentTheme] = useState('solarized_light');
+  const [defaultModel, setDefaultModel] = useState('');
   const sessionListRef = useRef<{ focusNewSession: () => void } | null>(null);
 
   // Detect mobile viewport
@@ -62,11 +66,16 @@ export default function Home() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Load saved theme on mount
+  // Load saved theme and default model on mount
   useEffect(() => {
-    const savedTheme = localStorage.getItem('selectedTheme') || 'solarized_light';
+    const savedTheme = localStorage.getItem(THEME_STORAGE_KEY) || 'solarized_light';
     if (savedTheme !== currentTheme) {
       setCurrentTheme(savedTheme);
+    }
+    
+    const savedModel = localStorage.getItem(DEFAULT_MODEL_STORAGE_KEY) || '';
+    if (savedModel !== defaultModel) {
+      setDefaultModel(savedModel);
     }
   }, []);
 
@@ -84,6 +93,19 @@ export default function Home() {
   const removeToast = useCallback((id: string) => {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
+
+  // Handle theme change (save to localStorage)
+  const handleThemeChange = useCallback((theme: string) => {
+    setCurrentTheme(theme);
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+  }, []);
+
+  // Handle default model change
+  const handleDefaultModelChange = useCallback((modelId: string) => {
+    setDefaultModel(modelId);
+    localStorage.setItem(DEFAULT_MODEL_STORAGE_KEY, modelId);
+    addToast('success', 'Default model updated');
+  }, [addToast]);
 
   // Restore active session from localStorage
   useEffect(() => {
@@ -111,6 +133,11 @@ export default function Home() {
         e.preventDefault();
         setShowNewSessionModal(true);
       }
+      // ⌘+, or Ctrl+,: Open settings
+      if ((e.metaKey || e.ctrlKey) && e.key === ',') {
+        e.preventDefault();
+        setShowSettingsModal(true);
+      }
       // ⌘+R or Ctrl+R: Refresh sessions (when not in input)
       if ((e.metaKey || e.ctrlKey) && e.key === 'r' && document.activeElement?.tagName !== 'TEXTAREA' && document.activeElement?.tagName !== 'INPUT') {
         e.preventDefault();
@@ -119,7 +146,9 @@ export default function Home() {
       }
       // Escape: Close modals, sidebar, deselect
       if (e.key === 'Escape') {
-        if (showNewSessionModal) {
+        if (showSettingsModal) {
+          setShowSettingsModal(false);
+        } else if (showNewSessionModal) {
           setShowNewSessionModal(false);
         } else if (sidebarOpen) {
           setSidebarOpen(false);
@@ -138,7 +167,7 @@ export default function Home() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showNewSessionModal, sidebarOpen, sessions, addToast]);
+  }, [showNewSessionModal, showSettingsModal, sidebarOpen, sessions, addToast]);
 
   const fetchSessions = async (silent = false) => {
     if (!silent) setError(null);
@@ -252,6 +281,16 @@ export default function Home() {
         ))}
       </div>
 
+      {/* Settings Modal */}
+      <SettingsModal
+        isOpen={showSettingsModal}
+        onClose={() => setShowSettingsModal(false)}
+        currentTheme={currentTheme}
+        onThemeChange={handleThemeChange}
+        defaultModel={defaultModel}
+        onDefaultModelChange={handleDefaultModelChange}
+      />
+
       {/* Mobile Overlay */}
       {isMobile && sidebarOpen && (
         <div 
@@ -307,13 +346,16 @@ export default function Home() {
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
-            {/* Theme Picker - Desktop */}
+            {/* Settings button - Desktop */}
             <div className="hidden md:block">
-              <ThemePicker
-                currentTheme={currentTheme}
-                onThemeChange={setCurrentTheme}
-                compact={false}
-              />
+              <button
+                onClick={() => setShowSettingsModal(true)}
+                className="flex items-center gap-2 p-2 text-content-tertiary hover:text-content-primary 
+                           hover:bg-surface-tertiary rounded-lg transition-colors"
+                title="Settings (⌘+,)"
+              >
+                <Settings className="w-5 h-5" />
+              </button>
             </div>
           </div>
         </div>
@@ -371,12 +413,15 @@ export default function Home() {
                 <p className="text-content-secondary">Select a session</p>
               )}
             </div>
-            {/* Theme Picker - Mobile */}
-            <ThemePicker
-              currentTheme={currentTheme}
-              onThemeChange={setCurrentTheme}
-              compact={true}
-            />
+            {/* Settings button - Mobile */}
+            <button
+              onClick={() => setShowSettingsModal(true)}
+              className="p-2 text-content-tertiary hover:text-content-primary 
+                         hover:bg-surface-tertiary rounded-lg transition-colors"
+              title="Settings"
+            >
+              <Settings className="w-5 h-5" />
+            </button>
           </div>
         )}
 
