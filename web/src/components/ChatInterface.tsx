@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Send, Mic, MicOff, Loader2 } from 'lucide-react';
+import { Send, Loader2, Bot, User, AlertTriangle } from 'lucide-react';
 import { VoiceInput } from './VoiceInput';
 
 interface Session {
@@ -153,70 +153,126 @@ export function ChatInterface({ session }: ChatInterfaceProps) {
     }
   };
 
+  const formatTime = (timestamp: string) => {
+    try {
+      return new Date(timestamp).toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return '';
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col h-full">
       {/* Header */}
-      <div className="p-4 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-        <h2 className="font-semibold text-slate-900 dark:text-white">
-          {session.name}
-        </h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          Session ID: {session.id}
-        </p>
+      <div className="p-4 border-b border-edge-subtle glass-panel">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold text-content-primary flex items-center gap-2">
+              {session.name}
+              <span className="w-2 h-2 rounded-full bg-neon-cyan animate-pulse" />
+            </h2>
+            <p className="text-xs text-content-tertiary font-mono mt-0.5">
+              id:{session.id}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-content-tertiary px-2 py-1 bg-surface-tertiary rounded-lg border border-edge-subtle">
+              {messages.length} messages
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-6">
         {messages.length === 0 ? (
-          <div className="text-center text-slate-500 dark:text-slate-400 py-8">
-            <p>No messages yet. Start a conversation!</p>
-            <p className="text-sm mt-2">
-              You can type or use the microphone for voice input.
-            </p>
+          <div className="h-full flex items-center justify-center">
+            <div className="text-center max-w-sm">
+              <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-surface-secondary to-surface-tertiary 
+                            border border-edge-subtle flex items-center justify-center mx-auto mb-6
+                            shadow-inner-glow">
+                <Bot className="w-9 h-9 text-content-tertiary" />
+              </div>
+              <p className="text-content-secondary mb-2">Start a conversation</p>
+              <p className="text-content-tertiary text-sm">
+                Type a message or use voice input to begin
+              </p>
+            </div>
           </div>
         ) : (
-          messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex ${
-                message.role === 'user' ? 'justify-end' : 'justify-start'
-              }`}
-            >
+          <div className="space-y-6 max-w-4xl mx-auto">
+            {messages.map((message, index) => (
               <div
-                className={`max-w-[80%] rounded-2xl px-4 py-2 ${
-                  message.role === 'user'
-                    ? 'bg-primary-500 text-white'
-                    : message.role === 'system'
-                    ? 'bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-200'
-                    : 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white'
+                key={message.id}
+                className={`flex gap-4 message-bubble ${
+                  message.role === 'user' ? 'flex-row-reverse' : ''
                 }`}
+                style={{ animationDelay: `${index * 50}ms` }}
               >
-                <p className="whitespace-pre-wrap">{message.content}</p>
-                {message.status === 'streaming' && (
-                  <span className="inline-block w-2 h-4 bg-current animate-pulse ml-1" />
-                )}
+                {/* Avatar */}
+                <div className={`flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center
+                  ${message.role === 'user' 
+                    ? 'bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30' 
+                    : message.role === 'system'
+                    ? 'bg-amber/20 text-amber border border-amber/30'
+                    : 'bg-violet/20 text-violet border border-violet/30'
+                  }`}
+                >
+                  {message.role === 'user' ? (
+                    <User className="w-4 h-4" />
+                  ) : message.role === 'system' ? (
+                    <AlertTriangle className="w-4 h-4" />
+                  ) : (
+                    <Bot className="w-4 h-4" />
+                  )}
+                </div>
+
+                {/* Message Content */}
+                <div className={`flex-1 max-w-[80%] ${message.role === 'user' ? 'text-right' : ''}`}>
+                  <div
+                    className={`inline-block rounded-2xl px-5 py-3 text-left
+                      ${message.role === 'user'
+                        ? 'bg-gradient-to-br from-neon-cyan/20 to-neon-cyan/10 border border-neon-cyan/30 text-content-primary'
+                        : message.role === 'system'
+                        ? 'bg-amber/10 border border-amber/30 text-amber'
+                        : 'bg-surface-elevated border border-edge-subtle text-content-primary'
+                      }`}
+                  >
+                    <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                    {message.status === 'streaming' && (
+                      <span className="inline-block w-2 h-5 bg-neon-cyan ml-1 typing-cursor" />
+                    )}
+                  </div>
+                  <div className={`mt-1.5 text-xs text-content-tertiary ${message.role === 'user' ? 'text-right' : ''}`}>
+                    {formatTime(message.timestamp)}
+                  </div>
+                </div>
               </div>
-            </div>
-          ))
+            ))}
+            <div ref={messagesEndRef} />
+          </div>
         )}
-        <div ref={messagesEndRef} />
       </div>
 
       {/* Input */}
-      <div className="p-4 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-        <div className="flex items-end gap-2">
+      <div className="p-4 border-t border-edge-subtle glass-panel">
+        <div className="flex items-end gap-3 max-w-4xl mx-auto">
           <div className="flex-1 relative">
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Type a message or use voice input..."
+              placeholder="Type a message..."
               rows={1}
-              className="w-full px-4 py-3 pr-12 border border-slate-300 dark:border-slate-600 
-                         rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-white
-                         focus:ring-2 focus:ring-primary-500 focus:border-transparent
-                         placeholder:text-slate-400 resize-none"
-              style={{ minHeight: '48px', maxHeight: '120px' }}
+              className="w-full px-5 py-4 border border-edge-medium rounded-2xl 
+                         bg-surface-secondary text-content-primary
+                         focus:ring-2 focus:ring-neon-cyan/30 focus:border-neon-cyan/50
+                         placeholder:text-content-tertiary resize-none transition-all
+                         outline-none"
+              style={{ minHeight: '56px', maxHeight: '150px' }}
             />
           </div>
           
@@ -225,9 +281,9 @@ export function ChatInterface({ session }: ChatInterfaceProps) {
           <button
             onClick={sendMessage}
             disabled={!input.trim() || loading}
-            className="p-3 bg-primary-500 text-white rounded-xl
-                       hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed
-                       transition-colors"
+            className="p-4 bg-neon-cyan text-surface-primary rounded-2xl
+                       hover:shadow-glow disabled:opacity-30 disabled:cursor-not-allowed
+                       disabled:hover:shadow-none transition-all active:scale-95"
           >
             {loading ? (
               <Loader2 className="w-5 h-5 animate-spin" />
@@ -235,6 +291,22 @@ export function ChatInterface({ session }: ChatInterfaceProps) {
               <Send className="w-5 h-5" />
             )}
           </button>
+        </div>
+        
+        {/* Typing hint */}
+        <div className="flex items-center justify-center gap-4 mt-3 text-xs text-content-tertiary">
+          <span className="flex items-center gap-1.5">
+            <kbd className="px-1.5 py-0.5 bg-surface-tertiary border border-edge-subtle rounded text-[10px] font-mono">
+              Enter
+            </kbd>
+            to send
+          </span>
+          <span className="flex items-center gap-1.5">
+            <kbd className="px-1.5 py-0.5 bg-surface-tertiary border border-edge-subtle rounded text-[10px] font-mono">
+              Shift + Enter
+            </kbd>
+            for new line
+          </span>
         </div>
       </div>
     </div>

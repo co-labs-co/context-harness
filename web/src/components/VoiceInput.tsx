@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Mic, MicOff, Loader2 } from 'lucide-react';
+import { Mic, MicOff } from 'lucide-react';
 
 interface VoiceInputProps {
   onTranscription: (text: string) => void;
@@ -133,7 +133,8 @@ export function VoiceInput({ onTranscription }: VoiceInputProps) {
     return (
       <button
         disabled
-        className="p-3 text-slate-400 rounded-xl cursor-not-allowed"
+        className="p-4 text-content-tertiary rounded-2xl cursor-not-allowed 
+                   bg-surface-tertiary border border-edge-subtle opacity-50"
         title="Voice input not supported in this browser"
       >
         <MicOff className="w-5 h-5" />
@@ -145,30 +146,40 @@ export function VoiceInput({ onTranscription }: VoiceInputProps) {
     <div className="relative">
       <button
         onClick={toggleRecording}
-        className={`p-3 rounded-xl transition-colors ${
-          isRecording
-            ? 'bg-red-500 text-white animate-pulse'
-            : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
-        }`}
+        className={`p-4 rounded-2xl transition-all relative overflow-hidden
+          ${isRecording
+            ? 'bg-amber/20 text-amber border border-amber/50 shadow-[0_0_20px_-5px_rgba(255,184,0,0.5)]'
+            : 'bg-surface-tertiary text-content-secondary border border-edge-subtle hover:border-edge-medium hover:text-content-primary hover:bg-surface-elevated'
+          }`}
         title={isRecording ? 'Stop recording' : 'Start voice input'}
       >
-        {isRecording ? (
-          <Mic className="w-5 h-5" />
-        ) : (
-          <Mic className="w-5 h-5" />
+        <Mic className={`w-5 h-5 relative z-10 ${isRecording ? 'animate-pulse' : ''}`} />
+        
+        {/* Recording pulse rings */}
+        {isRecording && (
+          <>
+            <span className="absolute inset-0 rounded-2xl border-2 border-amber/50 pulse-ring" />
+            <span className="absolute inset-0 rounded-2xl border-2 border-amber/30 pulse-ring" 
+                  style={{ animationDelay: '0.5s' }} />
+          </>
         )}
       </button>
       
-      {/* Recording indicator */}
+      {/* Recording indicator dot */}
       {isRecording && (
-        <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-ping" />
+        <span className="absolute -top-1 -right-1 w-3 h-3 bg-amber rounded-full 
+                        shadow-[0_0_10px_2px_rgba(255,184,0,0.6)]">
+          <span className="absolute inset-0 rounded-full bg-amber animate-ping opacity-75" />
+        </span>
       )}
       
       {/* Interim text tooltip */}
       {interimText && (
-        <div className="absolute bottom-full right-0 mb-2 p-2 bg-slate-800 text-white text-sm rounded-lg max-w-xs">
-          <span className="text-slate-400">Hearing: </span>
-          {interimText}
+        <div className="absolute bottom-full right-0 mb-3 p-3 rounded-xl max-w-xs
+                       bg-surface-elevated border border-edge-medium shadow-glow-sm
+                       animate-in">
+          <span className="text-content-tertiary text-xs font-medium">Hearing:</span>
+          <p className="text-content-primary text-sm mt-1">{interimText}</p>
         </div>
       )}
     </div>
