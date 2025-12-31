@@ -36,6 +36,10 @@ Homepage = "https://github.com/co-labs-co/context-harness"
 Repository = "https://github.com/co-labs-co/context-harness"
 Issues = "https://github.com/co-labs-co/context-harness/issues"
 
+[project.optional-dependencies]
+# Secure token storage via system keyring (recommended for OAuth)
+keyring = ["keyring>=24.0"]
+
 [build-system]
 requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"

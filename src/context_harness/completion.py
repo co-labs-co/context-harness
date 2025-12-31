@@ -385,3 +385,155 @@ def interactive_local_skill_picker(console, source_path: str = ".") -> Optional[
     ).ask()
 
     return result
+
+
+# =============================================================================
+# MCP Server Completion Functions
+# =============================================================================
+
+
+def _get_mcp_servers_for_completion() -> List[dict]:
+    """Get MCP servers list for completion.
+
+    Unlike skills which are fetched from a remote registry,
+    MCP servers are local to this package.
+
+    Returns:
+        List of server dicts with name and description
+    """
+    try:
+        from context_harness.mcp_config import get_mcp_registry
+
+        servers = get_mcp_registry()
+        return [
+            {
+                "name": server.name,
+                "description": server.description,
+                "auth_type": server.auth_type,
+            }
+            for server in servers
+        ]
+    except Exception:
+        # Completion should never fail noisily
+        return []
+
+
+def complete_mcp_servers(
+    ctx: Context, param: Parameter, incomplete: str
+) -> List[CompletionItem]:
+    """Provide shell completion for MCP server names.
+
+    This function is called by Click's shell completion system when
+    the user presses Tab after `context-harness mcp add`.
+
+    Args:
+        ctx: Click context
+        param: The parameter being completed
+        incomplete: The partial input typed by the user
+
+    Returns:
+        List of CompletionItem objects for matching MCP servers
+    """
+    servers = _get_mcp_servers_for_completion()
+
+    if not servers:
+        return []
+
+    # Score and filter servers
+    scored_servers = []
+    for server in servers:
+        name = server.get("name", "")
+        if not name:
+            continue
+
+        # If no input yet, include all servers
+        if not incomplete:
+            scored_servers.append((1, server))
+        else:
+            score = _fuzzy_score(incomplete, name)
+            if score > 0:
+                scored_servers.append((score, server))
+
+    # Sort by score (descending), then by name
+    scored_servers.sort(key=lambda x: (-x[0], x[1].get("name", "")))
+
+    # Convert to CompletionItems with helpful descriptions
+    completions = []
+    for _score, server in scored_servers:
+        name = server.get("name", "")
+        description = server.get("description", "")
+
+        # Truncate long descriptions for cleaner display
+        if len(description) > 50:
+            description = description[:47] + "..."
+
+        completions.append(CompletionItem(value=name, help=description))
+
+    return completions
+
+
+def interactive_mcp_picker(console) -> Optional[str]:
+    """Show an interactive fuzzy-searchable MCP server picker.
+
+    Args:
+        console: Rich console for status messages
+
+    Returns:
+        Selected MCP server name, or None if cancelled/no servers available
+    """
+    import questionary
+    from questionary import Style
+
+    servers = _get_mcp_servers_for_completion()
+
+    if not servers:
+        console.print("[yellow]No MCP servers available.[/yellow]")
+        return None
+
+    # Build choices with name and description
+    choices = []
+    for server in servers:
+        name = server.get("name", "")
+        description = server.get("description", "")
+        auth_type = server.get("auth_type", "")
+
+        if name:
+            # Format: "server-name - Description (auth-type)"
+            auth_indicator = f" [{auth_type}]" if auth_type else ""
+            if description:
+                display = f"{name} - {description[:50]}{'...' if len(description) > 50 else ''}{auth_indicator}"
+            else:
+                display = f"{name}{auth_indicator}"
+            choices.append(questionary.Choice(title=display, value=name))
+
+    if not choices:
+        console.print("[yellow]No valid MCP servers found.[/yellow]")
+        return None
+
+    # Custom style for the picker
+    custom_style = Style(
+        [
+            ("qmark", "fg:cyan bold"),
+            ("question", "fg:white bold"),
+            ("answer", "fg:cyan bold"),
+            ("pointer", "fg:cyan bold"),
+            ("highlighted", "fg:cyan bold"),
+            ("selected", "fg:green"),
+            ("instruction", "fg:gray"),
+        ]
+    )
+
+    # Show the interactive picker
+    console.print()
+    result = questionary.select(
+        "Select an MCP server to add:",
+        choices=choices,
+        style=custom_style,
+        instruction="(Use arrow keys to navigate, type to filter)",
+        use_shortcuts=False,
+        use_indicator=True,
+        use_search_filter=True,
+        use_jk_keys=False,
+    ).ask()
+
+    return result

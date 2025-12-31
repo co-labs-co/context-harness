@@ -1,5 +1,7 @@
 """CLI entry point for ContextHarness."""
 
+from typing import Optional
+
 import click
 from rich.console import Console
 from rich.panel import Panel
@@ -10,7 +12,19 @@ from context_harness.mcp_config import (
     add_mcp_server,
     list_mcp_servers,
     get_available_servers,
+    get_mcp_server_info,
     MCPResult,
+)
+from context_harness.oauth import (
+    get_atlassian_oauth_flow,
+    get_oauth_flow,
+    MCPOAuthFlow,
+    OAuthConfig,
+    OAUTH_PROVIDERS,
+    OAuthError,
+    OAuthTimeoutError,
+    OAuthCancelledError,
+    AuthStatus,
 )
 from context_harness.skills import (
     list_skills,
@@ -24,6 +38,8 @@ from context_harness.completion import (
     complete_skill_names,
     interactive_skill_picker,
     interactive_local_skill_picker,
+    complete_mcp_servers,
+    interactive_mcp_picker,
 )
 
 console = Console()
@@ -108,7 +124,12 @@ def mcp():
 
 
 @mcp.command("add")
-@click.argument("server", type=click.Choice(get_available_servers()))
+@click.argument(
+    "server",
+    required=False,
+    default=None,
+    shell_complete=complete_mcp_servers,
+)
 @click.option(
     "--api-key",
     "-k",
@@ -122,17 +143,24 @@ def mcp():
     type=click.Path(),
     help="Target directory containing opencode.json (default: current directory).",
 )
-def mcp_add(server: str, api_key: str, target: str):
+def mcp_add(server: str | None, api_key: str, target: str):
     """Add an MCP server to opencode.json.
 
     Configures the specified MCP server in your project's opencode.json file.
     If opencode.json doesn't exist, it will be created.
 
-    Available servers: context7
+    If no server name is provided, an interactive picker will be shown
+    with fuzzy search to help you find and select a server.
+
+    Available servers: context7, atlassian
 
     Examples:
 
+        context-harness mcp add
+
         context-harness mcp add context7
+
+        context-harness mcp add atlassian
 
         context-harness mcp add context7 --api-key YOUR_API_KEY
 
@@ -146,6 +174,14 @@ def mcp_add(server: str, api_key: str, target: str):
         )
     )
     console.print()
+
+    # If no server provided, show interactive picker
+    if server is None:
+        server = interactive_mcp_picker(console)
+        if server is None:
+            # User cancelled or no servers available
+            raise SystemExit(0)
+        console.print()
 
     result = add_mcp_server(server, target=target, api_key=api_key)
 
@@ -188,6 +224,199 @@ def mcp_list(target: str):
     console.print()
 
 
+@mcp.command("auth")
+@click.argument("server", required=True)
+@click.option(
+    "--client-id",
+    "-c",
+    default=None,
+    help="OAuth client ID (or set <SERVER>_CLIENT_ID env var).",
+)
+@click.option(
+    "--status",
+    "-s",
+    is_flag=True,
+    help="Check authentication status without starting a new flow.",
+)
+@click.option(
+    "--logout",
+    is_flag=True,
+    help="Remove stored authentication tokens.",
+)
+def mcp_auth(server: str, client_id: str, status: bool, logout: bool):
+    """Authenticate with an MCP server using OAuth.
+
+    Starts a browser-based OAuth flow to authenticate with servers that
+    require OAuth (like Atlassian). Tokens are stored securely for future use.
+
+    The flow works with any OAuth-enabled MCP server in the registry.
+    Client IDs can be provided via --client-id or environment variable
+    (e.g., ATLASSIAN_CLIENT_ID for Atlassian).
+
+    Examples:
+
+        context-harness mcp auth atlassian --client-id YOUR_CLIENT_ID
+
+        export ATLASSIAN_CLIENT_ID=your_client_id
+        context-harness mcp auth atlassian
+
+        context-harness mcp auth atlassian --status
+
+        context-harness mcp auth atlassian --logout
+    """
+    console.print()
+    console.print(
+        Panel.fit(
+            "[bold blue]ContextHarness[/bold blue] MCP Authentication",
+            subtitle=f"v{__version__}",
+        )
+    )
+    console.print()
+
+    # Validate server supports OAuth
+    server_info = get_mcp_server_info(server)
+    if server_info is None:
+        console.print(f"[red]Error: Unknown MCP server '{server}'[/red]")
+        console.print(
+            f"[dim]Available servers: {', '.join(get_available_servers())}[/dim]"
+        )
+        raise SystemExit(1)
+
+    if server_info.auth_type != "oauth":
+        console.print(
+            f"[yellow]Server '{server}' does not use OAuth authentication.[/yellow]"
+        )
+        if server_info.auth_type == "api-key":
+            console.print(
+                f"[dim]Use 'context-harness mcp add {server} --api-key YOUR_KEY' instead.[/dim]"
+            )
+        raise SystemExit(1)
+
+    # Check if this is a registered OAuth provider
+    if server not in OAUTH_PROVIDERS:
+        console.print(f"[yellow]OAuth not yet configured for '{server}'.[/yellow]")
+        console.print(
+            "[dim]The server requires OAuth but no provider configuration exists.[/dim]"
+        )
+        raise SystemExit(1)
+
+    # Use the generic OAuth flow
+    _handle_oauth_auth(server, client_id, status, logout)
+
+
+def _handle_oauth_auth(
+    server: str, client_id: Optional[str], status: bool, logout: bool
+) -> None:
+    """Handle generic OAuth authentication for any MCP server."""
+    try:
+        oauth = get_oauth_flow(server, client_id)
+    except OAuthError as e:
+        console.print(f"[red]Error: {e}[/red]")
+
+        # Show setup instructions if available
+        if server in OAUTH_PROVIDERS:
+            provider = OAUTH_PROVIDERS[server]
+            if provider.setup_url:
+                console.print()
+                console.print(
+                    f"[bold]To get a {provider.display_name or server.title()} OAuth client ID:[/bold]"
+                )
+                console.print(f"  1. Go to {provider.setup_url}")
+                console.print("  2. Create a new OAuth 2.0 app")
+                console.print("  3. Add callback URL: http://localhost:PORT/callback")
+                console.print(
+                    "     (any port works, the CLI uses a random available port)"
+                )
+                if provider.scopes:
+                    console.print("  4. Enable the required scopes:")
+                    for scope in provider.scopes[:5]:  # Show first 5 scopes
+                        console.print(f"     - {scope}")
+                    if len(provider.scopes) > 5:
+                        console.print(f"     ... and {len(provider.scopes) - 5} more")
+                console.print()
+        raise SystemExit(1)
+
+    display_name = OAUTH_PROVIDERS[server].display_name or server.title()
+
+    # Handle --status flag
+    if status:
+        auth_status = oauth.get_auth_status()
+        if auth_status == AuthStatus.AUTHENTICATED:
+            console.print(f"[green]✓ Authenticated with {display_name}[/green]")
+            tokens = oauth.get_tokens()
+            if tokens and tokens.scope:
+                console.print(f"[dim]Scopes: {tokens.scope}[/dim]")
+        elif auth_status == AuthStatus.TOKEN_EXPIRED:
+            console.print("[yellow]⚠ Token expired[/yellow]")
+            console.print(
+                f"[dim]Run 'context-harness mcp auth {server}' to refresh.[/dim]"
+            )
+        else:
+            console.print(f"[dim]Not authenticated with {display_name}[/dim]")
+            console.print(
+                f"[dim]Run 'context-harness mcp auth {server}' to authenticate.[/dim]"
+            )
+        console.print()
+        return
+
+    # Handle --logout flag
+    if logout:
+        if oauth.logout():
+            console.print(f"[green]✓ Logged out from {display_name}[/green]")
+            console.print("[dim]Stored tokens have been removed.[/dim]")
+        else:
+            console.print(f"[dim]Not currently logged in to {display_name}.[/dim]")
+        console.print()
+        return
+
+    # Run OAuth flow
+    try:
+        tokens = oauth.authenticate()
+
+        console.print()
+        console.print("[bold]Next steps:[/bold]")
+        console.print(
+            f"  • Run 'context-harness mcp add {server}' to configure the MCP"
+        )
+        console.print("  • The agent will use your stored credentials automatically")
+        console.print()
+
+    except OAuthTimeoutError:
+        console.print()
+        console.print("[yellow]⚠ Authentication timed out.[/yellow]")
+        console.print(
+            "[dim]The browser flow was not completed in time. Please try again.[/dim]"
+        )
+        console.print()
+        raise SystemExit(1)
+
+    except OAuthCancelledError:
+        console.print()
+        console.print("[yellow]⚠ Authentication cancelled.[/yellow]")
+        console.print(
+            "[dim]You denied access in the browser. No tokens were stored.[/dim]"
+        )
+        console.print()
+        raise SystemExit(1)
+
+    except OAuthError as e:
+        console.print()
+        console.print(f"[red]❌ Authentication failed: {e}[/red]")
+        console.print()
+        raise SystemExit(1)
+
+
+def _handle_atlassian_auth(
+    client_id: Optional[str], status: bool, logout: bool
+) -> None:
+    """Handle Atlassian OAuth authentication.
+
+    DEPRECATED: Use _handle_oauth_auth(server="atlassian", ...) instead.
+    Kept for backward compatibility.
+    """
+    _handle_oauth_auth("atlassian", client_id, status, logout)
+
+
 def _print_mcp_usage_tips(server: str) -> None:
     """Print usage tips for the configured MCP server."""
     if server == "context7":
@@ -200,6 +429,24 @@ def _print_mcp_usage_tips(server: str) -> None:
         console.print("[bold]Available tools:[/bold]")
         console.print("  • resolve-library-id - Find library documentation IDs")
         console.print("  • get-library-docs - Fetch documentation for a library")
+        console.print()
+    elif server == "atlassian":
+        console.print()
+        console.print(
+            "[dim]Atlassian MCP provides Jira, Confluence, and Compass integration.[/dim]"
+        )
+        console.print(
+            "[dim]Authentication uses OAuth 2.1 via browser-based flow.[/dim]"
+        )
+        console.print()
+        console.print("[bold]Capabilities:[/bold]")
+        console.print("  • Access Jira issues and projects")
+        console.print("  • Query Confluence pages and spaces")
+        console.print("  • Interact with Compass components")
+        console.print()
+        console.print(
+            "[dim]On first use, you'll be prompted to authenticate via browser.[/dim]"
+        )
         console.print()
 
 
