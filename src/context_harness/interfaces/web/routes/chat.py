@@ -92,7 +92,8 @@ class ConversationResponse(BaseModel):
 _conversations: Dict[str, List[Message]] = {}
 
 # ACP sessions per ContextHarness session
-_acp_sessions: Dict[str, str] = {}  # ContextHarness session_id -> ACP session_id
+# Maps ContextHarness session_id -> (ACP session_id, is_initialized)
+_acp_sessions: Dict[str, tuple[str, bool]] = {}
 
 
 def get_conversation(session_id: str) -> List[Message]:
@@ -102,7 +103,9 @@ def get_conversation(session_id: str) -> List[Message]:
     return _conversations[session_id]
 
 
-async def get_or_create_acp_session(client: ACPClient, session_id: str) -> str:
+async def get_or_create_acp_session(
+    client: ACPClient, session_id: str
+) -> tuple[str, bool]:
     """Get existing ACP session or create a new one.
 
     Args:
@@ -110,13 +113,46 @@ async def get_or_create_acp_session(client: ACPClient, session_id: str) -> str:
         session_id: ContextHarness session ID
 
     Returns:
-        ACP session ID
+        Tuple of (ACP session ID, needs_context_init)
+        needs_context_init is True if this is a fresh session that needs /ctx
     """
     if session_id not in _acp_sessions:
         acp_session = await client.create_session()
-        _acp_sessions[session_id] = acp_session.session_id
+        _acp_sessions[session_id] = (acp_session.session_id, True)
         logger.info(f"Created ACP session {acp_session.session_id} for {session_id}")
-    return _acp_sessions[session_id]
+        return acp_session.session_id, True
+
+    acp_session_id, needs_init = _acp_sessions[session_id]
+    return acp_session_id, needs_init
+
+
+def mark_acp_session_initialized(session_id: str) -> None:
+    """Mark an ACP session as initialized (context has been set)."""
+    if session_id in _acp_sessions:
+        acp_session_id, _ = _acp_sessions[session_id]
+        _acp_sessions[session_id] = (acp_session_id, False)
+
+
+def build_prompt_with_context(
+    session_id: str, content: str, needs_context: bool
+) -> str:
+    """Build the prompt, prepending /ctx if needed.
+
+    For new ACP sessions, we need to tell OpenCode which ContextHarness
+    session to use by prepending /ctx {session_id}.
+
+    Args:
+        session_id: ContextHarness session ID
+        content: User's message content
+        needs_context: Whether to prepend /ctx directive
+
+    Returns:
+        The prompt to send to OpenCode
+    """
+    if needs_context:
+        # Prepend the context switch command
+        return f"/ctx {session_id}\n\n{content}"
+    return content
 
 
 # =============================================================================
@@ -204,10 +240,15 @@ async def send_message(
 
     try:
         client = await get_acp_client(working_dir)
-        acp_session_id = await get_or_create_acp_session(client, session_id)
+        acp_session_id, needs_context = await get_or_create_acp_session(
+            client, session_id
+        )
+
+        # Build prompt with context if needed
+        prompt = build_prompt_with_context(session_id, request.content, needs_context)
 
         # Collect the full response from streaming
-        async for update in client.prompt(acp_session_id, request.content):
+        async for update in client.prompt(acp_session_id, prompt):
             if update.update_type == SessionUpdateType.AGENT_MESSAGE_CHUNK:
                 if update.content and update.content.text:
                     response_content += update.content.text
@@ -223,6 +264,9 @@ async def send_message(
                             status=update.tool_call.status.value,
                         )
                     )
+
+        # Mark session as initialized after successful prompt
+        mark_acp_session_initialized(session_id)
 
     except ACPConnectionError as e:
         logger.warning(f"OpenCode not available: {e}")
@@ -309,13 +353,21 @@ async def generate_sse_response(
     try:
         # Connect to OpenCode via ACP
         client = await get_acp_client(working_dir)
-        acp_session_id = await get_or_create_acp_session(client, session_id)
+        acp_session_id, needs_context = await get_or_create_acp_session(
+            client, session_id
+        )
+
+        # Build prompt with context if needed
+        prompt = build_prompt_with_context(session_id, content, needs_context)
 
         # Stream updates from ACP to SSE
-        async for update in client.prompt(acp_session_id, content):
+        async for update in client.prompt(acp_session_id, prompt):
             sse_event = convert_acp_update_to_sse(update, assistant_message)
             if sse_event:
                 yield sse_event
+
+        # Mark session as initialized after successful prompt
+        mark_acp_session_initialized(session_id)
 
     except ACPConnectionError as e:
         # Fallback: OpenCode not available
@@ -468,7 +520,8 @@ async def stream_message(
 async def clear_messages(session_id: str) -> Dict[str, str]:
     """Clear all messages for a session.
 
-    This also clears the associated ACP session mapping.
+    This also clears the associated ACP session mapping, so the next
+    message will re-initialize with /ctx.
 
     Args:
         session_id: The session identifier
