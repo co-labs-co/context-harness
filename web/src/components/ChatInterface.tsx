@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { 
@@ -27,6 +27,14 @@ import {
 } from 'lucide-react';
 import { VoiceInput } from './VoiceInput';
 import { ModelSelector } from './ModelSelector';
+import { 
+  useSlashCommands, 
+  SlashCommandSuggestions, 
+  SlashCommandHighlight,
+  SlashCommand,
+  SLASH_COMMANDS,
+  CATEGORY_CONFIG
+} from './SlashCommands';
 
 // =============================================================================
 // Types
@@ -393,6 +401,10 @@ export function ChatInterface({ session, onError, isMobile = false }: ChatInterf
   const [loading, setLoading] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Slash command suggestions
+  const slashCommands = useSlashCommands(input);
 
   // Fetch messages when session changes
   useEffect(() => {
@@ -662,7 +674,46 @@ export function ChatInterface({ session, onError, isMobile = false }: ChatInterf
     setInput(text);
   };
 
+  // Handle selecting a slash command from suggestions
+  const handleSlashCommandSelect = useCallback((command: SlashCommand) => {
+    // Replace input with command (add space if command has args)
+    const newInput = command.args ? `${command.command} ` : command.command;
+    setInput(newInput);
+    inputRef.current?.focus();
+  }, []);
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Handle slash command navigation
+    if (slashCommands.isActive) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        slashCommands.selectNext();
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        slashCommands.selectPrev();
+        return;
+      }
+      if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+        const selected = slashCommands.getSelected();
+        if (selected) {
+          e.preventDefault();
+          handleSlashCommandSelect(selected);
+          return;
+        }
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        // Clear slash command by removing the /
+        if (input.startsWith('/')) {
+          setInput('');
+        }
+        return;
+      }
+    }
+    
+    // Normal enter to send
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
@@ -856,19 +907,45 @@ export function ChatInterface({ session, onError, isMobile = false }: ChatInterf
         
         <div className="flex items-end gap-2 md:gap-3 max-w-4xl mx-auto">
           <div className="flex-1 relative min-w-0">
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Type a message..."
-              rows={1}
-              className="w-full px-3 py-3 md:px-5 md:py-4 border border-edge-medium rounded-xl md:rounded-2xl 
-                         bg-surface-secondary text-content-primary text-sm md:text-base
-                         focus:ring-2 focus:ring-neon-cyan/30 focus:border-neon-cyan/50
-                         placeholder:text-content-tertiary resize-none transition-all
-                         outline-none"
-              style={{ minHeight: isMobile ? '44px' : '56px', maxHeight: '150px' }}
-            />
+            {/* Slash Command Suggestions */}
+            {slashCommands.isActive && (
+              <SlashCommandSuggestions
+                suggestions={slashCommands.suggestions}
+                selectedIndex={slashCommands.selectedIndex}
+                onSelect={handleSlashCommandSelect}
+                onHover={slashCommands.setSelectedIndex}
+              />
+            )}
+            
+            {/* Input with slash command highlight overlay */}
+            <div className="relative">
+              {/* Highlighted overlay - shows colored slash commands */}
+              {input.startsWith('/') && (
+                <div 
+                  className="absolute inset-0 px-3 py-3 md:px-5 md:py-4 pointer-events-none 
+                             text-sm md:text-base whitespace-pre-wrap break-words overflow-hidden"
+                  aria-hidden="true"
+                >
+                  <SlashCommandHighlight value={input} />
+                </div>
+              )}
+              
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Type a message or / for commands..."
+                rows={1}
+                className={`w-full px-3 py-3 md:px-5 md:py-4 border border-edge-medium rounded-xl md:rounded-2xl 
+                           bg-surface-secondary text-sm md:text-base
+                           focus:ring-2 focus:ring-neon-cyan/30 focus:border-neon-cyan/50
+                           placeholder:text-content-tertiary resize-none transition-all
+                           outline-none
+                           ${input.startsWith('/') ? 'text-transparent caret-content-primary' : 'text-content-primary'}`}
+                style={{ minHeight: isMobile ? '44px' : '56px', maxHeight: '150px' }}
+              />
+            </div>
           </div>
           
           <VoiceInput onTranscription={handleVoiceTranscription} />
@@ -891,6 +968,12 @@ export function ChatInterface({ session, onError, isMobile = false }: ChatInterf
         {/* Typing hint - hide on mobile */}
         {!isMobile && (
           <div className="flex items-center justify-center gap-4 mt-3 text-xs text-content-tertiary">
+            <span className="flex items-center gap-1.5">
+              <kbd className="px-1.5 py-0.5 bg-surface-tertiary border border-edge-subtle rounded text-[10px] font-mono">
+                /
+              </kbd>
+              commands
+            </span>
             <span className="flex items-center gap-1.5">
               <kbd className="px-1.5 py-0.5 bg-surface-tertiary border border-edge-subtle rounded text-[10px] font-mono">
                 Enter
