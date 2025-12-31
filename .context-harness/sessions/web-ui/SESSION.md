@@ -10,9 +10,9 @@
 ## Active Work
 
 **Current Task**: Web UI MVP - Sessions + Chat + Voice  
-**Status**: Ready to Build  
-**Description**: Build a local-first web interface with session management, chat interface, and voice-to-text input. Monorepo structure under `web/` with new primitives as needed.  
-**Blockers**: None - all decisions made
+**Status**: ✅ Phase 1-4 COMPLETE & TESTED  
+**Description**: Local-first web interface with session management, chat interface, and voice-to-text input. Monorepo structure under `web/` with new primitives.  
+**Blockers**: None
 
 ---
 
@@ -135,46 +135,56 @@ class VoiceTranscription:
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `src/context_harness/interfaces/sdk/client.py` | SDK client for web integration | Existing |
-| `src/context_harness/primitives/` | Domain models | Existing (extend) |
-| `src/context_harness/services/` | Business logic | Existing (extend) |
-| `src/context_harness/interfaces/web/` | FastAPI backend | To Create |
-| `web/` | React frontend | To Create |
+| `src/context_harness/primitives/message.py` | Chat message primitives | ✅ Created |
+| `src/context_harness/primitives/voice.py` | Voice transcription primitives | ✅ Created |
+| `src/context_harness/interfaces/web/app.py` | FastAPI application | ✅ Created |
+| `src/context_harness/interfaces/web/routes/sessions.py` | Sessions CRUD API | ✅ Created |
+| `src/context_harness/interfaces/web/routes/chat.py` | Chat API + SSE | ✅ Created |
+| `web/src/app/page.tsx` | Main page layout | ✅ Created |
+| `web/src/components/SessionList.tsx` | Session sidebar | ✅ Created |
+| `web/src/components/ChatInterface.tsx` | Chat UI + streaming | ✅ Created |
+| `web/src/components/VoiceInput.tsx` | Voice input component | ✅ Created |
+| `pyproject.toml` | Added `[web]` dependencies | ✅ Updated |
 
 ---
 
 ## Implementation Phases
 
-### Phase 1: Foundation 🎯 CURRENT
-- [ ] Create `src/context_harness/primitives/message.py`
-- [ ] Create `src/context_harness/primitives/voice.py`
-- [ ] Create `src/context_harness/interfaces/web/` with FastAPI app
-- [ ] Create `web/` with React/Next.js scaffolding
-- [ ] Basic health check endpoint
+### Phase 1: Foundation ✅ COMPLETE
+- [x] Create `src/context_harness/primitives/message.py`
+- [x] Create `src/context_harness/primitives/voice.py`
+- [x] Create `src/context_harness/interfaces/web/` with FastAPI app
+- [x] Create `web/` with React/Next.js scaffolding
+- [x] Basic health check endpoint
 
-### Phase 2: Sessions MVP
-- [ ] SessionService with full CRUD
-- [ ] Sessions API endpoints
-- [ ] Frontend: SessionList component
-- [ ] Frontend: Session detail view
+### Phase 2: Sessions MVP ✅ COMPLETE
+- [x] SessionService with full CRUD
+- [x] Sessions API endpoints
+- [x] Frontend: SessionList component
+- [x] Frontend: Session detail view
 
-### Phase 3: Chat MVP
-- [ ] ChatService with OpenCode Server integration
-- [ ] Chat API with SSE streaming
-- [ ] Frontend: ChatInterface component
-- [ ] Frontend: MessageBubble component
+### Phase 3: Chat MVP ✅ COMPLETE
+- [x] ChatService with placeholder responses
+- [x] Chat API with SSE streaming
+- [x] Frontend: ChatInterface component
+- [x] Frontend: MessageBubble component
 
-### Phase 4: Voice Input
-- [ ] VoiceInput component (Web Speech API)
-- [ ] Recording indicator UI
-- [ ] Transcription preview
-- [ ] Optional: Whisper fallback
+### Phase 4: Voice Input ✅ COMPLETE
+- [x] VoiceInput component (Web Speech API)
+- [x] Recording indicator UI
+- [x] Transcription preview
+- [ ] Optional: Whisper fallback (deferred)
 
-### Phase 5: Polish
+### Phase 5: Polish 🎯 NEXT
 - [ ] Error handling and loading states
-- [ ] Session persistence
+- [ ] Session persistence across page reloads
 - [ ] Keyboard shortcuts
 - [ ] Mobile-responsive design
+
+### Phase 6: OpenCode Server Integration (Future)
+- [ ] Replace placeholder chat responses
+- [ ] Integrate SSE from OpenCode `/event` endpoint
+- [ ] Handle tool calls and permission requests
 
 ---
 
@@ -226,11 +236,20 @@ class VoiceTranscription:
 
 ## Next Steps
 
-1. ✅ ~~Get decisions on open questions~~
-2. Create new primitives (`message.py`, `voice.py`)
-3. Create FastAPI backend skeleton
-4. Create React frontend skeleton
-5. Implement Sessions API
+1. **Phase 5 - Polish** (Optional):
+   - Error handling and loading states
+   - Session persistence across page reloads
+   - Keyboard shortcuts (Ctrl+Enter to send, etc.)
+   - Mobile-responsive design
+
+2. **OpenCode Server Integration** (Future):
+   - Replace placeholder chat responses with actual agent calls
+   - Integrate with OpenCode Server's `/event` SSE endpoint
+   - Handle tool calls, permissions, and agent responses
+
+3. **PR Ready**:
+   - Current implementation is feature-complete for MVP
+   - Can create PR to merge into main
 
 ---
 
@@ -247,6 +266,25 @@ class VoiceTranscription:
 - [x] Got decisions: local-first, monorepo, sessions+chat+voice MVP
 - [x] Updated issue #54 with MVP scope and voice requirements
 
+### Phase 1-4 Implementation (2025-12-31)
+- [x] Created `primitives/message.py` with Message, ToolCall, ToolResult, Conversation
+- [x] Created `primitives/voice.py` with VoiceTranscription, VoiceSettings, VoiceRecordingState
+- [x] Created FastAPI backend with health, sessions, and chat routes
+- [x] Created Next.js frontend with SessionList, ChatInterface, VoiceInput
+- [x] Added `[web]` dependencies to pyproject.toml
+- [x] Committed as `a35daee` - "feat(web-ui): implement Phase 1-4 MVP foundation"
+- [x] Pushed to `feature/web-ui` branch
+
+### Testing Results (2025-12-31)
+- [x] Backend starts successfully with `uvicorn`
+- [x] `/health` endpoint returns healthy status
+- [x] `/api/sessions` returns all 12 sessions from file system
+- [x] `POST /api/sessions` creates new sessions
+- [x] `POST /api/chat/{session_id}/messages` returns placeholder response
+- [x] `POST /api/chat/{session_id}/stream` returns SSE events correctly
+- [x] Frontend builds without TypeScript errors
+- [x] Frontend compiles to optimized production build (91.8 kB)
+
 </details>
 
 ---
@@ -256,6 +294,17 @@ class VoiceTranscription:
 **Voice-to-Text Strategy**: Start with Web Speech API (browser-native, free, works in Chrome) for MVP. Can add Whisper as optional upgrade later for better accuracy/privacy.
 
 **Key insight**: The existing SDK client provides a solid foundation. Primitives architecture means API responses serialize cleanly.
+
+**How to Run**:
+```bash
+# Terminal 1 - Backend
+uv run uvicorn context_harness.interfaces.web.app:app --reload --port 8000
+
+# Terminal 2 - Frontend
+cd web && npm run dev
+```
+
+Then open http://localhost:3000 in your browser.
 
 ---
 
