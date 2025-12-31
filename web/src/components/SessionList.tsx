@@ -33,6 +33,7 @@ interface SessionListProps {
   onCreateSession: (name: string) => void;
   showNewSessionForm?: boolean;
   onToggleNewSession?: (show: boolean) => void;
+  isMobile?: boolean;
 }
 
 export interface SessionListRef {
@@ -70,6 +71,7 @@ export const SessionList = forwardRef<SessionListRef, SessionListProps>(function
   onCreateSession,
   showNewSessionForm = false,
   onToggleNewSession,
+  isMobile = false,
 }, ref) {
   const [newSessionName, setNewSessionName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
@@ -181,9 +183,11 @@ export const SessionList = forwardRef<SessionListRef, SessionListProps>(function
           >
             <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform duration-200" />
             <span className="font-medium">New Session</span>
-            <kbd className="ml-2 px-1.5 py-0.5 bg-surface-tertiary border border-edge-subtle rounded text-[10px] font-mono text-content-tertiary">
-              ⌘N
-            </kbd>
+            {!isMobile && (
+              <kbd className="ml-2 px-1.5 py-0.5 bg-surface-tertiary border border-edge-subtle rounded text-[10px] font-mono text-content-tertiary">
+                ⌘N
+              </kbd>
+            )}
           </button>
         )}
       </div>
@@ -203,7 +207,9 @@ export const SessionList = forwardRef<SessionListRef, SessionListProps>(function
               <Clock className="w-7 h-7 text-content-tertiary" />
             </div>
             <p className="text-content-secondary text-sm">No sessions yet</p>
-            <p className="text-content-tertiary text-xs mt-1">Press ⌘+N to create one</p>
+            <p className="text-content-tertiary text-xs mt-1">
+              {isMobile ? 'Tap the button above to create one' : 'Press ⌘+N to create one'}
+            </p>
           </div>
         ) : (
           <div className="space-y-2">

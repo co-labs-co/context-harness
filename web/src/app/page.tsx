@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { SessionList } from '@/components/SessionList';
 import { ChatInterface } from '@/components/ChatInterface';
-import { MessageSquare, Sparkles, Terminal, AlertCircle, X, RefreshCw, WifiOff } from 'lucide-react';
+import { MessageSquare, Sparkles, Terminal, AlertCircle, X, RefreshCw, WifiOff, Menu, ChevronLeft } from 'lucide-react';
 
 interface GitHubLink {
   url: string | null;
@@ -42,7 +42,23 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [showNewSessionModal, setShowNewSessionModal] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const sessionListRef = useRef<{ focusNewSession: () => void } | null>(null);
+
+  // Detect mobile viewport
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+      // Close sidebar on desktop resize
+      if (window.innerWidth >= 768) {
+        setSidebarOpen(false);
+      }
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // Add toast notification
   const addToast = useCallback((type: Toast['type'], message: string) => {
@@ -91,10 +107,12 @@ export default function Home() {
         fetchSessions();
         addToast('info', 'Refreshing sessions...');
       }
-      // Escape: Close modals, deselect
+      // Escape: Close modals, sidebar, deselect
       if (e.key === 'Escape') {
         if (showNewSessionModal) {
           setShowNewSessionModal(false);
+        } else if (sidebarOpen) {
+          setSidebarOpen(false);
         }
       }
       // ⌘+1-9: Quick switch to session by index
@@ -110,7 +128,7 @@ export default function Home() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showNewSessionModal, sessions, addToast]);
+  }, [showNewSessionModal, sidebarOpen, sessions, addToast]);
 
   const fetchSessions = async () => {
     setError(null);
@@ -143,6 +161,10 @@ export default function Home() {
 
   const handleSelectSession = (session: Session) => {
     setActiveSession(session);
+    // Close sidebar on mobile when session is selected
+    if (isMobile) {
+      setSidebarOpen(false);
+    }
   };
 
   const handleCreateSession = async (name: string) => {
@@ -170,9 +192,9 @@ export default function Home() {
   };
 
   return (
-    <div className="flex h-screen bg-surface-primary">
+    <div className="flex h-screen bg-surface-primary overflow-hidden">
       {/* Toast Notifications */}
-      <div className="fixed top-4 right-4 z-50 space-y-2">
+      <div className="fixed top-4 right-4 z-50 space-y-2 max-w-[calc(100vw-2rem)]">
         {toasts.map(toast => (
           <div
             key={toast.id}
@@ -183,10 +205,10 @@ export default function Home() {
             `}
           >
             {toast.type === 'error' && <AlertCircle className="w-4 h-4 flex-shrink-0" />}
-            <span className="text-sm">{toast.message}</span>
+            <span className="text-sm truncate">{toast.message}</span>
             <button
               onClick={() => removeToast(toast.id)}
-              className="ml-2 opacity-70 hover:opacity-100 transition-opacity"
+              className="ml-2 opacity-70 hover:opacity-100 transition-opacity flex-shrink-0"
             >
               <X className="w-4 h-4" />
             </button>
@@ -194,11 +216,36 @@ export default function Home() {
         ))}
       </div>
 
+      {/* Mobile Overlay */}
+      {isMobile && sidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/60 z-30 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="w-80 border-r border-edge-subtle glass-panel flex flex-col">
+      <aside className={`
+        ${isMobile 
+          ? `fixed inset-y-0 left-0 z-40 w-80 transform transition-transform duration-300 ease-out
+             ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`
+          : 'w-80 relative'
+        }
+        border-r border-edge-subtle glass-panel flex flex-col bg-surface-primary
+      `}>
         {/* Header */}
-        <div className="p-5 border-b border-edge-subtle">
+        <div className="p-4 md:p-5 border-b border-edge-subtle">
           <div className="flex items-center gap-3">
+            {/* Back button on mobile */}
+            {isMobile && (
+              <button
+                onClick={() => setSidebarOpen(false)}
+                className="p-2 -ml-2 text-content-tertiary hover:text-content-primary 
+                           hover:bg-surface-tertiary rounded-lg transition-colors md:hidden"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+            )}
             <div className="relative">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-neon-cyan/20 to-violet/20 
                             flex items-center justify-center border border-neon-cyan/30">
@@ -207,8 +254,8 @@ export default function Home() {
               <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full shadow-glow-sm
                 ${error ? 'bg-red-500' : 'bg-neon-cyan animate-pulse'}`} />
             </div>
-            <div className="flex-1">
-              <h1 className="text-lg font-semibold text-content-primary flex items-center gap-2">
+            <div className="flex-1 min-w-0">
+              <h1 className="text-lg font-semibold text-content-primary truncate">
                 ContextHarness
               </h1>
               <p className="text-xs text-content-tertiary font-mono">
@@ -219,7 +266,7 @@ export default function Home() {
             <button
               onClick={() => { fetchSessions(); addToast('info', 'Refreshing...'); }}
               className="p-2 text-content-tertiary hover:text-content-primary hover:bg-surface-tertiary 
-                         rounded-lg transition-colors"
+                         rounded-lg transition-colors flex-shrink-0"
               title="Refresh sessions (⌘+R)"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -234,7 +281,7 @@ export default function Home() {
               <WifiOff className="w-4 h-4" />
               <span>Connection error</span>
             </div>
-            <p className="text-xs text-content-tertiary mt-1">{error}</p>
+            <p className="text-xs text-content-tertiary mt-1 break-words">{error}</p>
             <button
               onClick={fetchSessions}
               className="mt-2 text-xs text-neon-cyan hover:underline"
@@ -254,59 +301,103 @@ export default function Home() {
           onCreateSession={handleCreateSession}
           showNewSessionForm={showNewSessionModal}
           onToggleNewSession={setShowNewSessionModal}
+          isMobile={isMobile}
         />
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col bg-surface-primary">
+      <main className="flex-1 flex flex-col bg-surface-primary min-w-0">
+        {/* Mobile Header */}
+        {isMobile && (
+          <div className="flex items-center gap-3 p-3 border-b border-edge-subtle glass-panel md:hidden">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="p-2 text-content-secondary hover:text-content-primary 
+                         hover:bg-surface-tertiary rounded-lg transition-colors"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <div className="flex-1 min-w-0">
+              {activeSession ? (
+                <div>
+                  <p className="font-medium text-content-primary truncate">{activeSession.name}</p>
+                  <p className="text-xs text-content-tertiary">Tap menu to switch sessions</p>
+                </div>
+              ) : (
+                <p className="text-content-secondary">Select a session</p>
+              )}
+            </div>
+          </div>
+        )}
+
         {activeSession ? (
-          <ChatInterface session={activeSession} onError={(msg) => addToast('error', msg)} />
+          <ChatInterface 
+            session={activeSession} 
+            onError={(msg) => addToast('error', msg)} 
+            isMobile={isMobile}
+          />
         ) : (
-          <div className="flex-1 flex items-center justify-center">
+          <div className="flex-1 flex items-center justify-center p-4">
             <div className="text-center max-w-md mx-auto px-6">
               {/* Animated icon */}
               <div className="relative mb-8 inline-block">
-                <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-surface-secondary to-surface-tertiary 
+                <div className="w-20 h-20 md:w-24 md:h-24 rounded-2xl bg-gradient-to-br from-surface-secondary to-surface-tertiary 
                               border border-edge-subtle flex items-center justify-center mx-auto
                               shadow-inner-glow">
-                  <MessageSquare className="w-10 h-10 text-content-tertiary" />
+                  <MessageSquare className="w-8 h-8 md:w-10 md:h-10 text-content-tertiary" />
                 </div>
                 {/* Orbiting sparkle */}
                 <div className="absolute top-0 right-0 animate-float">
-                  <Sparkles className="w-5 h-5 text-neon-cyan opacity-60" />
+                  <Sparkles className="w-4 h-4 md:w-5 md:h-5 text-neon-cyan opacity-60" />
                 </div>
               </div>
               
-              <h2 className="text-2xl font-semibold text-content-primary mb-3">
+              <h2 className="text-xl md:text-2xl font-semibold text-content-primary mb-3">
                 No Session Selected
               </h2>
-              <p className="text-content-secondary leading-relaxed">
-                Select a session from the sidebar or create a new one to start working
+              <p className="text-content-secondary leading-relaxed text-sm md:text-base">
+                {isMobile 
+                  ? 'Tap the menu to select or create a session'
+                  : 'Select a session from the sidebar or create a new one to start working'
+                }
               </p>
               
-              {/* Keyboard shortcuts */}
-              <div className="mt-8 space-y-2">
-                <div className="flex items-center justify-center gap-2 text-content-tertiary text-sm">
-                  <kbd className="px-2 py-1 bg-surface-tertiary border border-edge-subtle rounded text-xs font-mono">
-                    ⌘
-                  </kbd>
-                  <span>+</span>
-                  <kbd className="px-2 py-1 bg-surface-tertiary border border-edge-subtle rounded text-xs font-mono">
-                    N
-                  </kbd>
-                  <span className="ml-2">New session</span>
+              {/* Keyboard shortcuts - hide on mobile */}
+              {!isMobile && (
+                <div className="mt-8 space-y-2">
+                  <div className="flex items-center justify-center gap-2 text-content-tertiary text-sm">
+                    <kbd className="px-2 py-1 bg-surface-tertiary border border-edge-subtle rounded text-xs font-mono">
+                      ⌘
+                    </kbd>
+                    <span>+</span>
+                    <kbd className="px-2 py-1 bg-surface-tertiary border border-edge-subtle rounded text-xs font-mono">
+                      N
+                    </kbd>
+                    <span className="ml-2">New session</span>
+                  </div>
+                  <div className="flex items-center justify-center gap-2 text-content-tertiary text-sm">
+                    <kbd className="px-2 py-1 bg-surface-tertiary border border-edge-subtle rounded text-xs font-mono">
+                      ⌘
+                    </kbd>
+                    <span>+</span>
+                    <kbd className="px-2 py-1 bg-surface-tertiary border border-edge-subtle rounded text-xs font-mono">
+                      1-9
+                    </kbd>
+                    <span className="ml-2">Quick switch</span>
+                  </div>
                 </div>
-                <div className="flex items-center justify-center gap-2 text-content-tertiary text-sm">
-                  <kbd className="px-2 py-1 bg-surface-tertiary border border-edge-subtle rounded text-xs font-mono">
-                    ⌘
-                  </kbd>
-                  <span>+</span>
-                  <kbd className="px-2 py-1 bg-surface-tertiary border border-edge-subtle rounded text-xs font-mono">
-                    1-9
-                  </kbd>
-                  <span className="ml-2">Quick switch</span>
-                </div>
-              </div>
+              )}
+
+              {/* Mobile CTA */}
+              {isMobile && (
+                <button
+                  onClick={() => setSidebarOpen(true)}
+                  className="mt-6 px-6 py-3 bg-neon-cyan text-surface-primary rounded-xl
+                             font-semibold hover:shadow-glow transition-all active:scale-95"
+                >
+                  Open Sessions
+                </button>
+              )}
             </div>
           </div>
         )}

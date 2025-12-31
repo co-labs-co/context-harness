@@ -133,8 +133,8 @@ export function VoiceInput({ onTranscription }: VoiceInputProps) {
     return (
       <button
         disabled
-        className="p-4 text-content-tertiary rounded-2xl cursor-not-allowed 
-                   bg-surface-tertiary border border-edge-subtle opacity-50"
+        className="p-3 md:p-4 text-content-tertiary rounded-xl md:rounded-2xl cursor-not-allowed 
+                   bg-surface-tertiary border border-edge-subtle opacity-50 flex-shrink-0"
         title="Voice input not supported in this browser"
       >
         <MicOff className="w-5 h-5" />
@@ -143,10 +143,10 @@ export function VoiceInput({ onTranscription }: VoiceInputProps) {
   }
 
   return (
-    <div className="relative">
+    <div className="relative flex-shrink-0">
       <button
         onClick={toggleRecording}
-        className={`p-4 rounded-2xl transition-all relative overflow-hidden
+        className={`p-3 md:p-4 rounded-xl md:rounded-2xl transition-all relative overflow-hidden
           ${isRecording
             ? 'bg-amber/20 text-amber border border-amber/50 shadow-[0_0_20px_-5px_rgba(255,184,0,0.5)]'
             : 'bg-surface-tertiary text-content-secondary border border-edge-subtle hover:border-edge-medium hover:text-content-primary hover:bg-surface-elevated'
@@ -158,8 +158,8 @@ export function VoiceInput({ onTranscription }: VoiceInputProps) {
         {/* Recording pulse rings */}
         {isRecording && (
           <>
-            <span className="absolute inset-0 rounded-2xl border-2 border-amber/50 pulse-ring" />
-            <span className="absolute inset-0 rounded-2xl border-2 border-amber/30 pulse-ring" 
+            <span className="absolute inset-0 rounded-xl md:rounded-2xl border-2 border-amber/50 pulse-ring" />
+            <span className="absolute inset-0 rounded-xl md:rounded-2xl border-2 border-amber/30 pulse-ring" 
                   style={{ animationDelay: '0.5s' }} />
           </>
         )}
@@ -175,11 +175,11 @@ export function VoiceInput({ onTranscription }: VoiceInputProps) {
       
       {/* Interim text tooltip */}
       {interimText && (
-        <div className="absolute bottom-full right-0 mb-3 p-3 rounded-xl max-w-xs
+        <div className="absolute bottom-full right-0 mb-3 p-3 rounded-xl max-w-[200px] md:max-w-xs
                        bg-surface-elevated border border-edge-medium shadow-glow-sm
-                       animate-in">
+                       animate-in z-10">
           <span className="text-content-tertiary text-xs font-medium">Hearing:</span>
-          <p className="text-content-primary text-sm mt-1">{interimText}</p>
+          <p className="text-content-primary text-sm mt-1 break-words">{interimText}</p>
         </div>
       )}
     </div>
