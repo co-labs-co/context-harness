@@ -26,6 +26,7 @@ import {
   Check
 } from 'lucide-react';
 import { VoiceInput } from './VoiceInput';
+import { ModelSelector } from './ModelSelector';
 
 // =============================================================================
 // Types
@@ -735,6 +736,8 @@ export function ChatInterface({ session, onError, isMobile = false }: ChatInterf
                   )}
                 </div>
               )}
+              {/* Model Selector */}
+              <ModelSelector sessionId={session.id} compact />
               <span className="text-xs text-content-tertiary px-2 py-1 bg-surface-tertiary rounded-lg border border-edge-subtle">
                 {messages.length} messages
               </span>
