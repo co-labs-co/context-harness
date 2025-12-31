@@ -211,52 +211,78 @@ function MarkdownContent({ content }: { content: string }) {
   );
 }
 
+// Constants for better maintainability
+const TOOL_STATUS_CONFIG = {
+  pending: {
+    icon: <Clock className="w-3 h-3 text-content-tertiary" />,
+    color: 'border-content-tertiary/30',
+    ariaStatus: 'Pending'
+  },
+  in_progress: {
+    icon: <Loader2 className="w-3 h-3 text-neon-cyan animate-spin" />,
+    color: 'border-neon-cyan/50 bg-neon-cyan/5',
+    ariaStatus: 'In Progress'
+  },
+  completed: {
+    icon: <CheckCircle2 className="w-3 h-3 text-emerald-400" />,
+    color: 'border-emerald-400/30 bg-emerald-400/5',
+    ariaStatus: 'Completed'
+  },
+  failed: {
+    icon: <XCircle className="w-3 h-3 text-rose-400" />,
+    color: 'border-rose-400/30 bg-rose-400/5',
+    ariaStatus: 'Failed'
+  },
+} as const;
+
+const TOOL_KIND_ICONS = {
+  read: '📖',
+  edit: '✏️',
+  delete: '🗑️',
+  execute: '▶️',
+  search: '🔍',
+  fetch: '🌐',
+  think: '🧠',
+  other: '🔧',
+} as const;
+
 function ToolCallDisplay({ toolCall }: { toolCall: ToolCall }) {
   const [expanded, setExpanded] = useState(false);
   
-  const statusIcon = {
-    pending: <Clock className="w-3 h-3 text-content-tertiary" />,
-    in_progress: <Loader2 className="w-3 h-3 text-neon-cyan animate-spin" />,
-    completed: <CheckCircle2 className="w-3 h-3 text-emerald-400" />,
-    failed: <XCircle className="w-3 h-3 text-rose-400" />,
-  }[toolCall.status];
+  const statusConfig = TOOL_STATUS_CONFIG[toolCall.status];
+  const kindIcon = TOOL_KIND_ICONS[toolCall.kind as keyof typeof TOOL_KIND_ICONS] || TOOL_KIND_ICONS.other;
 
-  const statusColor = {
-    pending: 'border-content-tertiary/30',
-    in_progress: 'border-neon-cyan/50 bg-neon-cyan/5',
-    completed: 'border-emerald-400/30 bg-emerald-400/5',
-    failed: 'border-rose-400/30 bg-rose-400/5',
-  }[toolCall.status];
-
-  const kindIcon = {
-    read: '📖',
-    edit: '✏️',
-    delete: '🗑️',
-    execute: '▶️',
-    search: '🔍',
-    fetch: '🌐',
-    think: '🧠',
-    other: '🔧',
-  }[toolCall.kind || 'other'] || '🔧';
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      setExpanded(!expanded);
+    }
+  };
 
   return (
     <div 
-      className={`mt-2 rounded-lg border ${statusColor} overflow-hidden transition-all`}
+      className={`mt-2 rounded-lg border ${statusConfig.color} overflow-hidden transition-all`}
     >
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-white/5 transition-colors"
+        onKeyDown={handleKeyDown}
+        role="button"
+        aria-expanded={expanded}
+        aria-label={`Tool call: ${toolCall.title}, status: ${statusConfig.ariaStatus}`}
+        tabIndex={0}
+        className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-white/5 
+                   transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-neon-cyan/30"
       >
         {expanded ? (
           <ChevronDown className="w-3 h-3 text-content-tertiary flex-shrink-0" />
         ) : (
           <ChevronRight className="w-3 h-3 text-content-tertiary flex-shrink-0" />
         )}
-        <span className="flex-shrink-0">{kindIcon}</span>
+        <span className="flex-shrink-0" aria-hidden="true">{kindIcon}</span>
         <span className="flex-1 font-medium text-content-secondary truncate">
           {toolCall.title}
         </span>
-        {statusIcon}
+        <span className="flex-shrink-0" aria-hidden="true">{statusConfig.icon}</span>
       </button>
       {expanded && (
         <div className="px-3 pb-2 text-xs text-content-tertiary border-t border-edge-subtle/50">
@@ -275,19 +301,32 @@ function ThoughtDisplay({ thoughts }: { thoughts: string[] }) {
   const [expanded, setExpanded] = useState(false);
   
   if (thoughts.length === 0) return null;
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      setExpanded(!expanded);
+    }
+  };
   
   return (
     <div className="mt-2 rounded-lg border border-violet/30 bg-violet/5 overflow-hidden">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-violet/10 transition-colors"
+        onKeyDown={handleKeyDown}
+        role="button"
+        aria-expanded={expanded}
+        aria-label={`Agent thoughts: ${thoughts.length} thoughts`}
+        tabIndex={0}
+        className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-violet/10 
+                   transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-violet/30"
       >
         {expanded ? (
           <ChevronDown className="w-3 h-3 text-violet flex-shrink-0" />
         ) : (
           <ChevronRight className="w-3 h-3 text-violet flex-shrink-0" />
         )}
-        <Brain className="w-3 h-3 text-violet flex-shrink-0" />
+        <Brain className="w-3 h-3 text-violet flex-shrink-0" aria-hidden="true" />
         <span className="flex-1 font-medium text-violet">
           Agent Thoughts ({thoughts.length})
         </span>
