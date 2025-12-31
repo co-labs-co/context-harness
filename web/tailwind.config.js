@@ -7,41 +7,41 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Primary background colors
+        // Primary background colors - using CSS variables for theming
         surface: {
-          primary: '#0a0a0f',
-          secondary: '#12121a',
-          tertiary: '#1a1a24',
-          elevated: '#22222e',
+          primary: 'var(--surface-primary)',
+          secondary: 'var(--surface-secondary)',
+          tertiary: 'var(--surface-tertiary)',
+          elevated: 'var(--surface-elevated)',
         },
-        // Neon cyan accent
+        // Accent colors - using CSS variables for theming
         neon: {
-          cyan: '#00f0ff',
-          'cyan-dim': 'rgba(0, 240, 255, 0.2)',
-          'cyan-glow': 'rgba(0, 240, 255, 0.4)',
+          cyan: 'var(--accent-primary)',
+          'cyan-dim': 'var(--accent-primary-dim)',
+          'cyan-glow': 'var(--accent-primary-glow)',
         },
         // Warm amber accent
         amber: {
-          DEFAULT: '#ffb800',
-          dim: 'rgba(255, 184, 0, 0.2)',
+          DEFAULT: 'var(--accent-secondary)',
+          dim: 'var(--accent-secondary-dim)',
         },
         // Violet accent
         violet: {
-          DEFAULT: '#a855f7',
-          dim: 'rgba(168, 85, 247, 0.2)',
+          DEFAULT: 'var(--accent-tertiary)',
+          dim: 'var(--accent-tertiary-dim)',
         },
-        // Text colors
+        // Text colors - using CSS variables for theming
         content: {
-          primary: '#f0f0f5',
-          secondary: '#9090a0',
-          tertiary: '#606070',
+          primary: 'var(--text-primary)',
+          secondary: 'var(--text-secondary)',
+          tertiary: 'var(--text-tertiary)',
         },
-        // Border colors
+        // Border colors - using CSS variables for theming
         edge: {
-          subtle: '#2a2a38',
-          medium: '#3a3a48',
+          subtle: 'var(--border-subtle)',
+          medium: 'var(--border-medium)',
         },
-        // Theme colors (will be overridden by CSS custom properties)
+        // Direct theme color access
         theme: {
           background: 'var(--theme-background)',
           foreground: 'var(--theme-foreground)',

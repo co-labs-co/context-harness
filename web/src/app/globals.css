@@ -6,7 +6,7 @@
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap');
 
 :root {
-  /* Default theme colors (will be overridden by active theme) */
+  /* Theme colors - these are set by JavaScript when theme changes */
   --theme-background: #0a0a0f;
   --theme-foreground: #f0f0f5;
   --theme-primary: #00f0ff;
@@ -19,62 +19,55 @@
   --theme-muted: #606070;
   --theme-accent: #00f0ff;
   
-  /* Dark, atmospheric color palette (fallback) */
-  --bg-primary: #0a0a0f;
-  --bg-secondary: #12121a;
-  --bg-tertiary: #1a1a24;
-  --bg-elevated: #22222e;
+  /* Surface colors - derived from theme */
+  --surface-primary: var(--theme-background);
+  --surface-secondary: color-mix(in srgb, var(--theme-background) 85%, var(--theme-foreground) 15%);
+  --surface-tertiary: color-mix(in srgb, var(--theme-background) 75%, var(--theme-foreground) 25%);
+  --surface-elevated: color-mix(in srgb, var(--theme-background) 65%, var(--theme-foreground) 35%);
   
-  /* Neon accent - electric cyan */
-  --accent-primary: #00f0ff;
-  --accent-primary-dim: #00f0ff33;
-  --accent-primary-glow: #00f0ff66;
+  /* Accent colors - derived from theme */
+  --accent-primary: var(--theme-primary);
+  --accent-primary-dim: color-mix(in srgb, var(--theme-primary) 20%, transparent 80%);
+  --accent-primary-glow: color-mix(in srgb, var(--theme-primary) 40%, transparent 60%);
   
-  /* Secondary accent - warm amber */
-  --accent-secondary: #ffb800;
-  --accent-secondary-dim: #ffb80033;
+  --accent-secondary: var(--theme-warning);
+  --accent-secondary-dim: color-mix(in srgb, var(--theme-warning) 20%, transparent 80%);
   
-  /* Tertiary accent - soft violet */
   --accent-tertiary: #a855f7;
-  --accent-tertiary-dim: #a855f733;
+  --accent-tertiary-dim: rgba(168, 85, 247, 0.2);
   
-  /* Text hierarchy */
-  --text-primary: #f0f0f5;
-  --text-secondary: #9090a0;
-  --text-tertiary: #606070;
+  /* Text colors - derived from theme */
+  --text-primary: var(--theme-foreground);
+  --text-secondary: var(--theme-secondary);
+  --text-tertiary: var(--theme-muted);
+  
+  /* Border colors - derived from theme */
+  --border-subtle: var(--theme-border);
+  --border-medium: color-mix(in srgb, var(--theme-border) 70%, var(--theme-foreground) 30%);
   
   /* Semantic colors */
-  --success: #10b981;
-  --warning: #f59e0b;
-  --error: #ef4444;
-  
-  /* Borders and dividers */
-  --border-subtle: #2a2a38;
-  --border-medium: #3a3a48;
+  --success: var(--theme-success);
+  --warning: var(--theme-warning);
+  --error: var(--theme-error);
   
   /* Theme transition */
   --theme-transition-duration: 0.3s;
 }
 
 /* Apply theme colors with smooth transitions */
-body {
-  background-color: var(--theme-background);
-  color: var(--theme-foreground);
+* {
   transition: background-color var(--theme-transition-duration) ease, 
+              border-color var(--theme-transition-duration) ease,
               color var(--theme-transition-duration) ease;
 }
 
-/* Theme-specific utility classes */
-.theme-light {
-  --theme-transition-duration: 0.3s;
-}
-
-.theme-dark {
-  --theme-transition-duration: 0.3s;
-}
-
-.theme-high_contrast {
-  --theme-transition-duration: 0.2s;
+/* Disable transitions for elements that shouldn't animate */
+input, textarea, button, a {
+  transition: background-color 0.15s ease, 
+              border-color 0.15s ease,
+              color 0.15s ease,
+              transform 0.15s ease,
+              box-shadow 0.15s ease;
 }
 
 * {
@@ -86,7 +79,7 @@ html {
 }
 
 body {
-  background: var(--bg-primary);
+  background: var(--surface-primary);
   color: var(--text-primary);
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   -webkit-font-smoothing: antialiased;
@@ -108,7 +101,7 @@ body {
 
 /* Glassmorphism panel */
 .glass-panel {
-  background: rgba(18, 18, 26, 0.8);
+  background: color-mix(in srgb, var(--surface-secondary) 80%, transparent 20%);
   backdrop-filter: blur(20px);
   border: 1px solid var(--border-subtle);
 }
