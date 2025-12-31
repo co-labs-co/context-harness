@@ -435,6 +435,7 @@ export default function Home() {
             session={activeSession} 
             onError={(msg) => addToast('error', msg)} 
             isMobile={isMobile}
+            defaultModel={defaultModel}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center p-4">

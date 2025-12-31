@@ -18,6 +18,7 @@ interface ModelSelectorProps {
   sessionId: string;
   onModelChange?: (modelId: string) => void;
   compact?: boolean;
+  defaultModel?: string;
 }
 
 // Provider colors for visual distinction
@@ -40,14 +41,21 @@ const PROVIDER_NAMES: Record<string, string> = {
 // Component
 // =============================================================================
 
-export function ModelSelector({ sessionId, onModelChange, compact = false }: ModelSelectorProps) {
+export function ModelSelector({ sessionId, onModelChange, compact = false, defaultModel = '' }: ModelSelectorProps) {
   const [models, setModels] = useState<ModelInfo[]>([]);
-  const [currentModel, setCurrentModel] = useState<string>('');
+  const [currentModel, setCurrentModel] = useState<string>(defaultModel);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [changing, setChanging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Update current model when defaultModel prop changes (and no session model set)
+  useEffect(() => {
+    if (defaultModel && !currentModel) {
+      setCurrentModel(defaultModel);
+    }
+  }, [defaultModel]);
 
   // Fetch available models on mount
   useEffect(() => {
@@ -72,8 +80,15 @@ export function ModelSelector({ sessionId, onModelChange, compact = false }: Mod
       if (response.ok) {
         const data = await response.json();
         setModels(data.models || []);
-        if (data.current_model && !currentModel) {
-          setCurrentModel(data.current_model);
+        // Use current_model from API, or defaultModel, or first available model
+        if (!currentModel) {
+          if (data.current_model) {
+            setCurrentModel(data.current_model);
+          } else if (defaultModel) {
+            setCurrentModel(defaultModel);
+          } else if (data.models?.length > 0) {
+            setCurrentModel(data.models[0].id);
+          }
         }
       } else {
         setError('Failed to load models');

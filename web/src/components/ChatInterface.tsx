@@ -86,6 +86,7 @@ interface ChatInterfaceProps {
   session: Session;
   onError?: (message: string) => void;
   isMobile?: boolean;
+  defaultModel?: string;
 }
 
 // SSE Event types from the backend
@@ -434,7 +435,7 @@ function parseSSEEvents(chunk: string): SSEEvent[] {
 // Main Component
 // =============================================================================
 
-export function ChatInterface({ session, onError, isMobile = false }: ChatInterfaceProps) {
+export function ChatInterface({ session, onError, isMobile = false, defaultModel = '' }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -940,7 +941,7 @@ export function ChatInterface({ session, onError, isMobile = false }: ChatInterf
       <div className="p-3 md:p-4 border-t border-edge-subtle glass-panel flex-shrink-0">
         {/* Model selector row */}
         <div className="flex items-center justify-between mb-2 max-w-4xl mx-auto">
-          <ModelSelector sessionId={session.id} />
+          <ModelSelector sessionId={session.id} defaultModel={defaultModel} />
           {streaming && (
             <span className="text-xs text-neon-cyan flex items-center gap-1.5">
               <Loader2 className="w-3 h-3 animate-spin" />
