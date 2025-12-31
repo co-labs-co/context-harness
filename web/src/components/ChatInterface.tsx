@@ -1,13 +1,25 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, Bot, User, AlertTriangle } from 'lucide-react';
+import { Send, Loader2, Bot, User, AlertTriangle, GitBranch, GitPullRequest, CircleDot, ExternalLink } from 'lucide-react';
 import { VoiceInput } from './VoiceInput';
+
+interface GitHubLink {
+  url: string | null;
+  number: string | null;
+}
+
+interface GitHubIntegration {
+  branch: string | null;
+  issue: GitHubLink | null;
+  pr: GitHubLink | null;
+}
 
 interface Session {
   id: string;
   name: string;
   status: string;
+  github?: GitHubIntegration | null;
 }
 
 interface Message {
@@ -178,7 +190,47 @@ export function ChatInterface({ session }: ChatInterfaceProps) {
               id:{session.id}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            {/* GitHub Links */}
+            {session.github && (
+              <div className="flex items-center gap-2">
+                {session.github.branch && (
+                  <span className="flex items-center gap-1.5 text-xs text-content-secondary px-2 py-1 
+                                   bg-surface-tertiary rounded-lg border border-edge-subtle">
+                    <GitBranch className="w-3.5 h-3.5" />
+                    <span className="font-mono">{session.github.branch}</span>
+                  </span>
+                )}
+                {session.github.issue?.url && (
+                  <a
+                    href={session.github.issue.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-xs text-violet hover:text-violet/80 
+                               px-2 py-1 bg-violet/10 rounded-lg border border-violet/20
+                               transition-colors group"
+                  >
+                    <CircleDot className="w-3.5 h-3.5" />
+                    <span>Issue {session.github.issue.number}</span>
+                    <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </a>
+                )}
+                {session.github.pr?.url && (
+                  <a
+                    href={session.github.pr.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 
+                               px-2 py-1 bg-emerald-400/10 rounded-lg border border-emerald-400/20
+                               transition-colors group"
+                  >
+                    <GitPullRequest className="w-3.5 h-3.5" />
+                    <span>PR {session.github.pr.number}</span>
+                    <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </a>
+                )}
+              </div>
+            )}
             <span className="text-xs text-content-tertiary px-2 py-1 bg-surface-tertiary rounded-lg border border-edge-subtle">
               {messages.length} messages
             </span>

@@ -1,7 +1,18 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, Clock, CheckCircle, AlertCircle, Archive, Zap } from 'lucide-react';
+import { Plus, Clock, CheckCircle, AlertCircle, Archive, Zap, GitBranch, GitPullRequest, CircleDot } from 'lucide-react';
+
+interface GitHubLink {
+  url: string | null;
+  number: string | null;
+}
+
+interface GitHubIntegration {
+  branch: string | null;
+  issue: GitHubLink | null;
+  pr: GitHubLink | null;
+}
 
 interface Session {
   id: string;
@@ -11,6 +22,7 @@ interface Session {
   updated_at: string;
   compaction_cycle: number;
   active_work: string | null;
+  github?: GitHubIntegration | null;
 }
 
 interface SessionListProps {
@@ -153,6 +165,7 @@ export function SessionList({
             {sessions.map((session, index) => {
               const status = getStatusConfig(session.status);
               const isActive = activeSession?.id === session.id;
+              const hasGitHub = session.github && (session.github.branch || session.github.issue || session.github.pr);
               
               return (
                 <button
@@ -188,6 +201,42 @@ export function SessionList({
                       <div className="w-2 h-2 rounded-full bg-neon-cyan animate-pulse" />
                     )}
                   </div>
+                  
+                  {/* GitHub Links */}
+                  {hasGitHub && (
+                    <div className="flex items-center gap-3 mt-2.5 pl-5">
+                      {session.github?.branch && (
+                        <span className="flex items-center gap-1 text-xs text-content-tertiary">
+                          <GitBranch className="w-3 h-3" />
+                          <span className="font-mono truncate max-w-[80px]">{session.github.branch}</span>
+                        </span>
+                      )}
+                      {session.github?.issue && (
+                        <a
+                          href={session.github.issue.url || '#'}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex items-center gap-1 text-xs text-violet hover:text-violet/80 transition-colors"
+                        >
+                          <CircleDot className="w-3 h-3" />
+                          <span>{session.github.issue.number || 'Issue'}</span>
+                        </a>
+                      )}
+                      {session.github?.pr && (
+                        <a
+                          href={session.github.pr.url || '#'}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
+                        >
+                          <GitPullRequest className="w-3 h-3" />
+                          <span>{session.github.pr.number || 'PR'}</span>
+                        </a>
+                      )}
+                    </div>
+                  )}
                   
                   {/* Footer */}
                   <div className="flex items-center justify-between mt-3 pl-5">

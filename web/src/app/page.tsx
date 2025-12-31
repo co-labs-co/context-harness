@@ -5,6 +5,17 @@ import { SessionList } from '@/components/SessionList';
 import { ChatInterface } from '@/components/ChatInterface';
 import { MessageSquare, Sparkles, Terminal } from 'lucide-react';
 
+interface GitHubLink {
+  url: string | null;
+  number: string | null;
+}
+
+interface GitHubIntegration {
+  branch: string | null;
+  issue: GitHubLink | null;
+  pr: GitHubLink | null;
+}
+
 interface Session {
   id: string;
   name: string;
@@ -13,6 +24,7 @@ interface Session {
   updated_at: string;
   compaction_cycle: number;
   active_work: string | null;
+  github?: GitHubIntegration | null;
 }
 
 export default function Home() {

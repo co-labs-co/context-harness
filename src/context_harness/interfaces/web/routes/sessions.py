@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+import re
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -15,6 +16,21 @@ router = APIRouter()
 
 
 # Pydantic models for API requests/responses
+class GitHubLink(BaseModel):
+    """GitHub link with URL and display text."""
+
+    url: Optional[str] = None
+    number: Optional[str] = None  # e.g., "#54" or "55"
+
+
+class GitHubIntegration(BaseModel):
+    """GitHub integration links for a session."""
+
+    branch: Optional[str] = None
+    issue: Optional[GitHubLink] = None
+    pr: Optional[GitHubLink] = None
+
+
 class SessionResponse(BaseModel):
     """Session data response."""
 
@@ -27,6 +43,7 @@ class SessionResponse(BaseModel):
     active_work: Optional[str] = None
     key_files_count: int = 0
     decisions_count: int = 0
+    github: Optional[GitHubIntegration] = None
 
     class Config:
         """Pydantic config."""
@@ -70,6 +87,26 @@ def get_sessions_dir(working_dir: Path) -> Path:
     return working_dir / ".context-harness" / "sessions"
 
 
+def parse_github_link(text: str) -> Tuple[Optional[str], Optional[str]]:
+    """Parse a GitHub link from text like '#54 - https://github.com/...' or just a URL.
+
+    Returns:
+        Tuple of (url, number) where number is like "#54" or "55"
+    """
+    if not text or text.lower() in ["(none yet)", "none", "-", ""]:
+        return None, None
+
+    # Try to extract URL
+    url_match = re.search(r"https://github\.com/[^\s]+", text)
+    url = url_match.group(0) if url_match else None
+
+    # Try to extract issue/PR number
+    number_match = re.search(r"#?(\d+)", text)
+    number = number_match.group(0) if number_match else None
+
+    return url, number
+
+
 def parse_session_md(session_path: Path) -> Dict[str, Any]:
     """Parse a SESSION.md file into a dictionary.
 
@@ -95,6 +132,11 @@ def parse_session_md(session_path: Path) -> Dict[str, Any]:
         "documentation_refs": [],
         "next_steps": [],
         "notes": None,
+        "github": {
+            "branch": None,
+            "issue": None,
+            "pr": None,
+        },
     }
 
     # Simple parsing - look for key patterns
@@ -126,6 +168,21 @@ def parse_session_md(session_path: Path) -> Dict[str, Any]:
             status_val = line_stripped.replace("**Status**:", "").strip().lower()
             if status_val in ["active", "completed", "blocked", "archived"]:
                 result["status"] = status_val
+        # Parse GitHub integration
+        elif line_stripped.startswith("**Branch**:"):
+            branch = line_stripped.replace("**Branch**:", "").strip()
+            if branch and branch.lower() not in ["(none yet)", "none", "-"]:
+                result["github"]["branch"] = branch
+        elif line_stripped.startswith("**Issue**:"):
+            issue_text = line_stripped.replace("**Issue**:", "").strip()
+            url, number = parse_github_link(issue_text)
+            if url or number:
+                result["github"]["issue"] = {"url": url, "number": number}
+        elif line_stripped.startswith("**PR**:"):
+            pr_text = line_stripped.replace("**PR**:", "").strip()
+            url, number = parse_github_link(pr_text)
+            if url or number:
+                result["github"]["pr"] = {"url": url, "number": number}
 
     return result
 
@@ -150,6 +207,23 @@ async def list_sessions(
             session_md = session_path / "SESSION.md"
             if session_md.exists():
                 data = parse_session_md(session_md)
+                # Build GitHub integration object if any data exists
+                github_data = data.get("github", {})
+                github_integration = None
+                if (
+                    github_data.get("branch")
+                    or github_data.get("issue")
+                    or github_data.get("pr")
+                ):
+                    github_integration = GitHubIntegration(
+                        branch=github_data.get("branch"),
+                        issue=GitHubLink(**github_data["issue"])
+                        if github_data.get("issue")
+                        else None,
+                        pr=GitHubLink(**github_data["pr"])
+                        if github_data.get("pr")
+                        else None,
+                    )
                 sessions.append(
                     SessionResponse(
                         id=data["id"],
@@ -161,6 +235,7 @@ async def list_sessions(
                         active_work=data["active_work"],
                         key_files_count=len(data["key_files"]),
                         decisions_count=len(data["decisions"]),
+                        github=github_integration,
                     )
                 )
 
