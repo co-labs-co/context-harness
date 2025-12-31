@@ -58,10 +58,15 @@ fallback_version = "0.0.0+unknown"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/context_harness"]
+# Include static frontend files in the wheel
+artifacts = [
+    "src/context_harness/interfaces/web/static/**/*",
+]
 
 [tool.hatch.build.targets.sdist]
 include = [
     "src/",
+    "web/",
     "README.md",
     "LICENSE",
 ]
