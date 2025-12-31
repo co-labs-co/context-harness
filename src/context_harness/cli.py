@@ -42,6 +42,15 @@ from context_harness.completion import (
     interactive_mcp_picker,
 )
 
+# Check if web dependencies are available
+try:
+    import uvicorn
+    from context_harness.interfaces.web.app import create_app
+
+    WEB_AVAILABLE = True
+except ImportError:
+    WEB_AVAILABLE = False
+
 console = Console()
 
 
@@ -699,6 +708,112 @@ def skill_extract_cmd(skill_name: str | None, source: str):
         console.print()
         console.print("[red]❌ Failed to extract skill.[/red]")
         raise SystemExit(1)
+
+
+# =============================================================================
+# Web UI Command
+# =============================================================================
+
+
+@main.command()
+@click.option(
+    "--host",
+    "-h",
+    default="127.0.0.1",
+    help="Host to bind the server to (default: 127.0.0.1).",
+)
+@click.option(
+    "--port",
+    "-p",
+    default=8000,
+    type=int,
+    help="Port to bind the server to (default: 8000).",
+)
+@click.option(
+    "--reload",
+    "-r",
+    is_flag=True,
+    help="Enable auto-reload for development.",
+)
+@click.option(
+    "--working-dir",
+    "-w",
+    default=".",
+    type=click.Path(exists=True),
+    help="Working directory for ContextHarness operations (default: current directory).",
+)
+def serve(host: str, port: int, reload: bool, working_dir: str):
+    """Start the ContextHarness web UI server.
+
+    Launches a local web server that provides a browser-based interface
+    for managing sessions, chatting with agents, and voice input.
+
+    Requires the [web] optional dependencies to be installed:
+
+        pip install context-harness[web]
+
+    Or with uv:
+
+        uv pip install context-harness[web]
+
+    Examples:
+
+        context-harness serve
+
+        context-harness serve --port 3000
+
+        context-harness serve --host 0.0.0.0 --port 8080
+
+        context-harness serve --reload  # For development
+
+        context-harness serve --working-dir ./my-project
+    """
+    if not WEB_AVAILABLE:
+        console.print()
+        console.print("[red]❌ Web dependencies not installed.[/red]")
+        console.print()
+        console.print("Install them with:")
+        console.print("  [cyan]pip install context-harness[web][/cyan]")
+        console.print("Or with uv:")
+        console.print("  [cyan]uv pip install context-harness[web][/cyan]")
+        console.print()
+        raise SystemExit(1)
+
+    from pathlib import Path
+
+    console.print()
+    console.print(
+        Panel.fit(
+            "[bold blue]ContextHarness[/bold blue] Web UI",
+            subtitle=f"v{__version__}",
+        )
+    )
+    console.print()
+    console.print(f"[bold]Starting server...[/bold]")
+    console.print(f"  • Host: [cyan]{host}[/cyan]")
+    console.print(f"  • Port: [cyan]{port}[/cyan]")
+    console.print(f"  • Working directory: [cyan]{Path(working_dir).resolve()}[/cyan]")
+    console.print(
+        f"  • Auto-reload: [cyan]{'enabled' if reload else 'disabled'}[/cyan]"
+    )
+    console.print()
+    console.print(
+        f"[green]➜[/green] Open [cyan]http://{host}:{port}[/cyan] in your browser"
+    )
+    console.print()
+    console.print("[dim]Press Ctrl+C to stop the server[/dim]")
+    console.print()
+
+    # Create and run the app
+    app = create_app(working_dir=Path(working_dir).resolve())
+
+    uvicorn.run(
+        app,
+        host=host,
+        port=port,
+        reload=reload,
+        log_level="info",
+    )
 
 
 if __name__ == "__main__":

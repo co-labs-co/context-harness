@@ -52,6 +52,22 @@ from context_harness.primitives.config import (
     OpenCodeConfig,
     ProjectConfig,
 )
+from context_harness.primitives.message import (
+    Conversation,
+    Message,
+    MessagePart,
+    MessageRole,
+    MessageStatus,
+    ToolCall,
+    ToolResult,
+)
+from context_harness.primitives.voice import (
+    TranscriptionStatus,
+    VoiceRecordingState,
+    VoiceSettings,
+    VoiceSource,
+    VoiceTranscription,
+)
 
 __all__ = [
     # Result types
@@ -88,4 +104,18 @@ __all__ = [
     "CommandConfig",
     "OpenCodeConfig",
     "ProjectConfig",
+    # Message types
+    "Conversation",
+    "Message",
+    "MessagePart",
+    "MessageRole",
+    "MessageStatus",
+    "ToolCall",
+    "ToolResult",
+    # Voice types
+    "TranscriptionStatus",
+    "VoiceRecordingState",
+    "VoiceSettings",
+    "VoiceSource",
+    "VoiceTranscription",
 ]
