@@ -850,16 +850,9 @@ export function ChatInterface({ session, onError, isMobile = false }: ChatInterf
                         : 'bg-surface-elevated border border-edge-subtle text-content-primary'
                       }`}
                   >
-                    <div className="prose-sm max-w-none">
-                      <MarkdownContent content={message.content} />
-                    </div>
-                    {message.status === 'streaming' && (
-                      <span className="inline-block w-2 h-4 md:h-5 bg-neon-cyan ml-1 typing-cursor" />
-                    )}
-                    
-                    {/* Tool Calls */}
+                    {/* Tool Calls - render ABOVE text so response stays visible at bottom */}
                     {message.toolCalls && message.toolCalls.length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-edge-subtle/50">
+                      <div className="mb-3 pb-3 border-b border-edge-subtle/50">
                         <div className="flex items-center gap-1.5 text-xs text-content-tertiary mb-2">
                           <Wrench className="w-3 h-3" />
                           <span>Tool Calls ({message.toolCalls.length})</span>
@@ -870,14 +863,26 @@ export function ChatInterface({ session, onError, isMobile = false }: ChatInterf
                       </div>
                     )}
                     
-                    {/* Thoughts */}
+                    {/* Thoughts - render above main content */}
                     {message.thoughts && message.thoughts.length > 0 && (
-                      <ThoughtDisplay thoughts={message.thoughts} />
+                      <div className="mb-3">
+                        <ThoughtDisplay thoughts={message.thoughts} />
+                      </div>
                     )}
                     
-                    {/* Plan */}
+                    {/* Plan - render above main content */}
                     {message.plan && message.plan.length > 0 && (
-                      <PlanDisplay plan={message.plan} />
+                      <div className="mb-3">
+                        <PlanDisplay plan={message.plan} />
+                      </div>
+                    )}
+                    
+                    {/* Main text content - renders at bottom so it stays visible */}
+                    <div className="prose-sm max-w-none">
+                      <MarkdownContent content={message.content} />
+                    </div>
+                    {message.status === 'streaming' && (
+                      <span className="inline-block w-2 h-4 md:h-5 bg-neon-cyan ml-1 typing-cursor" />
                     )}
                   </div>
                   <div className={`mt-1 md:mt-1.5 flex items-center gap-2 text-[10px] md:text-xs text-content-tertiary ${message.role === 'user' ? 'justify-end' : ''}`}>
