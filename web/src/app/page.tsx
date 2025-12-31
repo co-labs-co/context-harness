@@ -140,8 +140,8 @@ export default function Home() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [showNewSessionModal, sidebarOpen, sessions, addToast]);
 
-  const fetchSessions = async () => {
-    setError(null);
+  const fetchSessions = async (silent = false) => {
+    if (!silent) setError(null);
     try {
       const response = await fetch('/api/sessions');
       if (!response.ok) {
@@ -150,6 +150,17 @@ export default function Home() {
       const data = await response.json();
       setSessions(data.sessions);
       
+      // Update active session with fresh data if it exists
+      if (activeSession) {
+        const updatedActiveSession = data.sessions.find((s: Session) => s.id === activeSession.id);
+        if (updatedActiveSession) {
+          // Only update if something changed (avoid unnecessary re-renders)
+          if (JSON.stringify(updatedActiveSession) !== JSON.stringify(activeSession)) {
+            setActiveSession(updatedActiveSession);
+          }
+        }
+      }
+      
       // Auto-select first session if none selected and no saved session
       if (data.sessions.length > 0 && !activeSession) {
         const savedSessionId = localStorage.getItem(STORAGE_KEY);
@@ -157,17 +168,32 @@ export default function Home() {
         setActiveSession(savedSession || data.sessions[0]);
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to fetch sessions';
-      setError(message);
-      addToast('error', message);
+      if (!silent) {
+        const message = err instanceof Error ? err.message : 'Failed to fetch sessions';
+        setError(message);
+        addToast('error', message);
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
+  // Initial fetch
   useEffect(() => {
     fetchSessions();
   }, []);
+
+  // Poll for session updates every 5 seconds when there's an active session
+  // This catches changes made by the agent (commits, PRs, etc.)
+  useEffect(() => {
+    if (!activeSession) return;
+    
+    const pollInterval = setInterval(() => {
+      fetchSessions(true); // silent = true, don't show loading/errors
+    }, 5000);
+    
+    return () => clearInterval(pollInterval);
+  }, [activeSession?.id]);
 
   const handleSelectSession = (session: Session) => {
     setActiveSession(session);
@@ -301,7 +327,7 @@ export default function Home() {
             </div>
             <p className="text-xs text-content-tertiary mt-1 break-words">{error}</p>
             <button
-              onClick={fetchSessions}
+              onClick={() => fetchSessions()}
               className="mt-2 text-xs text-neon-cyan hover:underline"
             >
               Try again
