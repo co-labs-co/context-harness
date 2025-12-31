@@ -316,24 +316,32 @@ class OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
 class OAuthCallbackServer:
     """Local HTTP server to receive OAuth callback.
 
-    Starts on a random available port and waits for the OAuth callback.
+    Tries preferred ports first (commonly registered with OAuth providers),
+    then falls back to a random available port.
     This acts as a local OAuth proxy, handling the browser redirect flow.
     """
 
-    def __init__(self, timeout: int = 300):
+    # Preferred ports to try first - these should be registered with OAuth providers
+    PREFERRED_PORTS = [8080, 3000, 57548]
+
+    def __init__(self, timeout: int = 300, preferred_ports: Optional[List[int]] = None):
         """Initialize callback server.
 
         Args:
             timeout: Maximum seconds to wait for callback (default: 5 minutes)
+            preferred_ports: List of ports to try first (default: [8080, 3000, 57548])
         """
         self.timeout = timeout
+        self.preferred_ports = preferred_ports or self.PREFERRED_PORTS
         self.server: Optional[socketserver.TCPServer] = None
         self.port: Optional[int] = None
         self._thread: Optional[threading.Thread] = None
         self._shutdown_event = threading.Event()
 
     def start(self) -> int:
-        """Start the callback server on a random port.
+        """Start the callback server on a preferred port or random port.
+
+        Tries preferred ports first, falls back to random if all are in use.
 
         Returns:
             The port number the server is listening on
@@ -341,14 +349,32 @@ class OAuthCallbackServer:
         OAuthCallbackHandler.reset()
         self._shutdown_event.clear()
 
-        # Find an available port - use SO_REUSEADDR to prevent "address in use" errors
-        self.server = socketserver.TCPServer(("127.0.0.1", 0), OAuthCallbackHandler)
-        self.server.socket.setsockopt(
-            __import__("socket").SOL_SOCKET,
-            __import__("socket").SO_REUSEADDR,
-            1,
-        )
-        self.port = self.server.server_address[1]
+        # Try preferred ports first
+        for port in self.preferred_ports:
+            try:
+                self.server = socketserver.TCPServer(
+                    ("127.0.0.1", port), OAuthCallbackHandler
+                )
+                self.server.socket.setsockopt(
+                    __import__("socket").SOL_SOCKET,
+                    __import__("socket").SO_REUSEADDR,
+                    1,
+                )
+                self.port = port
+                break
+            except OSError:
+                # Port in use, try next one
+                continue
+
+        # Fall back to random port if all preferred ports are in use
+        if self.server is None:
+            self.server = socketserver.TCPServer(("127.0.0.1", 0), OAuthCallbackHandler)
+            self.server.socket.setsockopt(
+                __import__("socket").SOL_SOCKET,
+                __import__("socket").SO_REUSEADDR,
+                1,
+            )
+            self.port = self.server.server_address[1]
 
         # Set a socket timeout so handle_request doesn't block forever
         self.server.socket.settimeout(1.0)
