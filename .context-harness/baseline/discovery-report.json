@@ -1,0 +1,235 @@
+{
+  "project_name": "context-harness",
+  "discovery_timestamp": "2025-12-30T00:00:00Z",
+  "discovery_version": "1.1.0",
+  "primary_language": "Python",
+  "primary_language_version": ">=3.9",
+  "secondary_languages": ["JavaScript", "Markdown"],
+  "framework": "Click CLI",
+  "ui_framework": null,
+  "architecture_pattern": "Primitives-Services-Interfaces (Layered Architecture)",
+  "description": "CLI installer for the ContextHarness agent framework for OpenCode.ai - maintains session continuity for AI-assisted development",
+  "directory_structure": {
+    "type": "single-package",
+    "root_directories": [".context-harness", ".github", ".opencode", "src", "tests"],
+    "source_directories": ["src/context_harness/"],
+    "test_directories": ["tests/", "tests/unit/"],
+    "config_directories": [".github/workflows/"],
+    "documentation_directories": [".context-harness/"],
+    "notable_files": ["README.md", "ARCHITECTURE.md", "DOCS.md", "LICENSE", "PROJECT-CONTEXT.md", "pyproject.toml", "opencode.json"],
+    "depth_analysis": "moderate (3-4 levels)",
+    "organization_pattern": "src-layout with primitives/services/interfaces separation"
+  },
+  "build_tools": ["hatchling", "hatch-vcs", "semantic-release"],
+  "package_manager": "uv",
+  "ci_cd": {
+    "platform": "GitHub Actions",
+    "workflows": {
+      "ci.yml": {
+        "triggers": ["push to main", "pull_request to main"],
+        "jobs": ["test (uv run pytest)", "lint-pr-title (commitlint)"]
+      },
+      "release.yml": {
+        "triggers": ["push to main"],
+        "jobs": ["release (semantic-release)"],
+        "permissions": ["contents: write", "issues: write", "pull-requests: write"]
+      }
+    }
+  },
+  "external_dependencies": {
+    "databases": [],
+    "message_queues": [],
+    "cloud_services": [],
+    "external_apis": [
+      {
+        "service": "Context7 MCP",
+        "purpose": "Documentation lookup for libraries/frameworks"
+      },
+      {
+        "service": "Atlassian MCP",
+        "purpose": "Atlassian integration"
+      },
+      {
+        "service": "Exa MCP",
+        "purpose": "Web search integration"
+      },
+      {
+        "service": "GitHub CLI (gh)",
+        "purpose": "Branch creation, issue tracking, PR creation"
+      }
+    ]
+  },
+  "key_files": [
+    "pyproject.toml",
+    "src/context_harness/cli.py",
+    "src/context_harness/installer.py",
+    "src/context_harness/primitives/__init__.py",
+    "src/context_harness/services/__init__.py",
+    "src/context_harness/interfaces/sdk/client.py",
+    "ARCHITECTURE.md",
+    "opencode.json"
+  ],
+  "detected_patterns": [
+    {
+      "name": "Primitives-First Architecture",
+      "description": "Pure Python dataclasses with no I/O dependencies as foundation",
+      "category": "architecture"
+    },
+    {
+      "name": "Result Type Pattern",
+      "description": "Success/Failure union type for explicit error handling",
+      "category": "code_pattern"
+    },
+    {
+      "name": "Service Layer",
+      "description": "Business logic separated from interfaces, depends only on primitives",
+      "category": "architecture"
+    },
+    {
+      "name": "Multi-Interface Support",
+      "description": "CLI and SDK interfaces both consume services",
+      "category": "architecture"
+    },
+    {
+      "name": "Storage Protocol Pattern",
+      "description": "Protocol-based storage abstraction for testability",
+      "category": "code_pattern"
+    },
+    {
+      "name": "Template Bundling",
+      "description": "Templates bundled in package, located via __file__",
+      "category": "code_pattern"
+    },
+    {
+      "name": "Conventional Commits",
+      "description": "Enforced commit format with commitlint",
+      "category": "workflow"
+    },
+    {
+      "name": "Session-Based Context",
+      "description": "SESSION.md files maintain work continuity",
+      "category": "domain"
+    },
+    {
+      "name": "Single Executor Pattern",
+      "description": "One primary agent executes, subagents provide advisory only",
+      "category": "domain"
+    }
+  ],
+  "skill_opportunities": [
+    {
+      "id": "python-cli-click",
+      "name": "Python Click CLI",
+      "category": "repeated_code",
+      "description": "Click-based CLI command group patterns with consistent error handling and Rich formatting",
+      "potential_value": "high",
+      "evidence_files": [
+        "src/context_harness/interfaces/cli/skill_cmd.py",
+        "src/context_harness/interfaces/cli/mcp_cmd.py",
+        "src/context_harness/interfaces/cli/init_cmd.py",
+        "src/context_harness/interfaces/cli/main.py"
+      ]
+    },
+    {
+      "id": "python-result-pattern",
+      "name": "Python Result Pattern",
+      "category": "complex_workflow",
+      "description": "Functional Result[T] pattern with Success/Failure for explicit error handling without exceptions",
+      "potential_value": "high",
+      "evidence_files": [
+        "src/context_harness/primitives/result.py",
+        "src/context_harness/services/skill_service.py"
+      ]
+    },
+    {
+      "id": "python-primitives-architecture",
+      "name": "Python Primitives Architecture",
+      "category": "complex_workflow",
+      "description": "Primitives-first architecture with pure dataclasses, services, and interface layers",
+      "potential_value": "high",
+      "evidence_files": [
+        "src/context_harness/primitives/",
+        "ARCHITECTURE.md"
+      ]
+    },
+    {
+      "id": "python-storage-abstraction",
+      "name": "Python Storage Abstraction",
+      "category": "external_integration",
+      "description": "Protocol-based storage abstraction with FileStorage and MemoryStorage implementations",
+      "potential_value": "medium",
+      "evidence_files": [
+        "src/context_harness/storage/protocol.py",
+        "src/context_harness/storage/memory_storage.py",
+        "src/context_harness/storage/file_storage.py"
+      ]
+    },
+    {
+      "id": "python-sdk-client",
+      "name": "Python SDK Client",
+      "category": "external_integration",
+      "description": "High-level SDK client wrapping services with sub-clients for each domain",
+      "potential_value": "medium",
+      "evidence_files": [
+        "src/context_harness/interfaces/sdk/client.py"
+      ]
+    },
+    {
+      "id": "python-rich-formatters",
+      "name": "Python Rich Formatters",
+      "category": "repeated_code",
+      "description": "Centralized Rich console formatters for consistent CLI output",
+      "potential_value": "medium",
+      "evidence_files": [
+        "src/context_harness/interfaces/cli/formatters.py"
+      ]
+    },
+    {
+      "id": "python-service-with-protocol",
+      "name": "Python Service with Protocol DI",
+      "category": "external_integration",
+      "description": "Service pattern with Protocol-based dependency injection for external APIs",
+      "potential_value": "high",
+      "evidence_files": [
+        "src/context_harness/services/skill_service.py"
+      ]
+    },
+    {
+      "id": "python-test-with-mock-client",
+      "name": "Python Testing with Mock Clients",
+      "category": "complex_workflow",
+      "description": "Testing pattern with mock clients implementing protocols for isolation",
+      "potential_value": "medium",
+      "evidence_files": [
+        "tests/unit/services/test_skill_service.py"
+      ]
+    }
+  ],
+  "file_count_estimate": {
+    "python_files": 57,
+    "markdown_files": 63,
+    "total_source_files": 120
+  },
+  "test_framework": "pytest",
+  "documentation_files": [
+    "README.md",
+    "ARCHITECTURE.md",
+    "DOCS.md",
+    "PROJECT-CONTEXT.md",
+    ".context-harness/README.md"
+  ],
+  "existing_skills": ["skill-creator"],
+  "opencode_integration": {
+    "agents": [
+      "context-harness (primary executor)",
+      "baseline-discovery",
+      "baseline-questions",
+      "baseline-answers",
+      "baseline-question-answer",
+      "baseline-skills",
+      "baseline-skill-answer"
+    ],
+    "commands": ["/ctx", "/contexts", "/compact", "/baseline", "/issue", "/pr", "/extract-skills"],
+    "mcp_servers_configured": ["context7", "atlassian", "exa"]
+  }
+}

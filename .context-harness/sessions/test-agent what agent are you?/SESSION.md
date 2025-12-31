@@ -1,0 +1,81 @@
+# ContextHarness Session
+
+**Session**: test-agent what agent are you?
+**Last Updated**: 2025-12-31  
+**Compaction Cycle**: #0  
+**Session Started**: 2025-12-31
+
+---
+
+## Active Work
+
+**Current Task**: None yet  
+**Status**: Initializing  
+**Description**: Session just started  
+**Blockers**: None
+
+---
+
+## Key Files
+
+No files modified yet.
+
+| File | Purpose | Status |
+|------|---------|--------|
+| - | - | - |
+
+---
+
+## Decisions Made
+
+No decisions recorded yet.
+
+| Decision | Choice | Rationale | Date |
+|----------|--------|-----------|------|
+| - | - | - | - |
+
+---
+
+## Documentation References
+
+No documentation referenced yet.
+
+| Title | URL | Relevance |
+|-------|-----|-----------|
+| - | - | - |
+
+---
+
+## Next Steps
+
+1. Define initial task or feature
+2. Begin work with Primary Agent
+
+---
+
+## Completed This Session
+
+<details>
+<summary>Archived Work (Expand to view)</summary>
+
+No completed work yet.
+
+</details>
+
+---
+
+## GitHub Integration
+
+**Branch**: feature/test-agent-what-agent-are-you
+**Issue**: (none yet - describe your task and I'll create one)
+**PR**: (none yet)
+
+---
+
+## Notes
+
+Session `test-agent what agent are you?` initialized by ContextHarness Primary Agent.
+
+---
+
+_Auto-updated by ContextHarness Primary Agent every 2nd user interaction_
