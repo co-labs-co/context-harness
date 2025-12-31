@@ -103,10 +103,16 @@ def get_conversation(session_id: str) -> List[Message]:
     return _conversations[session_id]
 
 
+# Default agent mode for ContextHarness
+DEFAULT_AGENT_MODE = "context-harness"
+
+
 async def get_or_create_acp_session(
     client: ACPClient, session_id: str
 ) -> tuple[str, bool]:
     """Get existing ACP session or create a new one.
+
+    Creates a new ACP session and sets it to use the context-harness agent mode.
 
     Args:
         client: The ACP client
@@ -118,9 +124,21 @@ async def get_or_create_acp_session(
     """
     if session_id not in _acp_sessions:
         acp_session = await client.create_session()
-        _acp_sessions[session_id] = (acp_session.session_id, True)
-        logger.info(f"Created ACP session {acp_session.session_id} for {session_id}")
-        return acp_session.session_id, True
+        acp_session_id = acp_session.session_id
+
+        # Set the agent mode to context-harness
+        try:
+            await client.set_mode(acp_session_id, DEFAULT_AGENT_MODE)
+            logger.info(
+                f"Set agent mode to '{DEFAULT_AGENT_MODE}' for session {acp_session_id}"
+            )
+        except Exception as e:
+            logger.warning(f"Could not set agent mode to '{DEFAULT_AGENT_MODE}': {e}")
+            # Continue anyway - the /ctx command will still work
+
+        _acp_sessions[session_id] = (acp_session_id, True)
+        logger.info(f"Created ACP session {acp_session_id} for {session_id}")
+        return acp_session_id, True
 
     acp_session_id, needs_init = _acp_sessions[session_id]
     return acp_session_id, needs_init

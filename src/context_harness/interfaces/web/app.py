@@ -7,6 +7,7 @@ file serving for the frontend.
 
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator, Optional
@@ -16,7 +17,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
+from context_harness.installer import (
+    install_framework,
+    InstallResult,
+    verify_installation,
+)
 from context_harness.interfaces.web.routes import chat, health, sessions
+
+logger = logging.getLogger(__name__)
 
 
 def get_static_dir() -> Optional[Path]:
@@ -51,6 +59,40 @@ def get_static_dir() -> Optional[Path]:
     return None
 
 
+def ensure_context_harness_initialized(working_dir: Path) -> bool:
+    """Ensure ContextHarness framework files are installed in the working directory.
+
+    This runs `context-harness init` logic to ensure the .context-harness/ and
+    .opencode/agent/ directories exist with all necessary files.
+
+    Args:
+        working_dir: The working directory to initialize
+
+    Returns:
+        True if initialization succeeded or already exists, False on error
+    """
+    # Check if already installed
+    if verify_installation(str(working_dir)):
+        logger.debug(f"ContextHarness already initialized in {working_dir}")
+        return True
+
+    # Run initialization
+    logger.info(f"Initializing ContextHarness in {working_dir}...")
+    result = install_framework(str(working_dir), force=False, quiet=True)
+
+    if result == InstallResult.SUCCESS:
+        logger.info("ContextHarness initialized successfully")
+        return True
+    elif result == InstallResult.ALREADY_EXISTS:
+        # Partial installation exists, try with force to update
+        logger.info("Updating existing ContextHarness installation...")
+        result = install_framework(str(working_dir), force=True, quiet=True)
+        return result == InstallResult.SUCCESS
+    else:
+        logger.error("Failed to initialize ContextHarness")
+        return False
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan handler.
@@ -58,6 +100,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     Handles startup and shutdown events for the FastAPI application.
     """
     # Startup
+    working_dir = getattr(app.state, "working_dir", Path.cwd())
+
+    # Ensure ContextHarness is initialized in the working directory
+    if not ensure_context_harness_initialized(working_dir):
+        print("⚠️  Warning: Could not initialize ContextHarness framework files")
+        print("   Run 'context-harness init' manually to set up the framework")
+
     static_dir = get_static_dir()
     if static_dir:
         print(
