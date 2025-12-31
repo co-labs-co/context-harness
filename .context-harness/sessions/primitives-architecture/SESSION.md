@@ -1,8 +1,8 @@
 # ContextHarness Session
 
 **Session**: primitives-architecture
-**Last Updated**: 2025-12-30T20:00:00Z  
-**Compaction Cycle**: #2  
+**Last Updated**: 2025-12-30T21:30:00Z  
+**Compaction Cycle**: #3  
 **Session Started**: 2025-12-30T17:00:00Z
 **GitHub Issue**: #52
 **GitHub PR**: #53
@@ -12,8 +12,8 @@
 
 ## Active Work
 
-**Current Task**: Phase 2 - Services Package (Complete)
-**Status**: Ready for Phase 3  
+**Current Task**: Phase 3 - Storage Package (Complete)
+**Status**: Ready for Phase 4  
 **Description**: Establishing primitive-based architecture for multi-interface support (CLI, Web, SDK)
 **Blockers**: None
 
@@ -37,12 +37,18 @@
 | `src/context_harness/services/mcp_service.py` | MCP server registry and configuration | ✅ Created |
 | `src/context_harness/services/oauth_service.py` | OAuth 2.1 with PKCE, token storage | ✅ Created |
 | `src/context_harness/services/skill_service.py` | Skill listing, installation, validation | ✅ Created |
+| **Phase 3: Storage** | | |
+| `src/context_harness/storage/__init__.py` | Package exports for storage abstractions | ✅ Created |
+| `src/context_harness/storage/protocol.py` | StorageProtocol interface definition | ✅ Created |
+| `src/context_harness/storage/file_storage.py` | FileStorage - real filesystem implementation | ✅ Created |
+| `src/context_harness/storage/memory_storage.py` | MemoryStorage - in-memory for testing | ✅ Created |
 | **Tests** | | |
 | `tests/unit/primitives/test_config.py` | Unit tests for config primitives | ✅ 19 tests |
 | `tests/unit/services/test_config_service.py` | Unit tests for ConfigService | ✅ 13 tests |
 | `tests/unit/services/test_mcp_service.py` | Unit tests for MCPService | ✅ 16 tests |
 | `tests/unit/services/test_oauth_service.py` | Unit tests for OAuthService | ✅ 22 tests |
 | `tests/unit/services/test_skill_service.py` | Unit tests for SkillService | ✅ 28 tests |
+| `tests/unit/storage/test_memory_storage.py` | Unit tests for MemoryStorage | ✅ 39 tests |
 
 ---
 
@@ -58,6 +64,8 @@
 | Skill.location required | Non-optional field | Consistent with SKILL.md file path; empty string for uninstalled remote skills | 2025-12-30 |
 | TokenStorageProtocol | Protocol with MemoryTokenStorage for tests | Enables dependency injection and isolated testing | 2025-12-30 |
 | Services don't import Rich/Click | Pure Python only | Interface-agnostic design for CLI, Web, SDK reuse | 2025-12-30 |
+| StorageProtocol as general abstraction | FileStorage/MemoryStorage | Generic file ops, distinct from specialized TokenStorageProtocol | 2025-12-30 |
+| Keep TokenStorage in oauth_service | No migration needed | Works well, tested, different abstraction level | 2025-12-30 |
 
 ---
 
@@ -88,13 +96,15 @@
 - [x] Add 79 unit tests for services
 - [x] Fix Skill primitive alignment (location, SkillSource.REMOTE)
 
-### Phase 3: Storage (Next)
-- [ ] Create `storage/` package
-- [ ] Abstract file operations behind storage protocols
-- [ ] Migrate token storage
-- [ ] FileStorage, MemoryStorage implementations
+### Phase 3: Storage ✅ COMPLETE
+- [x] Create `storage/` package
+- [x] Define StorageProtocol for file operations
+- [x] Implement FileStorage (real filesystem)
+- [x] Implement MemoryStorage (for testing)
+- [x] Add 39 unit tests for storage
+- [x] Note: TokenStorage kept in oauth_service (different abstraction level)
 
-### Phase 4: CLI Refactor
+### Phase 4: CLI Refactor (Next)
 - [ ] Move CLI to `interfaces/cli/`
 - [ ] Split into command modules
 - [ ] CLI calls services, formats output
@@ -115,8 +125,9 @@
 | MCPService | 16 | ✅ Passing |
 | OAuthService | 22 | ✅ Passing |
 | SkillService | 28 | ✅ Passing |
-| **Total New** | **98** | ✅ Passing |
-| **Full Suite** | **311** | ✅ Passing |
+| MemoryStorage | 39 | ✅ Passing |
+| **Total New** | **137** | ✅ Passing |
+| **Full Suite** | **350** | ✅ Passing |
 
 ---
 
@@ -126,11 +137,10 @@
 2. ~~Add OAuth and Skill service tests~~ ✅
 3. ~~Fix Skill primitive alignment~~ ✅
 4. ~~Push and update PR~~ ✅
-5. Begin Phase 3: Storage package
-   - Create `storage/` directory structure
-   - Define StorageProtocol for file operations
-   - Implement FileStorage and MemoryStorage
-   - Migrate FileTokenStorage to use storage abstraction
+5. ~~Begin Phase 3: Storage package~~ ✅
+6. Commit Phase 3 changes
+7. Update PR #53 with Phase 3 work
+8. Optional: Begin Phase 4 (CLI Refactor) or merge PR
 
 ---
 
@@ -152,6 +162,14 @@
 - Added TOKEN_EXPIRED, TOKEN_REFRESH_FAILED error codes
 - Pushed commit 1a5fd59 to feat/primitives-architecture
 
+### 2025-12-30: Phase 3 Complete
+- Created storage package with 3 modules:
+  - `protocol.py` - StorageProtocol interface
+  - `file_storage.py` - FileStorage for real filesystem
+  - `memory_storage.py` - MemoryStorage for testing
+- 350 tests passing (311 + 39 new storage tests)
+- Decision: Keep TokenStorage separate from StorageProtocol (different abstraction levels)
+
 </details>
 
 ---
@@ -160,7 +178,7 @@
 
 This is a major architectural refactor to prepare ContextHarness for:
 1. **Multi-interface support** - CLI, Web, SDK can share primitives
-2. **Clean separation of concerns** - Primitives → Services → Interfaces
+2. **Clean separation of concerns** - Primitives → Services → Storage → Interfaces
 3. **OpenCode.ai alignment** - Patterns inspired by sst/opencode
 
 Session `primitives-architecture` managed by ContextHarness Primary Agent.
