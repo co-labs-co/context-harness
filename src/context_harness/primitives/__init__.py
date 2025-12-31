@@ -1,0 +1,91 @@
+"""ContextHarness Primitives.
+
+This package contains pure domain models (dataclasses) with no I/O dependencies.
+These primitives are the foundation for all ContextHarness functionality and
+can be used by any interface (CLI, Web, SDK).
+
+Primitives follow these rules:
+1. No I/O operations (file, network, etc.)
+2. No framework dependencies (click, rich, etc.)
+3. Only standard library + typing dependencies
+4. Immutable where practical
+5. Full type annotations
+"""
+
+from context_harness.primitives.result import (
+    ErrorCode,
+    Failure,
+    Result,
+    Success,
+    is_failure,
+    is_success,
+)
+from context_harness.primitives.session import (
+    CompactionCycle,
+    Decision,
+    DocRef,
+    KeyFile,
+    Session,
+    SessionStatus,
+)
+from context_harness.primitives.skill import (
+    Skill,
+    SkillMetadata,
+    SkillSource,
+)
+from context_harness.primitives.oauth import (
+    AuthStatus,
+    OAuthConfig,
+    OAuthProvider,
+    OAuthTokens,
+    PKCEChallenge,
+)
+from context_harness.primitives.mcp import (
+    MCPAuthType,
+    MCPServer,
+    MCPServerConfig,
+    MCPServerType,
+)
+from context_harness.primitives.config import (
+    AgentConfig,
+    CommandConfig,
+    OpenCodeConfig,
+    ProjectConfig,
+)
+
+__all__ = [
+    # Result types
+    "ErrorCode",
+    "Failure",
+    "Result",
+    "Success",
+    "is_failure",
+    "is_success",
+    # Session types
+    "CompactionCycle",
+    "Decision",
+    "DocRef",
+    "KeyFile",
+    "Session",
+    "SessionStatus",
+    # Skill types
+    "Skill",
+    "SkillMetadata",
+    "SkillSource",
+    # OAuth types
+    "AuthStatus",
+    "OAuthConfig",
+    "OAuthProvider",
+    "OAuthTokens",
+    "PKCEChallenge",
+    # MCP types
+    "MCPAuthType",
+    "MCPServer",
+    "MCPServerConfig",
+    "MCPServerType",
+    # Config types
+    "AgentConfig",
+    "CommandConfig",
+    "OpenCodeConfig",
+    "ProjectConfig",
+]
