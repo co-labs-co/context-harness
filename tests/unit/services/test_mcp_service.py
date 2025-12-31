@@ -4,19 +4,15 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict
-
-import pytest
 
 from context_harness.primitives import (
     ErrorCode,
     Failure,
     MCPAuthType,
-    MCPServer,
     MCPServerType,
     Success,
 )
-from context_harness.services import ConfigService, MCPService
+from context_harness.services import MCPService
 
 
 class TestMCPServiceListAvailable:

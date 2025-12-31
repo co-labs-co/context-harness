@@ -12,7 +12,7 @@ import subprocess
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Protocol
+from typing import List, Optional, Protocol
 
 import yaml
 

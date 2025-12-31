@@ -5,9 +5,6 @@ Handles the `context-harness init` command for initializing the framework.
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Optional
-
 import click
 
 from context_harness.installer import install_framework, InstallResult

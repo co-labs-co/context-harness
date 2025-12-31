@@ -3,8 +3,6 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-import pytest
-
 from context_harness.interfaces.sdk import Client, create_client
 from context_harness.interfaces.sdk.client import (
     ConfigClient,

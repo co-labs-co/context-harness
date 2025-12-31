@@ -5,7 +5,6 @@ Handles the `context-harness mcp` command group for MCP server management.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Optional
 
 import click
@@ -32,7 +31,6 @@ from context_harness.completion import (
 from context_harness.interfaces.cli.formatters import (
     console,
     print_header,
-    print_success,
     print_warning,
     print_error,
     print_info,
@@ -263,7 +261,7 @@ def _handle_oauth_auth(
 
     # Run OAuth flow
     try:
-        tokens = oauth.authenticate()
+        oauth.authenticate()
 
         console.print()
         print_bold("Next steps:")

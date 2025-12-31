@@ -7,9 +7,6 @@ Network-dependent tests (authenticate, refresh) are marked as integration tests.
 from __future__ import annotations
 
 import time
-from typing import Optional
-
-import pytest
 
 from context_harness.primitives import (
     AuthStatus,

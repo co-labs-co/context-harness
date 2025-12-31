@@ -3,8 +3,6 @@
 Tests the in-memory storage implementation used for testing.
 """
 
-import pytest
-
 from context_harness.storage import MemoryStorage
 
 

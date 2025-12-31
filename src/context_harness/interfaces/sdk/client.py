@@ -6,11 +6,10 @@ High-level client that wraps services for programmatic access.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import List, Optional
 
 from context_harness.primitives import (
     AuthStatus,
-    ErrorCode,
     Failure,
     MCPServer,
     MCPServerConfig,

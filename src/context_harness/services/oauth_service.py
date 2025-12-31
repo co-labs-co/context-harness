@@ -139,6 +139,7 @@ class FileTokenStorage:
                     f"{self.SERVICE_PREFIX}-{service}", "oauth_tokens"
                 )
             except Exception:
+                # Keyring access failed; fall back to file-based storage
                 pass
 
         if not token_data:
@@ -184,6 +185,7 @@ class FileTokenStorage:
                 )
                 deleted = True
             except Exception:
+                # Keyring deletion failed; continue with file-based cleanup
                 pass
 
         # Also try to delete file
@@ -858,6 +860,7 @@ class OAuthService:
         try:
             server.server_close()
         except Exception:
+            # Best-effort shutdown: ignore errors when closing the callback server
             pass
 
     def _build_authorization_url(

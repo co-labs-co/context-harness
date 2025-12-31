@@ -16,7 +16,6 @@ from context_harness.primitives import (
     MCPServer,
     MCPServerConfig,
     MCPServerType,
-    OpenCodeConfig,
     Result,
     Success,
 )

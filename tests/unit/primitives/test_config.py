@@ -9,7 +9,7 @@ from context_harness.primitives.config import (
     OpenCodeConfig,
     ProjectConfig,
 )
-from context_harness.primitives.mcp import MCPServerConfig, MCPServerType
+from context_harness.primitives.mcp import MCPServerType
 
 
 class TestAgentConfig:

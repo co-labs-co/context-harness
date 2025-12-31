@@ -9,20 +9,15 @@ import json
 from pathlib import Path
 from typing import List, Optional
 
-import pytest
-
 from context_harness.primitives import (
     ErrorCode,
     Failure,
-    Skill,
-    SkillMetadata,
     SkillSource,
     Success,
 )
 from context_harness.services.skill_service import (
     GitHubClient,
     SkillService,
-    SKILLS_DIR,
     SKILLS_REGISTRY_PATH,
 )
 

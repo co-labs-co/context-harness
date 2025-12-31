@@ -5,7 +5,6 @@ Handles the `context-harness skill` command group for skill management.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Optional, Tuple
 
 import click
@@ -26,8 +25,6 @@ from context_harness.completion import (
 from context_harness.interfaces.cli.formatters import (
     console,
     print_header,
-    print_success,
-    print_warning,
     print_error,
     print_info,
     print_bold,
