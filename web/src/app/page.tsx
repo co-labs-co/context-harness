@@ -370,13 +370,13 @@ export default function Home() {
               ) : (
                 <p className="text-content-secondary">Select a session</p>
               )}
-              {/* Theme Picker */}
-              <ThemePicker
-                currentTheme={currentTheme}
-                onThemeChange={setCurrentTheme}
-                compact={true}
-              />
             </div>
+            {/* Theme Picker - Mobile */}
+            <ThemePicker
+              currentTheme={currentTheme}
+              onThemeChange={setCurrentTheme}
+              compact={true}
+            />
           </div>
         )}
 

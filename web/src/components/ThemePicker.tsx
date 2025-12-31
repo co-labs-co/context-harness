@@ -206,43 +206,11 @@ export default function ThemePicker({ currentTheme, onThemeChange, compact = fal
 
   const currentThemeData = themes.find(t => t.metadata.name === currentTheme);
 
-  if (compact) {
-    return (
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-2 text-sm rounded-lg border border-gray-700 hover:border-gray-600 transition-colors"
-        title={`Theme: ${getCurrentThemeDisplay()}`}
-      >
-        {currentThemeData ? getThemeIcon(currentThemeData.metadata.theme_type) : <Palette className="w-4 h-4" />}
-        {!currentThemeData && <span className="hidden sm:inline">Theme</span>}
-      </button>
-    );
-  }
-
-  return (
-    <div className="relative">
-      {/* Theme Button */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-2 text-sm rounded-lg border border-gray-700 hover:border-gray-600 transition-colors bg-gray-800 text-gray-200"
-      >
-        {currentThemeData ? (
-          <>
-            {getThemeIcon(currentThemeData.metadata.theme_type)}
-            <span>{currentThemeData.metadata.display_name}</span>
-          </>
-        ) : (
-          <>
-            <Palette className="w-4 h-4" />
-            <span>Select Theme</span>
-          </>
-        )}
-        <ChevronDown className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-      </button>
-
-      {/* Dropdown */}
+  // Shared dropdown component
+  const renderDropdown = () => (
+    <>
       {isOpen && (
-        <div className="absolute top-full left-0 mt-2 w-80 bg-gray-900 border border-gray-700 rounded-lg shadow-xl z-50">
+        <div className="absolute top-full right-0 mt-2 w-80 bg-gray-900 border border-gray-700 rounded-lg shadow-xl z-50">
           <div className="p-3 border-b border-gray-700">
             <h3 className="text-sm font-semibold text-gray-200">Choose Theme</h3>
             <p className="text-xs text-gray-400 mt-1">Select a theme for the interface</p>
@@ -356,6 +324,48 @@ export default function ThemePicker({ currentTheme, onThemeChange, compact = fal
           onClick={() => setIsOpen(false)}
         />
       )}
+    </>
+  );
+
+  if (compact) {
+    return (
+      <div className="relative">
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="flex items-center gap-2 px-3 py-2 text-sm rounded-lg border border-edge-subtle 
+                     bg-surface-secondary hover:bg-surface-tertiary hover:border-edge-medium transition-colors"
+          title={`Theme: ${getCurrentThemeDisplay()}`}
+        >
+          {currentThemeData ? getThemeIcon(currentThemeData.metadata.theme_type) : <Palette className="w-4 h-4" />}
+        </button>
+        {renderDropdown()}
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      {/* Theme Button */}
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-2 px-3 py-2 text-sm rounded-lg border border-edge-subtle 
+                   bg-surface-secondary hover:bg-surface-tertiary hover:border-edge-medium transition-colors"
+      >
+        {currentThemeData ? (
+          <>
+            {getThemeIcon(currentThemeData.metadata.theme_type)}
+            <span className="text-content-secondary">{currentThemeData.metadata.display_name}</span>
+          </>
+        ) : (
+          <>
+            <Palette className="w-4 h-4" />
+            <span className="text-content-secondary">Select Theme</span>
+          </>
+        )}
+        <ChevronDown className={`w-4 h-4 text-content-tertiary transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {renderDropdown()}
     </div>
   );
 }
