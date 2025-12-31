@@ -6,7 +6,20 @@
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap');
 
 :root {
-  /* Dark, atmospheric color palette */
+  /* Default theme colors (will be overridden by active theme) */
+  --theme-background: #0a0a0f;
+  --theme-foreground: #f0f0f5;
+  --theme-primary: #00f0ff;
+  --theme-secondary: #9090a0;
+  --theme-success: #10b981;
+  --theme-warning: #f59e0b;
+  --theme-error: #ef4444;
+  --theme-info: #3b82f6;
+  --theme-border: #2a2a38;
+  --theme-muted: #606070;
+  --theme-accent: #00f0ff;
+  
+  /* Dark, atmospheric color palette (fallback) */
   --bg-primary: #0a0a0f;
   --bg-secondary: #12121a;
   --bg-tertiary: #1a1a24;
@@ -38,6 +51,30 @@
   /* Borders and dividers */
   --border-subtle: #2a2a38;
   --border-medium: #3a3a48;
+  
+  /* Theme transition */
+  --theme-transition-duration: 0.3s;
+}
+
+/* Apply theme colors with smooth transitions */
+body {
+  background-color: var(--theme-background);
+  color: var(--theme-foreground);
+  transition: background-color var(--theme-transition-duration) ease, 
+              color var(--theme-transition-duration) ease;
+}
+
+/* Theme-specific utility classes */
+.theme-light {
+  --theme-transition-duration: 0.3s;
+}
+
+.theme-dark {
+  --theme-transition-duration: 0.3s;
+}
+
+.theme-high_contrast {
+  --theme-transition-duration: 0.2s;
 }
 
 * {

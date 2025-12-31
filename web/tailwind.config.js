@@ -3,6 +3,7 @@ module.exports = {
   content: [
     './src/**/*.{js,ts,jsx,tsx,mdx}',
   ],
+  darkMode: ['class', '[data-theme="dark"]'],
   theme: {
     extend: {
       colors: {
@@ -39,6 +40,20 @@ module.exports = {
         edge: {
           subtle: '#2a2a38',
           medium: '#3a3a48',
+        },
+        // Theme colors (will be overridden by CSS custom properties)
+        theme: {
+          background: 'var(--theme-background)',
+          foreground: 'var(--theme-foreground)',
+          primary: 'var(--theme-primary)',
+          secondary: 'var(--theme-secondary)',
+          success: 'var(--theme-success)',
+          warning: 'var(--theme-warning)',
+          error: 'var(--theme-error)',
+          info: 'var(--theme-info)',
+          border: 'var(--theme-border)',
+          muted: 'var(--theme-muted)',
+          accent: 'var(--theme-accent)',
         },
       },
       fontFamily: {

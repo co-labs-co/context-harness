@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { SessionList } from '@/components/SessionList';
 import { ChatInterface } from '@/components/ChatInterface';
+import ThemePicker from '@/components/ThemePicker';
 import { MessageSquare, Sparkles, Terminal, AlertCircle, X, RefreshCw, WifiOff, Menu, ChevronLeft } from 'lucide-react';
 
 interface GitHubLink {
@@ -44,6 +45,7 @@ export default function Home() {
   const [showNewSessionModal, setShowNewSessionModal] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [currentTheme, setCurrentTheme] = useState('solarized_light');
   const sessionListRef = useRef<{ focusNewSession: () => void } | null>(null);
 
   // Detect mobile viewport
@@ -58,6 +60,14 @@ export default function Home() {
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Load saved theme on mount
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('selectedTheme') || 'solarized_light';
+    if (savedTheme !== currentTheme) {
+      setCurrentTheme(savedTheme);
+    }
   }, []);
 
   // Add toast notification
@@ -271,6 +281,14 @@ export default function Home() {
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
+            {/* Theme Picker - Desktop */}
+            <div className="hidden md:block">
+              <ThemePicker
+                currentTheme={currentTheme}
+                onThemeChange={setCurrentTheme}
+                compact={false}
+              />
+            </div>
           </div>
         </div>
 
@@ -326,6 +344,12 @@ export default function Home() {
               ) : (
                 <p className="text-content-secondary">Select a session</p>
               )}
+              {/* Theme Picker */}
+              <ThemePicker
+                currentTheme={currentTheme}
+                onThemeChange={setCurrentTheme}
+                compact={true}
+              />
             </div>
           </div>
         )}

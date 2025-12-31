@@ -22,7 +22,8 @@ from context_harness.installer import (
     InstallResult,
     verify_installation,
 )
-from context_harness.interfaces.web.routes import chat, health, sessions
+from context_harness.interfaces.web.routes import chat, health, sessions, themes
+from context_harness.services.theme_service import ThemeService
 
 logger = logging.getLogger(__name__)
 
@@ -159,10 +160,15 @@ def create_app(
         allow_headers=["*"],
     )
 
+    # Initialize theme service
+    theme_service = ThemeService()
+    app.state.theme_service = theme_service
+
     # Include API routers FIRST (before static files catch-all)
     app.include_router(health.router, tags=["health"])
     app.include_router(sessions.router, prefix="/api/sessions", tags=["sessions"])
     app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
+    app.include_router(themes.create_theme_router(theme_service), tags=["themes"])
 
     # Serve static frontend files
     static_dir = get_static_dir()
