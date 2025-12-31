@@ -1,8 +1,31 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, Bot, User, AlertTriangle, GitBranch, GitPullRequest, CircleDot, ExternalLink } from 'lucide-react';
+import { 
+  Send, 
+  Loader2, 
+  Bot, 
+  User, 
+  AlertTriangle, 
+  GitBranch, 
+  GitPullRequest, 
+  CircleDot, 
+  ExternalLink,
+  Wrench,
+  Brain,
+  ListChecks,
+  ChevronDown,
+  ChevronRight,
+  CheckCircle2,
+  Clock,
+  XCircle,
+  Play
+} from 'lucide-react';
 import { VoiceInput } from './VoiceInput';
+
+// =============================================================================
+// Types
+// =============================================================================
 
 interface GitHubLink {
   url: string | null;
@@ -22,12 +45,28 @@ interface Session {
   github?: GitHubIntegration | null;
 }
 
+interface ToolCall {
+  id: string;
+  title: string;
+  kind: string | null;
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+}
+
+interface PlanEntry {
+  content: string;
+  priority: 'high' | 'medium' | 'low';
+  status: 'pending' | 'in_progress' | 'completed';
+}
+
 interface Message {
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: string;
   status?: string;
+  toolCalls?: ToolCall[];
+  thoughts?: string[];
+  plan?: PlanEntry[];
 }
 
 interface ChatInterfaceProps {
@@ -35,6 +74,212 @@ interface ChatInterfaceProps {
   onError?: (message: string) => void;
   isMobile?: boolean;
 }
+
+// SSE Event types from the backend
+type SSEEventType = 
+  | 'user_message' 
+  | 'start' 
+  | 'chunk' 
+  | 'thought' 
+  | 'tool_call' 
+  | 'tool_call_update' 
+  | 'plan' 
+  | 'mode_change' 
+  | 'error' 
+  | 'complete';
+
+interface SSEEvent {
+  type: SSEEventType;
+  data: Record<string, unknown>;
+}
+
+// =============================================================================
+// Sub-components
+// =============================================================================
+
+function ToolCallDisplay({ toolCall }: { toolCall: ToolCall }) {
+  const [expanded, setExpanded] = useState(false);
+  
+  const statusIcon = {
+    pending: <Clock className="w-3 h-3 text-content-tertiary" />,
+    in_progress: <Loader2 className="w-3 h-3 text-neon-cyan animate-spin" />,
+    completed: <CheckCircle2 className="w-3 h-3 text-emerald-400" />,
+    failed: <XCircle className="w-3 h-3 text-rose-400" />,
+  }[toolCall.status];
+
+  const statusColor = {
+    pending: 'border-content-tertiary/30',
+    in_progress: 'border-neon-cyan/50 bg-neon-cyan/5',
+    completed: 'border-emerald-400/30 bg-emerald-400/5',
+    failed: 'border-rose-400/30 bg-rose-400/5',
+  }[toolCall.status];
+
+  const kindIcon = {
+    read: '📖',
+    edit: '✏️',
+    delete: '🗑️',
+    execute: '▶️',
+    search: '🔍',
+    fetch: '🌐',
+    think: '🧠',
+    other: '🔧',
+  }[toolCall.kind || 'other'] || '🔧';
+
+  return (
+    <div 
+      className={`mt-2 rounded-lg border ${statusColor} overflow-hidden transition-all`}
+    >
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-white/5 transition-colors"
+      >
+        {expanded ? (
+          <ChevronDown className="w-3 h-3 text-content-tertiary flex-shrink-0" />
+        ) : (
+          <ChevronRight className="w-3 h-3 text-content-tertiary flex-shrink-0" />
+        )}
+        <span className="flex-shrink-0">{kindIcon}</span>
+        <span className="flex-1 font-medium text-content-secondary truncate">
+          {toolCall.title}
+        </span>
+        {statusIcon}
+      </button>
+      {expanded && (
+        <div className="px-3 pb-2 text-xs text-content-tertiary border-t border-edge-subtle/50">
+          <div className="pt-2 space-y-1">
+            <div><span className="text-content-tertiary">ID:</span> <span className="font-mono">{toolCall.id}</span></div>
+            {toolCall.kind && <div><span className="text-content-tertiary">Kind:</span> {toolCall.kind}</div>}
+            <div><span className="text-content-tertiary">Status:</span> {toolCall.status}</div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ThoughtDisplay({ thoughts }: { thoughts: string[] }) {
+  const [expanded, setExpanded] = useState(false);
+  
+  if (thoughts.length === 0) return null;
+  
+  return (
+    <div className="mt-2 rounded-lg border border-violet/30 bg-violet/5 overflow-hidden">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-violet/10 transition-colors"
+      >
+        {expanded ? (
+          <ChevronDown className="w-3 h-3 text-violet flex-shrink-0" />
+        ) : (
+          <ChevronRight className="w-3 h-3 text-violet flex-shrink-0" />
+        )}
+        <Brain className="w-3 h-3 text-violet flex-shrink-0" />
+        <span className="flex-1 font-medium text-violet">
+          Agent Thoughts ({thoughts.length})
+        </span>
+      </button>
+      {expanded && (
+        <div className="px-3 pb-2 text-xs text-content-secondary border-t border-violet/20">
+          <div className="pt-2 space-y-2">
+            {thoughts.map((thought, i) => (
+              <p key={i} className="italic text-violet/80">{thought}</p>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PlanDisplay({ plan }: { plan: PlanEntry[] }) {
+  const [expanded, setExpanded] = useState(true);
+  
+  if (plan.length === 0) return null;
+
+  const priorityColor = {
+    high: 'text-rose-400',
+    medium: 'text-amber',
+    low: 'text-content-tertiary',
+  };
+
+  const statusIcon = {
+    pending: <Clock className="w-3 h-3 text-content-tertiary" />,
+    in_progress: <Play className="w-3 h-3 text-neon-cyan" />,
+    completed: <CheckCircle2 className="w-3 h-3 text-emerald-400" />,
+  };
+  
+  return (
+    <div className="mt-2 rounded-lg border border-amber/30 bg-amber/5 overflow-hidden">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-amber/10 transition-colors"
+      >
+        {expanded ? (
+          <ChevronDown className="w-3 h-3 text-amber flex-shrink-0" />
+        ) : (
+          <ChevronRight className="w-3 h-3 text-amber flex-shrink-0" />
+        )}
+        <ListChecks className="w-3 h-3 text-amber flex-shrink-0" />
+        <span className="flex-1 font-medium text-amber">
+          Plan ({plan.filter(e => e.status === 'completed').length}/{plan.length})
+        </span>
+      </button>
+      {expanded && (
+        <div className="px-3 pb-2 text-xs border-t border-amber/20">
+          <ul className="pt-2 space-y-1.5">
+            {plan.map((entry, i) => (
+              <li key={i} className="flex items-start gap-2">
+                {statusIcon[entry.status]}
+                <span className={`flex-1 ${entry.status === 'completed' ? 'line-through text-content-tertiary' : 'text-content-secondary'}`}>
+                  {entry.content}
+                </span>
+                <span className={`text-[10px] ${priorityColor[entry.priority]}`}>
+                  {entry.priority}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =============================================================================
+// SSE Parser
+// =============================================================================
+
+function parseSSEEvents(chunk: string): SSEEvent[] {
+  const events: SSEEvent[] = [];
+  const lines = chunk.split('\n');
+  
+  let currentEvent: string | null = null;
+  let currentData: string | null = null;
+  
+  for (const line of lines) {
+    if (line.startsWith('event: ')) {
+      currentEvent = line.slice(7).trim() as SSEEventType;
+    } else if (line.startsWith('data: ')) {
+      currentData = line.slice(6);
+    } else if (line === '' && currentEvent && currentData) {
+      // Empty line = end of event
+      try {
+        const data = JSON.parse(currentData);
+        events.push({ type: currentEvent as SSEEventType, data });
+      } catch {
+        console.warn('Failed to parse SSE data:', currentData);
+      }
+      currentEvent = null;
+      currentData = null;
+    }
+  }
+  
+  return events;
+}
+
+// =============================================================================
+// Main Component
+// =============================================================================
 
 export function ChatInterface({ session, onError, isMobile = false }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -102,25 +347,63 @@ export function ChatInterface({ session, onError, isMobile = false }: ChatInterf
         content: '',
         timestamp: new Date().toISOString(),
         status: 'streaming',
+        toolCalls: [],
+        thoughts: [],
+        plan: [],
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
+
+      let buffer = '';
 
       while (reader) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
+        buffer += decoder.decode(value, { stream: true });
+        
+        // Process complete events (ending with double newline)
+        const events = parseSSEEvents(buffer);
+        
+        // Keep incomplete data in buffer
+        const lastDoubleNewline = buffer.lastIndexOf('\n\n');
+        if (lastDoubleNewline !== -1) {
+          buffer = buffer.slice(lastDoubleNewline + 2);
+        }
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              if (data.content) {
+        for (const event of events) {
+          switch (event.type) {
+            case 'user_message':
+              // Update user message ID if provided
+              if (event.data.id) {
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === userMessage.id ? { ...m, id: event.data.id as string } : m
+                  )
+                );
+              }
+              break;
+
+            case 'start':
+              // Update assistant message ID
+              if (event.data.id) {
+                assistantMessage = { ...assistantMessage, id: event.data.id as string };
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.status === 'streaming' && m.role === 'assistant'
+                      ? { ...m, id: event.data.id as string }
+                      : m
+                  )
+                );
+              }
+              break;
+
+            case 'chunk':
+              // Append content chunk
+              if (event.data.content) {
                 assistantMessage = {
                   ...assistantMessage,
-                  content: assistantMessage.content + data.content,
+                  content: assistantMessage.content + (event.data.content as string),
                 };
                 setMessages((prev) =>
                   prev.map((m) =>
@@ -128,14 +411,123 @@ export function ChatInterface({ session, onError, isMobile = false }: ChatInterf
                   )
                 );
               }
-            } catch {
-              // Skip non-JSON lines
-            }
+              break;
+
+            case 'thought':
+              // Add agent thought
+              if (event.data.content) {
+                assistantMessage = {
+                  ...assistantMessage,
+                  thoughts: [...(assistantMessage.thoughts || []), event.data.content as string],
+                };
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantMessage.id ? assistantMessage : m
+                  )
+                );
+              }
+              break;
+
+            case 'tool_call':
+              // Add new tool call
+              const toolCall: ToolCall = {
+                id: event.data.id as string,
+                title: event.data.title as string,
+                kind: event.data.kind as string | null,
+                status: (event.data.status as ToolCall['status']) || 'pending',
+              };
+              assistantMessage = {
+                ...assistantMessage,
+                toolCalls: [...(assistantMessage.toolCalls || []), toolCall],
+              };
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantMessage.id ? assistantMessage : m
+                )
+              );
+              break;
+
+            case 'tool_call_update':
+              // Update existing tool call
+              if (event.data.id) {
+                assistantMessage = {
+                  ...assistantMessage,
+                  toolCalls: (assistantMessage.toolCalls || []).map((tc) =>
+                    tc.id === event.data.id
+                      ? {
+                          ...tc,
+                          status: (event.data.status as ToolCall['status']) || tc.status,
+                          title: (event.data.title as string) || tc.title,
+                        }
+                      : tc
+                  ),
+                };
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantMessage.id ? assistantMessage : m
+                  )
+                );
+              }
+              break;
+
+            case 'plan':
+              // Update plan entries
+              if (event.data.entries) {
+                const entries = event.data.entries as Array<{
+                  content: string;
+                  priority: 'high' | 'medium' | 'low';
+                  status: 'pending' | 'in_progress' | 'completed';
+                }>;
+                assistantMessage = {
+                  ...assistantMessage,
+                  plan: entries,
+                };
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantMessage.id ? assistantMessage : m
+                  )
+                );
+              }
+              break;
+
+            case 'error':
+              // Handle error
+              const errorMsg = event.data.error as string || 'Unknown error';
+              onError?.(errorMsg);
+              assistantMessage = {
+                ...assistantMessage,
+                content: assistantMessage.content + `\n\n⚠️ Error: ${errorMsg}`,
+              };
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantMessage.id ? assistantMessage : m
+                )
+              );
+              break;
+
+            case 'complete':
+              // Mark as complete
+              assistantMessage = {
+                ...assistantMessage,
+                status: 'complete',
+                content: (event.data.content as string) || assistantMessage.content,
+              };
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantMessage.id ? assistantMessage : m
+                )
+              );
+              break;
+
+            case 'mode_change':
+              // Could show mode change notification
+              console.log('Mode changed to:', event.data.modeId);
+              break;
           }
         }
       }
 
-      // Mark as complete
+      // Ensure message is marked complete
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantMessage.id ? { ...m, status: 'complete' } : m
@@ -144,9 +536,7 @@ export function ChatInterface({ session, onError, isMobile = false }: ChatInterf
     } catch (error) {
       console.error('Failed to send message:', error);
       const errorMsg = 'Failed to get response. Please try again.';
-      // Notify parent via callback
       onError?.(errorMsg);
-      // Add error message to chat
       setMessages((prev) => [
         ...prev,
         {
@@ -306,6 +696,29 @@ export function ChatInterface({ session, onError, isMobile = false }: ChatInterf
                     <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
                     {message.status === 'streaming' && (
                       <span className="inline-block w-2 h-4 md:h-5 bg-neon-cyan ml-1 typing-cursor" />
+                    )}
+                    
+                    {/* Tool Calls */}
+                    {message.toolCalls && message.toolCalls.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-edge-subtle/50">
+                        <div className="flex items-center gap-1.5 text-xs text-content-tertiary mb-2">
+                          <Wrench className="w-3 h-3" />
+                          <span>Tool Calls ({message.toolCalls.length})</span>
+                        </div>
+                        {message.toolCalls.map((tc) => (
+                          <ToolCallDisplay key={tc.id} toolCall={tc} />
+                        ))}
+                      </div>
+                    )}
+                    
+                    {/* Thoughts */}
+                    {message.thoughts && message.thoughts.length > 0 && (
+                      <ThoughtDisplay thoughts={message.thoughts} />
+                    )}
+                    
+                    {/* Plan */}
+                    {message.plan && message.plan.length > 0 && (
+                      <PlanDisplay plan={message.plan} />
                     )}
                   </div>
                   <div className={`mt-1 md:mt-1.5 text-[10px] md:text-xs text-content-tertiary ${message.role === 'user' ? 'text-right' : ''}`}>
