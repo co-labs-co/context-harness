@@ -22,12 +22,19 @@ module.exports = {
       1, // Warning, not error
       'always',
       [
-        'cli',        // CLI installer
+        'cli',        // CLI commands and interface
+        'primitives', // Core domain models
+        'services',   // Business logic services
+        'storage',    // Storage abstractions
         'agents',     // Agent definitions
         'templates',  // Template files
         'docs',       // Documentation
         'ci',         // CI/CD
         'release',    // Release process
+        'baseline',   // Baseline command
+        'skill',      // Skill management
+        'mcp',        // MCP server integration
+        'oauth',      // OAuth authentication
       ],
     ],
     'subject-case': [2, 'always', 'lower-case'],
