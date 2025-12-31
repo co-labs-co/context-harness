@@ -482,6 +482,8 @@ class ACPClient:
         logger.info(f"Starting OpenCode ACP at {self.working_dir}")
 
         try:
+            # Use a large limit for stdout to handle large JSON-RPC messages
+            # Tool outputs (especially file reads) can be several MB
             self._process = await asyncio.create_subprocess_exec(
                 self.opencode_path,
                 "acp",
@@ -489,6 +491,7 @@ class ACPClient:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=str(self.working_dir),
+                limit=10 * 1024 * 1024,  # 10MB buffer limit
             )
         except FileNotFoundError:
             raise ACPConnectionError(
