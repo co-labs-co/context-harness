@@ -151,26 +151,28 @@ def mark_acp_session_initialized(session_id: str) -> None:
         _acp_sessions[session_id] = (acp_session_id, False)
 
 
-def build_prompt_with_context(
-    session_id: str, content: str, needs_context: bool
-) -> str:
-    """Build the prompt, prepending /ctx if needed.
+async def initialize_session_context(
+    client: "ACPClient", acp_session_id: str, session_id: str
+) -> None:
+    """Send /ctx command to initialize session context.
 
-    For new ACP sessions, we need to tell OpenCode which ContextHarness
-    session to use by prepending /ctx {session_id}.
+    This sends the /ctx command as a separate prompt to ensure it's parsed
+    correctly and doesn't get confused with the user's actual message.
 
     Args:
-        session_id: ContextHarness session ID
-        content: User's message content
-        needs_context: Whether to prepend /ctx directive
-
-    Returns:
-        The prompt to send to OpenCode
+        client: The ACP client
+        acp_session_id: The ACP session ID
+        session_id: The ContextHarness session ID to switch to
     """
-    if needs_context:
-        # Prepend the context switch command
-        return f"/ctx {session_id}\n\n{content}"
-    return content
+    ctx_command = f"/ctx {session_id}"
+    logger.info(f"Initializing session context with: {ctx_command}")
+
+    # Consume all updates from the /ctx command (we don't need to display them)
+    async for update in client.prompt(acp_session_id, ctx_command):
+        # Just drain the updates - the /ctx command's response is internal
+        pass
+
+    logger.info(f"Session context initialized for: {session_id}")
 
 
 # =============================================================================
@@ -262,11 +264,12 @@ async def send_message(
             client, session_id
         )
 
-        # Build prompt with context if needed
-        prompt = build_prompt_with_context(session_id, request.content, needs_context)
+        # Initialize session context if needed (separate /ctx command)
+        if needs_context:
+            await initialize_session_context(client, acp_session_id, session_id)
 
         # Collect the full response from streaming
-        async for update in client.prompt(acp_session_id, prompt):
+        async for update in client.prompt(acp_session_id, request.content):
             if update.update_type == SessionUpdateType.AGENT_MESSAGE_CHUNK:
                 if update.content and update.content.text:
                     response_content += update.content.text
@@ -375,11 +378,12 @@ async def generate_sse_response(
             client, session_id
         )
 
-        # Build prompt with context if needed
-        prompt = build_prompt_with_context(session_id, content, needs_context)
+        # Initialize session context if needed (separate /ctx command)
+        if needs_context:
+            await initialize_session_context(client, acp_session_id, session_id)
 
         # Stream updates from ACP to SSE
-        async for update in client.prompt(acp_session_id, prompt):
+        async for update in client.prompt(acp_session_id, content):
             sse_event = convert_acp_update_to_sse(update, assistant_message)
             if sse_event:
                 yield sse_event

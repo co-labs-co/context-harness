@@ -5,7 +5,8 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$PROJECT_DIR"
 
 echo "🔨 Building ContextHarness Web UI..."
 
@@ -26,7 +27,7 @@ npm run build
 
 # Copy to package directory
 echo "📋 Copying static files to package..."
-cd "$SCRIPT_DIR"
+cd "$PROJECT_DIR"
 rm -rf src/context_harness/interfaces/web/static
 mkdir -p src/context_harness/interfaces/web/static
 cp -r web/out/* src/context_harness/interfaces/web/static/

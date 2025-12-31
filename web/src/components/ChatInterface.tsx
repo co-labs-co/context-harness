@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { 
   Send, 
   Loader2, 
@@ -19,7 +21,9 @@ import {
   CheckCircle2,
   Clock,
   XCircle,
-  Play
+  Play,
+  Copy,
+  Check
 } from 'lucide-react';
 import { VoiceInput } from './VoiceInput';
 
@@ -96,6 +100,107 @@ interface SSEEvent {
 // =============================================================================
 // Sub-components
 // =============================================================================
+
+function CopyButton({ text, className = '' }: { text: string; className?: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleCopy}
+      className={`p-1.5 rounded-lg transition-all hover:bg-white/10 ${className}`}
+      title={copied ? 'Copied!' : 'Copy message'}
+    >
+      {copied ? (
+        <Check className="w-3.5 h-3.5 text-emerald-400" />
+      ) : (
+        <Copy className="w-3.5 h-3.5 text-content-tertiary hover:text-content-secondary" />
+      )}
+    </button>
+  );
+}
+
+function MarkdownContent({ content }: { content: string }) {
+  // Clean up excessive newlines that can appear from tool call streaming
+  const cleanedContent = content
+    .replace(/\n{4,}/g, '\n\n\n') // Reduce 4+ newlines to 3
+    .trim();
+
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        // Style headings
+        h1: ({ children }) => <h1 className="text-xl font-bold mt-4 mb-2 text-content-primary">{children}</h1>,
+        h2: ({ children }) => <h2 className="text-lg font-semibold mt-3 mb-2 text-content-primary">{children}</h2>,
+        h3: ({ children }) => <h3 className="text-base font-semibold mt-2 mb-1 text-content-primary">{children}</h3>,
+        // Style paragraphs
+        p: ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>,
+        // Style links
+        a: ({ href, children }) => (
+          <a href={href} target="_blank" rel="noopener noreferrer" 
+             className="text-neon-cyan hover:underline">
+            {children}
+          </a>
+        ),
+        // Style code blocks
+        code: ({ className, children }) => {
+          const isInline = !className;
+          if (isInline) {
+            return <code className="px-1.5 py-0.5 bg-surface-tertiary rounded text-sm font-mono text-neon-cyan">{children}</code>;
+          }
+          return (
+            <code className="block p-3 my-2 bg-surface-tertiary rounded-lg text-sm font-mono overflow-x-auto">
+              {children}
+            </code>
+          );
+        },
+        pre: ({ children }) => <pre className="my-2">{children}</pre>,
+        // Style lists
+        ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
+        ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
+        li: ({ children }) => <li className="text-content-secondary">{children}</li>,
+        // Style blockquotes
+        blockquote: ({ children }) => (
+          <blockquote className="border-l-2 border-neon-cyan/50 pl-3 my-2 text-content-secondary italic">
+            {children}
+          </blockquote>
+        ),
+        // Style tables
+        table: ({ children }) => (
+          <div className="overflow-x-auto my-2">
+            <table className="min-w-full border border-edge-subtle rounded-lg overflow-hidden">
+              {children}
+            </table>
+          </div>
+        ),
+        thead: ({ children }) => <thead className="bg-surface-tertiary">{children}</thead>,
+        tbody: ({ children }) => <tbody className="divide-y divide-edge-subtle">{children}</tbody>,
+        tr: ({ children }) => <tr className="hover:bg-white/5">{children}</tr>,
+        th: ({ children }) => <th className="px-3 py-2 text-left text-xs font-semibold text-content-secondary">{children}</th>,
+        td: ({ children }) => <td className="px-3 py-2 text-sm">{children}</td>,
+        // Style horizontal rules
+        hr: () => <hr className="my-4 border-edge-subtle" />,
+        // Style strong/bold
+        strong: ({ children }) => <strong className="font-semibold text-content-primary">{children}</strong>,
+        // Style emphasis/italic
+        em: ({ children }) => <em className="italic">{children}</em>,
+      }}
+    >
+      {cleanedContent}
+    </ReactMarkdown>
+  );
+}
 
 function ToolCallDisplay({ toolCall }: { toolCall: ToolCall }) {
   const [expanded, setExpanded] = useState(false);
@@ -693,7 +798,9 @@ export function ChatInterface({ session, onError, isMobile = false }: ChatInterf
                         : 'bg-surface-elevated border border-edge-subtle text-content-primary'
                       }`}
                   >
-                    <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                    <div className="prose-sm max-w-none">
+                      <MarkdownContent content={message.content} />
+                    </div>
                     {message.status === 'streaming' && (
                       <span className="inline-block w-2 h-4 md:h-5 bg-neon-cyan ml-1 typing-cursor" />
                     )}
@@ -721,8 +828,9 @@ export function ChatInterface({ session, onError, isMobile = false }: ChatInterf
                       <PlanDisplay plan={message.plan} />
                     )}
                   </div>
-                  <div className={`mt-1 md:mt-1.5 text-[10px] md:text-xs text-content-tertiary ${message.role === 'user' ? 'text-right' : ''}`}>
-                    {formatTime(message.timestamp)}
+                  <div className={`mt-1 md:mt-1.5 flex items-center gap-2 text-[10px] md:text-xs text-content-tertiary ${message.role === 'user' ? 'justify-end' : ''}`}>
+                    <span>{formatTime(message.timestamp)}</span>
+                    <CopyButton text={message.content} />
                   </div>
                 </div>
               </div>
