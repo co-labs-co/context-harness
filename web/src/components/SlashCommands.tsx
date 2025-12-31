@@ -239,14 +239,16 @@ export function SlashCommandSuggestions({
   onSelect,
   onHover,
 }: SlashCommandSuggestionsProps) {
-  const listRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   
   // Scroll selected item into view
   useEffect(() => {
-    if (listRef.current) {
-      const selected = listRef.current.children[selectedIndex] as HTMLElement;
-      if (selected) {
-        selected.scrollIntoView({ block: 'nearest' });
+    if (containerRef.current) {
+      const selectedElement = containerRef.current.querySelector(
+        `[data-index="${selectedIndex}"]`
+      ) as HTMLElement;
+      if (selectedElement) {
+        selectedElement.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       }
     }
   }, [selectedIndex]);
@@ -260,14 +262,11 @@ export function SlashCommandSuggestions({
     return acc;
   }, {} as Record<string, SlashCommand[]>);
   
-  // Flatten with category headers for rendering
-  let flatIndex = 0;
-  
   return (
     <div 
+      ref={containerRef}
       className="absolute bottom-full left-0 right-0 mb-2 max-h-[300px] overflow-y-auto
                  bg-surface-elevated border border-edge-subtle rounded-xl shadow-2xl z-50"
-      ref={listRef}
     >
       <div className="p-2">
         <div className="flex items-center gap-2 px-2 py-1 text-xs text-content-tertiary mb-1">
@@ -294,6 +293,7 @@ export function SlashCommandSuggestions({
                 return (
                   <button
                     key={cmd.command}
+                    data-index={index}
                     onClick={() => onSelect(cmd)}
                     onMouseEnter={() => onHover(index)}
                     className={`
