@@ -153,12 +153,13 @@ def add_mcp_server(
         if api_key and server_name == "context7":
             new_config["headers"] = {"CONTEXT7_API_KEY": api_key}
 
-        # For Atlassian, try to get stored OAuth token
-        if server_name == "atlassian":
+        # For OAuth-authenticated servers, try to get stored OAuth token
+        server_info = get_mcp_server_info(server_name)
+        if server_info and server_info.auth_type == "oauth":
             try:
                 from context_harness.oauth import get_mcp_bearer_token
 
-                token = get_mcp_bearer_token("atlassian")
+                token = get_mcp_bearer_token(server_name)
                 if token:
                     new_config["headers"] = {"Authorization": f"Bearer {token}"}
                     if not quiet:
@@ -166,8 +167,8 @@ def add_mcp_server(
                 else:
                     if not quiet:
                         console.print(
-                            "[yellow]Note: No OAuth credentials found. "
-                            "Run 'context-harness mcp auth atlassian' to authenticate.[/yellow]"
+                            f"[yellow]Note: No OAuth credentials found. "
+                            f"Run 'context-harness mcp auth {server_name}' to authenticate.[/yellow]"
                         )
             except ImportError:
                 # OAuth module not available - proceed without token

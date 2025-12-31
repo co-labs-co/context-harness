@@ -26,6 +26,14 @@ from context_harness.oauth import (
     OAuthTimeoutError,
     OAuthCancelledError,
     MCPOAuthMetadata,
+    # Generic OAuth classes
+    OAuthConfig,
+    MCPOAuthFlow,
+    OAUTH_PROVIDERS,
+    register_oauth_provider,
+    get_oauth_config,
+    get_oauth_flow,
+    # Functions
     generate_pkce,
     generate_state,
     get_atlassian_oauth_flow,
@@ -671,3 +679,338 @@ def cli_runner():
     from click.testing import CliRunner
 
     return CliRunner()
+
+
+# =============================================================================
+# Tests for Generic OAuth Configuration and Flow
+# =============================================================================
+
+
+class TestOAuthConfig:
+    """Tests for OAuthConfig dataclass."""
+
+    def test_config_creation(self):
+        """Test basic config creation."""
+        config = OAuthConfig(
+            service_name="test-service",
+            client_id="test_client",
+            auth_url="https://auth.example.com/authorize",
+            token_url="https://auth.example.com/token",
+        )
+        assert config.service_name == "test-service"
+        assert config.client_id == "test_client"
+        assert config.auth_url == "https://auth.example.com/authorize"
+        assert config.token_url == "https://auth.example.com/token"
+
+    def test_config_with_all_fields(self):
+        """Test config with all optional fields."""
+        config = OAuthConfig(
+            service_name="test-service",
+            client_id="test_client",
+            auth_url="https://auth.example.com/authorize",
+            token_url="https://auth.example.com/token",
+            client_secret="test_secret",
+            scopes=["read", "write"],
+            audience="api.example.com",
+            resources_url="https://api.example.com/resources",
+            extra_auth_params={"prompt": "consent"},
+            display_name="Test Service",
+            setup_url="https://developer.example.com/apps",
+        )
+        assert config.client_secret == "test_secret"
+        assert config.scopes == ["read", "write"]
+        assert config.audience == "api.example.com"
+        assert config.resources_url == "https://api.example.com/resources"
+        assert config.extra_auth_params == {"prompt": "consent"}
+        assert config.display_name == "Test Service"
+        assert config.setup_url == "https://developer.example.com/apps"
+
+
+class TestOAuthProviderRegistry:
+    """Tests for OAuth provider registry."""
+
+    def test_atlassian_is_registered(self):
+        """Test that Atlassian is pre-registered."""
+        assert "atlassian" in OAUTH_PROVIDERS
+        atlassian = OAUTH_PROVIDERS["atlassian"]
+        assert atlassian.service_name == "atlassian"
+        assert atlassian.auth_url == "https://auth.atlassian.com/authorize"
+        assert atlassian.token_url == "https://auth.atlassian.com/oauth/token"
+        assert "read:jira-work" in atlassian.scopes
+
+    def test_register_custom_provider(self):
+        """Test registering a custom provider."""
+        custom_config = OAuthConfig(
+            service_name="custom-test",
+            client_id="",
+            auth_url="https://auth.custom.com/authorize",
+            token_url="https://auth.custom.com/token",
+            scopes=["read"],
+        )
+        register_oauth_provider(custom_config)
+
+        assert "custom-test" in OAUTH_PROVIDERS
+        assert (
+            OAUTH_PROVIDERS["custom-test"].auth_url
+            == "https://auth.custom.com/authorize"
+        )
+
+        # Cleanup
+        del OAUTH_PROVIDERS["custom-test"]
+
+    def test_get_oauth_config(self):
+        """Test getting config with credentials."""
+        config = get_oauth_config("atlassian", "my_client_id", "my_secret")
+
+        assert config.service_name == "atlassian"
+        assert config.client_id == "my_client_id"
+        assert config.client_secret == "my_secret"
+        assert config.auth_url == "https://auth.atlassian.com/authorize"
+
+    def test_get_oauth_config_unknown_provider_raises(self):
+        """Test that unknown provider raises error."""
+        with pytest.raises(OAuthError) as exc_info:
+            get_oauth_config("unknown-provider", "client_id")
+        assert "Unknown OAuth provider" in str(exc_info.value)
+
+
+class TestMCPOAuthFlow:
+    """Tests for MCPOAuthFlow generic class."""
+
+    def test_flow_creation(self):
+        """Test creating a generic OAuth flow."""
+        config = OAuthConfig(
+            service_name="test-service",
+            client_id="test_client",
+            auth_url="https://auth.example.com/authorize",
+            token_url="https://auth.example.com/token",
+            scopes=["read"],
+        )
+        flow = MCPOAuthFlow(config)
+
+        assert flow.service_name == "test-service"
+        assert flow.config.client_id == "test_client"
+
+    def test_flow_builds_authorization_url(self):
+        """Test that flow builds correct authorization URL."""
+        config = OAuthConfig(
+            service_name="test-service",
+            client_id="test_client_id",
+            auth_url="https://auth.example.com/authorize",
+            token_url="https://auth.example.com/token",
+            scopes=["read", "write"],
+        )
+        flow = MCPOAuthFlow(config)
+
+        url = flow.build_authorization_url("http://localhost:8000/callback")
+
+        assert "https://auth.example.com/authorize" in url
+        assert "client_id=test_client_id" in url
+        assert "redirect_uri=http%3A%2F%2Flocalhost%3A8000%2Fcallback" in url
+        assert "response_type=code" in url
+        assert "code_challenge=" in url
+        assert "code_challenge_method=S256" in url
+        assert "state=" in url
+        # Scopes should be URL-encoded space-separated
+        assert "scope=read+write" in url or "scope=read%20write" in url
+
+    def test_flow_builds_authorization_url_with_audience(self):
+        """Test that flow includes audience when configured."""
+        config = OAuthConfig(
+            service_name="test-service",
+            client_id="test_client",
+            auth_url="https://auth.example.com/authorize",
+            token_url="https://auth.example.com/token",
+            audience="api.example.com",
+        )
+        flow = MCPOAuthFlow(config)
+
+        url = flow.build_authorization_url("http://localhost:8000/callback")
+        assert "audience=api.example.com" in url
+
+    def test_flow_builds_authorization_url_with_extra_params(self):
+        """Test that flow includes extra auth params."""
+        config = OAuthConfig(
+            service_name="test-service",
+            client_id="test_client",
+            auth_url="https://auth.example.com/authorize",
+            token_url="https://auth.example.com/token",
+            extra_auth_params={"prompt": "consent", "custom": "value"},
+        )
+        flow = MCPOAuthFlow(config)
+
+        url = flow.build_authorization_url("http://localhost:8000/callback")
+        assert "prompt=consent" in url
+        assert "custom=value" in url
+
+    def test_flow_get_auth_status(self):
+        """Test flow auth status check."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch.object(Path, "home", return_value=Path(tmpdir)):
+                config = OAuthConfig(
+                    service_name="test-service",
+                    client_id="test_client",
+                    auth_url="https://auth.example.com/authorize",
+                    token_url="https://auth.example.com/token",
+                )
+                storage = TokenStorage(use_keyring=False)
+                flow = MCPOAuthFlow(config, token_storage=storage)
+
+                assert flow.get_auth_status() == AuthStatus.NOT_AUTHENTICATED
+
+    def test_flow_get_tokens_returns_none_when_not_authenticated(self):
+        """Test that get_tokens returns None when not authenticated."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch.object(Path, "home", return_value=Path(tmpdir)):
+                config = OAuthConfig(
+                    service_name="test-service",
+                    client_id="test_client",
+                    auth_url="https://auth.example.com/authorize",
+                    token_url="https://auth.example.com/token",
+                )
+                storage = TokenStorage(use_keyring=False)
+                flow = MCPOAuthFlow(config, token_storage=storage)
+
+                assert flow.get_tokens() is None
+
+    def test_flow_logout(self):
+        """Test flow logout."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch.object(Path, "home", return_value=Path(tmpdir)):
+                config = OAuthConfig(
+                    service_name="test-service",
+                    client_id="test_client",
+                    auth_url="https://auth.example.com/authorize",
+                    token_url="https://auth.example.com/token",
+                )
+                storage = TokenStorage(use_keyring=False)
+                flow = MCPOAuthFlow(config, token_storage=storage)
+
+                # Save some tokens first
+                storage.save_tokens("test-service", OAuthTokens(access_token="test"))
+
+                assert flow.logout()  # Should succeed
+                assert not flow.logout()  # Should fail - already logged out
+
+
+class TestGetOAuthFlow:
+    """Tests for get_oauth_flow convenience function."""
+
+    def test_get_flow_with_client_id(self):
+        """Test getting flow with explicit client ID."""
+        flow = get_oauth_flow("atlassian", client_id="my_client_id")
+        assert flow.config.client_id == "my_client_id"
+        assert flow.service_name == "atlassian"
+
+    def test_get_flow_from_env(self):
+        """Test getting flow from environment variable."""
+        with mock.patch.dict(os.environ, {"ATLASSIAN_CLIENT_ID": "env_client_id"}):
+            flow = get_oauth_flow("atlassian")
+            assert flow.config.client_id == "env_client_id"
+
+    def test_get_flow_raises_without_client_id(self):
+        """Test that error is raised without client ID."""
+        with mock.patch.dict(os.environ, {}, clear=True):
+            # Ensure ATLASSIAN_CLIENT_ID is not set
+            os.environ.pop("ATLASSIAN_CLIENT_ID", None)
+
+            with pytest.raises(OAuthError) as exc_info:
+                get_oauth_flow("atlassian")
+
+            assert "client" in str(exc_info.value).lower().replace(" ", "_")
+
+    def test_get_flow_raises_for_unknown_provider(self):
+        """Test that error is raised for unknown provider."""
+        with pytest.raises(OAuthError) as exc_info:
+            get_oauth_flow("unknown-provider", client_id="test")
+
+        assert "Unknown OAuth provider" in str(exc_info.value)
+
+    def test_get_flow_with_client_secret(self):
+        """Test getting flow with client secret."""
+        flow = get_oauth_flow(
+            "atlassian",
+            client_id="test_id",
+            client_secret="test_secret",
+        )
+        assert flow.config.client_id == "test_id"
+        assert flow.config.client_secret == "test_secret"
+
+
+class TestAtlassianOAuthConfigToGeneric:
+    """Tests for AtlassianOAuthConfig.to_generic() method."""
+
+    def test_to_generic_conversion(self):
+        """Test converting AtlassianOAuthConfig to generic OAuthConfig."""
+        atlassian_config = AtlassianOAuthConfig(
+            client_id="test_client",
+            client_secret="test_secret",
+        )
+        generic = atlassian_config.to_generic()
+
+        assert generic.service_name == "atlassian"
+        assert generic.client_id == "test_client"
+        assert generic.client_secret == "test_secret"
+        assert generic.auth_url == "https://auth.atlassian.com/authorize"
+        assert generic.token_url == "https://auth.atlassian.com/oauth/token"
+        assert "read:jira-work" in generic.scopes
+
+
+class TestTokenStorageMultipleServices:
+    """Tests for TokenStorage with multiple services."""
+
+    def test_storage_isolates_services(self):
+        """Test that tokens are isolated per service."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch.object(Path, "home", return_value=Path(tmpdir)):
+                storage = TokenStorage(use_keyring=False)
+
+                # Store tokens for different services
+                storage.save_tokens(
+                    "atlassian", OAuthTokens(access_token="atlassian_token")
+                )
+                storage.save_tokens("github", OAuthTokens(access_token="github_token"))
+
+                # Verify isolation
+                atlassian = storage.load_tokens("atlassian")
+                github = storage.load_tokens("github")
+
+                assert atlassian is not None
+                assert atlassian.access_token == "atlassian_token"
+                assert github is not None
+                assert github.access_token == "github_token"
+
+    def test_deleting_one_service_doesnt_affect_others(self):
+        """Test that deleting tokens for one service doesn't affect others."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch.object(Path, "home", return_value=Path(tmpdir)):
+                storage = TokenStorage(use_keyring=False)
+
+                storage.save_tokens(
+                    "atlassian", OAuthTokens(access_token="atlassian_token")
+                )
+                storage.save_tokens("github", OAuthTokens(access_token="github_token"))
+
+                # Delete one service
+                storage.delete_tokens("atlassian")
+
+                # Verify other service is unaffected
+                assert storage.load_tokens("atlassian") is None
+                github = storage.load_tokens("github")
+                assert github is not None
+                assert github.access_token == "github_token"
+
+
+class TestGetMCPBearerTokenGeneric:
+    """Tests for get_mcp_bearer_token with multiple services."""
+
+    def test_returns_token_for_any_service(self):
+        """Test returns token for any registered service."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch.object(Path, "home", return_value=Path(tmpdir)):
+                storage = TokenStorage(use_keyring=False)
+                tokens = OAuthTokens(access_token="custom_token", expires_in=3600)
+                storage.save_tokens("custom-service", tokens)
+
+                result = get_mcp_bearer_token("custom-service")
+                assert result == "custom_token"

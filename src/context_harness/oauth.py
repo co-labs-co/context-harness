@@ -1,7 +1,11 @@
 """OAuth 2.1 authentication flow for MCP servers.
 
-Implements a secure OAuth 2.1 flow with PKCE for authenticating with MCP servers
-like Atlassian. Uses a local HTTP callback server to receive the authorization code.
+Implements a generic OAuth 2.1 flow with PKCE for authenticating with any MCP server
+that requires OAuth (e.g., Atlassian, GitHub, etc.). Uses a local HTTP callback
+server to receive the authorization code.
+
+The flow is provider-agnostic - each MCP server can define its own OAuth configuration
+in the MCP registry, and this module handles the authentication flow generically.
 """
 
 from __future__ import annotations
@@ -579,8 +583,112 @@ class TokenStorage:
 
 
 @dataclass
+class OAuthConfig:
+    """Generic OAuth configuration for any MCP server.
+
+    This dataclass can represent OAuth configuration for any provider.
+    Provider-specific configurations (like Atlassian) can be created
+    using factory methods or by passing values directly.
+    """
+
+    # Required fields
+    service_name: str  # e.g., "atlassian", "github", "slack"
+    client_id: str
+    auth_url: str  # Authorization endpoint
+    token_url: str  # Token endpoint
+
+    # Optional fields with sensible defaults
+    client_secret: Optional[str] = None  # Optional for public clients
+    scopes: List[str] = field(default_factory=list)
+    audience: Optional[str] = None  # Some providers require this
+    resources_url: Optional[str] = None  # URL to fetch accessible resources
+    extra_auth_params: Dict[str, str] = field(
+        default_factory=dict
+    )  # Provider-specific params
+
+    # Display information
+    display_name: Optional[str] = None  # Human-readable name for UI
+    setup_url: Optional[str] = None  # URL where users create OAuth apps
+
+
+# Pre-defined OAuth configurations for known providers
+OAUTH_PROVIDERS: Dict[str, "OAuthConfig"] = {}
+
+
+def register_oauth_provider(config: OAuthConfig) -> None:
+    """Register an OAuth provider configuration.
+
+    Args:
+        config: The OAuth configuration to register
+    """
+    OAUTH_PROVIDERS[config.service_name] = config
+
+
+def get_oauth_config(
+    service_name: str, client_id: str, client_secret: Optional[str] = None
+) -> OAuthConfig:
+    """Get OAuth configuration for a service, with client credentials.
+
+    Args:
+        service_name: Name of the service (e.g., "atlassian")
+        client_id: OAuth client ID
+        client_secret: OAuth client secret (optional for public clients)
+
+    Returns:
+        OAuthConfig with client credentials populated
+
+    Raises:
+        OAuthError: If service is not a registered OAuth provider
+    """
+    if service_name not in OAUTH_PROVIDERS:
+        raise OAuthError(f"Unknown OAuth provider: {service_name}")
+
+    # Create a copy with the client credentials
+    base = OAUTH_PROVIDERS[service_name]
+    return OAuthConfig(
+        service_name=base.service_name,
+        client_id=client_id,
+        client_secret=client_secret,
+        auth_url=base.auth_url,
+        token_url=base.token_url,
+        scopes=base.scopes.copy(),
+        audience=base.audience,
+        resources_url=base.resources_url,
+        extra_auth_params=base.extra_auth_params.copy(),
+        display_name=base.display_name,
+        setup_url=base.setup_url,
+    )
+
+
+# Register Atlassian as a known provider
+register_oauth_provider(
+    OAuthConfig(
+        service_name="atlassian",
+        client_id="",  # Will be overwritten when getting config
+        auth_url="https://auth.atlassian.com/authorize",
+        token_url="https://auth.atlassian.com/oauth/token",
+        scopes=[
+            "read:jira-work",
+            "read:jira-user",
+            "read:confluence-content.all",
+            "read:confluence-space.summary",
+            "offline_access",  # Required for refresh tokens
+        ],
+        audience="api.atlassian.com",
+        resources_url="https://api.atlassian.com/oauth/token/accessible-resources",
+        display_name="Atlassian",
+        setup_url="https://developer.atlassian.com/console/myapps/",
+    )
+)
+
+
+@dataclass
 class AtlassianOAuthConfig:
-    """Configuration for Atlassian OAuth flow."""
+    """Configuration for Atlassian OAuth flow.
+
+    DEPRECATED: Use OAuthConfig with service_name="atlassian" instead.
+    Kept for backward compatibility.
+    """
 
     client_id: str
     client_secret: Optional[str] = None  # Optional for public clients
@@ -597,6 +705,21 @@ class AtlassianOAuthConfig:
     token_url: str = "https://auth.atlassian.com/oauth/token"
     resources_url: str = "https://api.atlassian.com/oauth/token/accessible-resources"
     audience: str = "api.atlassian.com"
+
+    def to_generic(self) -> OAuthConfig:
+        """Convert to generic OAuthConfig."""
+        return OAuthConfig(
+            service_name="atlassian",
+            client_id=self.client_id,
+            client_secret=self.client_secret,
+            auth_url=self.auth_url,
+            token_url=self.token_url,
+            scopes=self.scopes.copy(),
+            audience=self.audience,
+            resources_url=self.resources_url,
+            display_name="Atlassian",
+            setup_url="https://developer.atlassian.com/console/myapps/",
+        )
 
 
 class AtlassianOAuthFlow:
@@ -956,6 +1079,373 @@ def get_atlassian_oauth_flow(client_id: Optional[str] = None) -> AtlassianOAuthF
     )
 
     return AtlassianOAuthFlow(config)
+
+
+# =============================================================================
+# Generic MCP OAuth Flow
+# =============================================================================
+
+
+class MCPOAuthFlow:
+    """Generic OAuth 2.1 flow for any MCP server.
+
+    This is a provider-agnostic OAuth flow that works with any MCP server
+    that requires OAuth authentication. It uses OAuthConfig to configure
+    the flow for the specific provider.
+
+    Usage:
+        # Get config for a known provider
+        config = get_oauth_config("atlassian", client_id="...")
+
+        # Or create custom config
+        config = OAuthConfig(
+            service_name="my-service",
+            client_id="...",
+            auth_url="https://auth.example.com/authorize",
+            token_url="https://auth.example.com/token",
+            scopes=["read", "write"],
+        )
+
+        # Create flow and authenticate
+        flow = MCPOAuthFlow(config)
+        tokens = flow.authenticate()
+    """
+
+    def __init__(
+        self,
+        config: OAuthConfig,
+        token_storage: Optional[TokenStorage] = None,
+        callback_timeout: int = 300,
+    ):
+        """Initialize MCP OAuth flow.
+
+        Args:
+            config: OAuth configuration for the provider
+            token_storage: Token storage instance (creates default if None)
+            callback_timeout: Timeout for OAuth callback in seconds
+        """
+        self.config = config
+        self.storage = token_storage or TokenStorage()
+        self.callback_timeout = callback_timeout
+        self._pkce: Optional[PKCEChallenge] = None
+        self._state: Optional[str] = None
+
+    @property
+    def service_name(self) -> str:
+        """Get the service name for this flow."""
+        return self.config.service_name
+
+    def get_auth_status(self) -> AuthStatus:
+        """Check current authentication status.
+
+        Returns:
+            AuthStatus for this service
+        """
+        return self.storage.get_auth_status(self.service_name)
+
+    def get_tokens(self) -> Optional[OAuthTokens]:
+        """Get current tokens if authenticated.
+
+        Returns:
+            OAuthTokens if authenticated, None otherwise
+        """
+        return self.storage.load_tokens(self.service_name)
+
+    def build_authorization_url(self, redirect_uri: str) -> str:
+        """Build the authorization URL for browser redirect.
+
+        Args:
+            redirect_uri: The callback URI
+
+        Returns:
+            Full authorization URL
+        """
+        # Generate PKCE challenge
+        self._pkce = generate_pkce()
+        self._state = generate_state()
+
+        params = {
+            "client_id": self.config.client_id,
+            "scope": " ".join(self.config.scopes),
+            "redirect_uri": redirect_uri,
+            "state": self._state,
+            "response_type": "code",
+            "code_challenge": self._pkce.code_challenge,
+            "code_challenge_method": self._pkce.code_challenge_method,
+        }
+
+        # Add audience if configured (required by some providers like Atlassian)
+        if self.config.audience:
+            params["audience"] = self.config.audience
+
+        # Add any extra provider-specific params
+        params.update(self.config.extra_auth_params)
+
+        return f"{self.config.auth_url}?{urllib.parse.urlencode(params)}"
+
+    def exchange_code_for_tokens(self, code: str, redirect_uri: str) -> OAuthTokens:
+        """Exchange authorization code for tokens.
+
+        Args:
+            code: Authorization code from callback
+            redirect_uri: The same redirect URI used in authorization
+
+        Returns:
+            OAuthTokens from the token exchange
+
+        Raises:
+            OAuthError: If token exchange fails
+        """
+        if self._pkce is None:
+            raise OAuthError(
+                "PKCE not initialized - call build_authorization_url first"
+            )
+
+        data = {
+            "grant_type": "authorization_code",
+            "client_id": self.config.client_id,
+            "code": code,
+            "redirect_uri": redirect_uri,
+            "code_verifier": self._pkce.code_verifier,
+        }
+
+        if self.config.client_secret:
+            data["client_secret"] = self.config.client_secret
+
+        return self._request_tokens(data)
+
+    def refresh_tokens(self, refresh_token: str) -> OAuthTokens:
+        """Refresh access token using refresh token.
+
+        Args:
+            refresh_token: The refresh token
+
+        Returns:
+            New OAuthTokens
+
+        Raises:
+            OAuthError: If refresh fails
+        """
+        data = {
+            "grant_type": "refresh_token",
+            "client_id": self.config.client_id,
+            "refresh_token": refresh_token,
+        }
+
+        if self.config.client_secret:
+            data["client_secret"] = self.config.client_secret
+
+        return self._request_tokens(data)
+
+    def _request_tokens(self, data: Dict[str, str]) -> OAuthTokens:
+        """Make token request to OAuth provider.
+
+        Args:
+            data: Form data for token request
+
+        Returns:
+            OAuthTokens from response
+
+        Raises:
+            OAuthError: If request fails
+        """
+        encoded_data = urllib.parse.urlencode(data).encode("utf-8")
+
+        request = urllib.request.Request(
+            self.config.token_url,
+            data=encoded_data,
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Accept": "application/json",
+            },
+        )
+
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                response_data = json.loads(response.read().decode("utf-8"))
+
+            tokens = OAuthTokens(
+                access_token=response_data["access_token"],
+                token_type=response_data.get("token_type", "Bearer"),
+                expires_in=response_data.get("expires_in"),
+                refresh_token=response_data.get("refresh_token"),
+                scope=response_data.get("scope"),
+            )
+
+            # Save tokens
+            self.storage.save_tokens(self.service_name, tokens)
+            return tokens
+
+        except HTTPError as e:
+            error_body = e.read().decode("utf-8")
+            try:
+                error_data = json.loads(error_body)
+                error_msg = error_data.get(
+                    "error_description", error_data.get("error", str(e))
+                )
+            except json.JSONDecodeError:
+                error_msg = error_body or str(e)
+            raise OAuthError(f"Token exchange failed: {error_msg}")
+
+        except URLError as e:
+            raise OAuthError(f"Network error during token exchange: {e}")
+
+    def authenticate(
+        self,
+        open_browser: bool = True,
+        browser_callback: Optional[Callable[[str], None]] = None,
+    ) -> OAuthTokens:
+        """Run the full OAuth authentication flow.
+
+        Args:
+            open_browser: Whether to automatically open the browser
+            browser_callback: Optional callback with auth URL (for custom handling)
+
+        Returns:
+            OAuthTokens after successful authentication
+
+        Raises:
+            OAuthError: If authentication fails
+            OAuthTimeoutError: If user doesn't complete flow in time
+            OAuthCancelledError: If user cancels
+        """
+        # Start callback server
+        server = OAuthCallbackServer(timeout=self.callback_timeout)
+        port = server.start()
+
+        try:
+            # Build authorization URL
+            auth_url = self.build_authorization_url(server.redirect_uri)
+
+            display_name = self.config.display_name or self.service_name.title()
+            console.print(
+                f"\n[bold blue]🔐 {display_name} Authentication[/bold blue]\n"
+            )
+
+            if browser_callback:
+                browser_callback(auth_url)
+            elif open_browser:
+                console.print("Opening browser for authentication...")
+                console.print(f"[dim]If browser doesn't open, visit:[/dim]")
+                console.print(f"[cyan]{auth_url}[/cyan]\n")
+                webbrowser.open(auth_url)
+            else:
+                console.print("Please visit this URL to authenticate:")
+                console.print(f"[cyan]{auth_url}[/cyan]\n")
+
+            console.print("[dim]Waiting for authentication...[/dim]")
+
+            # Wait for callback
+            code = server.wait_for_callback(self._state or "")
+
+            console.print("[green]✓ Authorization received[/green]")
+
+            # Exchange code for tokens
+            console.print("[dim]Exchanging code for tokens...[/dim]")
+            tokens = self.exchange_code_for_tokens(code, server.redirect_uri)
+
+            console.print("[green]✓ Authentication successful![/green]\n")
+
+            return tokens
+
+        finally:
+            server.stop()
+
+    def logout(self) -> bool:
+        """Remove stored tokens (logout).
+
+        Returns:
+            True if tokens were removed, False if not logged in
+        """
+        return self.storage.delete_tokens(self.service_name)
+
+    def ensure_valid_token(self) -> OAuthTokens:
+        """Ensure we have a valid (non-expired) token, refreshing if needed.
+
+        Returns:
+            Valid OAuthTokens
+
+        Raises:
+            OAuthError: If not authenticated or refresh fails
+        """
+        tokens = self.get_tokens()
+        if tokens is None:
+            raise OAuthError(
+                f"Not authenticated. Run 'context-harness mcp auth {self.service_name}' first."
+            )
+
+        if tokens.is_expired():
+            if tokens.refresh_token:
+                console.print("[dim]Access token expired, refreshing...[/dim]")
+                try:
+                    tokens = self.refresh_tokens(tokens.refresh_token)
+                    console.print("[green]✓ Token refreshed[/green]")
+                except OAuthError:
+                    raise OAuthError(
+                        f"Token refresh failed. Please re-authenticate with "
+                        f"'context-harness mcp auth {self.service_name}'"
+                    )
+            else:
+                raise OAuthError(
+                    "Access token expired and no refresh token available. "
+                    "Please re-authenticate."
+                )
+
+        return tokens
+
+
+def get_oauth_flow(
+    service_name: str,
+    client_id: Optional[str] = None,
+    client_secret: Optional[str] = None,
+) -> MCPOAuthFlow:
+    """Get an OAuth flow instance for a service.
+
+    This is the main entry point for OAuth authentication. It will:
+    1. Look up the service in registered OAuth providers
+    2. Get client credentials from environment if not provided
+    3. Return a configured MCPOAuthFlow instance
+
+    Args:
+        service_name: Name of the service (e.g., "atlassian")
+        client_id: OAuth client ID (uses env var if not provided)
+        client_secret: OAuth client secret (uses env var if not provided)
+
+    Returns:
+        Configured MCPOAuthFlow instance
+
+    Raises:
+        OAuthError: If service not found or credentials missing
+    """
+    if service_name not in OAUTH_PROVIDERS:
+        raise OAuthError(
+            f"Unknown OAuth provider: {service_name}. "
+            f"Available providers: {', '.join(OAUTH_PROVIDERS.keys())}"
+        )
+
+    # Get client ID from environment if not provided
+    if client_id is None:
+        env_var = f"{service_name.upper()}_CLIENT_ID"
+        client_id = os.environ.get(env_var)
+        if not client_id:
+            base_config = OAUTH_PROVIDERS[service_name]
+            setup_info = ""
+            if base_config.setup_url:
+                setup_info = f"\nCreate an OAuth app at: {base_config.setup_url}"
+            raise OAuthError(
+                f"{service_name.title()} client ID not configured. "
+                f"Set {env_var} environment variable or provide --client-id.{setup_info}"
+            )
+
+    # Get client secret from environment if not provided
+    if client_secret is None:
+        env_var = f"{service_name.upper()}_CLIENT_SECRET"
+        client_secret = os.environ.get(env_var)
+
+    # Get config with credentials
+    config = get_oauth_config(service_name, client_id, client_secret)
+
+    return MCPOAuthFlow(config)
 
 
 # =============================================================================
