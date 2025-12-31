@@ -28,6 +28,8 @@ class ErrorCode(Enum):
     AUTH_FAILED = "auth_failed"
     AUTH_EXPIRED = "auth_expired"
     AUTH_CANCELLED = "auth_cancelled"
+    TOKEN_EXPIRED = "token_expired"
+    TOKEN_REFRESH_FAILED = "token_refresh_failed"
 
     # Network errors
     NETWORK_ERROR = "network_error"
