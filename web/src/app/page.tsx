@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { SessionList } from '@/components/SessionList';
 import { ChatInterface } from '@/components/ChatInterface';
 import { SettingsModal } from '@/components/SettingsModal';
+import { applyThemeByName, initializeTheme } from '@/lib/theme';
 import { MessageSquare, Sparkles, Terminal, AlertCircle, X, RefreshCw, WifiOff, Menu, ChevronLeft, Settings } from 'lucide-react';
 
 interface GitHubLink {
@@ -68,10 +69,12 @@ export default function Home() {
 
   // Load saved theme and default model on mount
   useEffect(() => {
-    const savedTheme = localStorage.getItem(THEME_STORAGE_KEY) || 'solarized_light';
-    if (savedTheme !== currentTheme) {
-      setCurrentTheme(savedTheme);
-    }
+    // Initialize theme from localStorage and apply CSS variables
+    const savedThemeName = initializeTheme();
+    setCurrentTheme(savedThemeName);
+    
+    // Also fetch from API to get full theme data (in case of custom themes)
+    applyThemeByName(savedThemeName);
     
     const savedModel = localStorage.getItem(DEFAULT_MODEL_STORAGE_KEY) || '';
     if (savedModel !== defaultModel) {
@@ -94,10 +97,12 @@ export default function Home() {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  // Handle theme change (save to localStorage)
-  const handleThemeChange = useCallback((theme: string) => {
-    setCurrentTheme(theme);
-    localStorage.setItem(THEME_STORAGE_KEY, theme);
+  // Handle theme change (save to localStorage and apply)
+  const handleThemeChange = useCallback((themeName: string) => {
+    setCurrentTheme(themeName);
+    localStorage.setItem(THEME_STORAGE_KEY, themeName);
+    // Apply theme CSS variables
+    applyThemeByName(themeName);
   }, []);
 
   // Handle default model change
