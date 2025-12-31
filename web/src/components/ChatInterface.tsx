@@ -32,9 +32,10 @@ interface Message {
 
 interface ChatInterfaceProps {
   session: Session;
+  onError?: (message: string) => void;
 }
 
-export function ChatInterface({ session }: ChatInterfaceProps) {
+export function ChatInterface({ session, onError }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -57,9 +58,12 @@ export function ChatInterface({ session }: ChatInterfaceProps) {
       if (response.ok) {
         const data = await response.json();
         setMessages(data.messages);
+      } else {
+        onError?.('Failed to load messages');
       }
     } catch (error) {
       console.error('Failed to fetch messages:', error);
+      onError?.('Failed to fetch messages');
     }
   };
 
@@ -138,13 +142,16 @@ export function ChatInterface({ session }: ChatInterfaceProps) {
       );
     } catch (error) {
       console.error('Failed to send message:', error);
-      // Add error message
+      const errorMsg = 'Failed to get response. Please try again.';
+      // Notify parent via callback
+      onError?.(errorMsg);
+      // Add error message to chat
       setMessages((prev) => [
         ...prev,
         {
           id: `error-${Date.now()}`,
           role: 'system',
-          content: 'Failed to get response. Please try again.',
+          content: errorMsg,
           timestamp: new Date().toISOString(),
         },
       ]);

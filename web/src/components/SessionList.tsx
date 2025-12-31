@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, forwardRef, useImperativeHandle, useRef, useEffect } from 'react';
 import { Plus, Clock, CheckCircle, AlertCircle, Archive, Zap, GitBranch, GitPullRequest, CircleDot } from 'lucide-react';
 
 interface GitHubLink {
@@ -31,6 +31,12 @@ interface SessionListProps {
   loading: boolean;
   onSelectSession: (session: Session) => void;
   onCreateSession: (name: string) => void;
+  showNewSessionForm?: boolean;
+  onToggleNewSession?: (show: boolean) => void;
+}
+
+export interface SessionListRef {
+  focusNewSession: () => void;
 }
 
 const statusConfig: Record<string, { icon: React.ReactNode; color: string; label: string }> = {
@@ -56,22 +62,50 @@ const statusConfig: Record<string, { icon: React.ReactNode; color: string; label
   },
 };
 
-export function SessionList({
+export const SessionList = forwardRef<SessionListRef, SessionListProps>(function SessionList({
   sessions,
   activeSession,
   loading,
   onSelectSession,
   onCreateSession,
-}: SessionListProps) {
-  const [showNewSession, setShowNewSession] = useState(false);
+  showNewSessionForm = false,
+  onToggleNewSession,
+}, ref) {
   const [newSessionName, setNewSessionName] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleCreateSession = () => {
-    if (newSessionName.trim()) {
-      onCreateSession(newSessionName.trim());
-      setNewSessionName('');
-      setShowNewSession(false);
+  // Expose methods via ref
+  useImperativeHandle(ref, () => ({
+    focusNewSession: () => {
+      onToggleNewSession?.(true);
+      setTimeout(() => inputRef.current?.focus(), 100);
     }
+  }));
+
+  // Focus input when form opens
+  useEffect(() => {
+    if (showNewSessionForm) {
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [showNewSessionForm]);
+
+  const handleCreateSession = async () => {
+    if (newSessionName.trim() && !isCreating) {
+      setIsCreating(true);
+      try {
+        await onCreateSession(newSessionName.trim());
+        setNewSessionName('');
+        onToggleNewSession?.(false);
+      } finally {
+        setIsCreating(false);
+      }
+    }
+  };
+
+  const handleCancel = () => {
+    setNewSessionName('');
+    onToggleNewSession?.(false);
   };
 
   const formatDate = (dateStr: string) => {
@@ -96,34 +130,42 @@ export function SessionList({
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* New Session Button */}
       <div className="p-4">
-        {showNewSession ? (
+        {showNewSessionForm ? (
           <div className="space-y-3 animate-in">
             <input
+              ref={inputRef}
               type="text"
               value={newSessionName}
               onChange={(e) => setNewSessionName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleCreateSession()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleCreateSession();
+                if (e.key === 'Escape') handleCancel();
+              }}
               placeholder="session-name..."
+              disabled={isCreating}
               className="w-full px-4 py-3 border border-edge-medium rounded-xl 
                          bg-surface-tertiary text-content-primary font-mono text-sm
                          focus:ring-2 focus:ring-neon-cyan/50 focus:border-neon-cyan/50
-                         placeholder:text-content-tertiary transition-all outline-none"
-              autoFocus
+                         placeholder:text-content-tertiary transition-all outline-none
+                         disabled:opacity-50"
             />
             <div className="flex gap-2">
               <button
                 onClick={handleCreateSession}
+                disabled={!newSessionName.trim() || isCreating}
                 className="flex-1 px-4 py-2.5 bg-neon-cyan text-surface-primary rounded-xl
                            hover:shadow-glow transition-all text-sm font-semibold
-                           active:scale-[0.98]"
+                           active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Create
+                {isCreating ? 'Creating...' : 'Create'}
               </button>
               <button
-                onClick={() => setShowNewSession(false)}
+                onClick={handleCancel}
+                disabled={isCreating}
                 className="px-4 py-2.5 text-content-secondary rounded-xl
                            border border-edge-subtle hover:border-edge-medium 
-                           hover:bg-surface-tertiary transition-all text-sm"
+                           hover:bg-surface-tertiary transition-all text-sm
+                           disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -131,7 +173,7 @@ export function SessionList({
           </div>
         ) : (
           <button
-            onClick={() => setShowNewSession(true)}
+            onClick={() => onToggleNewSession?.(true)}
             className="w-full flex items-center justify-center gap-2 px-4 py-3
                        border border-dashed border-edge-medium rounded-xl
                        text-content-secondary hover:text-neon-cyan hover:border-neon-cyan/50
@@ -139,6 +181,9 @@ export function SessionList({
           >
             <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform duration-200" />
             <span className="font-medium">New Session</span>
+            <kbd className="ml-2 px-1.5 py-0.5 bg-surface-tertiary border border-edge-subtle rounded text-[10px] font-mono text-content-tertiary">
+              ⌘N
+            </kbd>
           </button>
         )}
       </div>
@@ -158,7 +203,7 @@ export function SessionList({
               <Clock className="w-7 h-7 text-content-tertiary" />
             </div>
             <p className="text-content-secondary text-sm">No sessions yet</p>
-            <p className="text-content-tertiary text-xs mt-1">Create one to get started</p>
+            <p className="text-content-tertiary text-xs mt-1">Press ⌘+N to create one</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -188,6 +233,14 @@ export function SessionList({
                         <span className={`font-medium truncate ${isActive ? 'text-content-primary' : 'text-content-secondary'}`}>
                           {session.name}
                         </span>
+                        {/* Quick switch hint */}
+                        {index < 9 && (
+                          <kbd className="px-1 py-0.5 bg-surface-tertiary/50 border border-edge-subtle/50 
+                                        rounded text-[9px] font-mono text-content-tertiary opacity-0 
+                                        group-hover:opacity-100 transition-opacity">
+                            ⌘{index + 1}
+                          </kbd>
+                        )}
                       </div>
                       
                       {session.active_work && (
@@ -255,4 +308,4 @@ export function SessionList({
       </div>
     </div>
   );
-}
+});
