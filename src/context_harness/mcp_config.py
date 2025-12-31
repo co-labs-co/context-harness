@@ -50,6 +50,13 @@ MCP_REGISTRY: List[MCPServerInfo] = [
         server_type="remote",
         auth_type="oauth",
     ),
+    MCPServerInfo(
+        name="exa",
+        url="https://mcp.exa.ai/mcp",
+        description="AI-powered web search and research assistant",
+        server_type="remote",
+        auth_type=None,
+    ),
 ]
 
 # Known MCP server configurations (derived from registry for backward compatibility)

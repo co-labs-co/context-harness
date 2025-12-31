@@ -39,6 +39,13 @@ MCP_REGISTRY: List[Dict[str, Any]] = [
         "server_type": "remote",
         "auth_type": "oauth",
     },
+    {
+        "name": "exa",
+        "url": "https://mcp.exa.ai/mcp",
+        "description": "AI-powered web search and research assistant",
+        "server_type": "remote",
+        "auth_type": None,
+    },
 ]
 
 
