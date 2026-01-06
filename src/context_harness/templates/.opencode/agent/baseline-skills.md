@@ -261,12 +261,20 @@ Analyzed [X] skill opportunities:
 ```
 .opencode/skill/
 ├── {skill-name-1}/
-│   └── SKILL.md
+│   ├── SKILL.md
+│   ├── scripts/
+│   ├── references/
+│   └── assets/
 ├── {skill-name-2}/
-│   └── SKILL.md
+│   ├── SKILL.md
+│   ├── scripts/
+│   ├── references/
+│   └── assets/
 └── {skill-name-3}/
     └── SKILL.md
 ```
+
+**Note**: Skeletons follow the skill-creator standard. See `.opencode/skill/skill-creator/SKILL.md` for format details.
 
 ## Refinement Recommendations
 
