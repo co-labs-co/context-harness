@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { ChevronDown, Cpu, Check, Loader2 } from 'lucide-react';
 
 // =============================================================================
@@ -18,6 +18,7 @@ interface ModelSelectorProps {
   sessionId: string;
   onModelChange?: (modelId: string) => void;
   compact?: boolean;
+  defaultModel?: string;
 }
 
 // Provider colors for visual distinction
@@ -40,14 +41,21 @@ const PROVIDER_NAMES: Record<string, string> = {
 // Component
 // =============================================================================
 
-export function ModelSelector({ sessionId, onModelChange, compact = false }: ModelSelectorProps) {
+export function ModelSelector({ sessionId, onModelChange, compact = false, defaultModel = '' }: ModelSelectorProps) {
   const [models, setModels] = useState<ModelInfo[]>([]);
-  const [currentModel, setCurrentModel] = useState<string>('');
+  const [currentModel, setCurrentModel] = useState<string>(defaultModel);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [changing, setChanging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Update current model when defaultModel prop changes (and no session model set)
+  useEffect(() => {
+    if (defaultModel && !currentModel) {
+      setCurrentModel(defaultModel);
+    }
+  }, [defaultModel]);
 
   // Fetch available models on mount
   useEffect(() => {
@@ -72,8 +80,15 @@ export function ModelSelector({ sessionId, onModelChange, compact = false }: Mod
       if (response.ok) {
         const data = await response.json();
         setModels(data.models || []);
-        if (data.current_model && !currentModel) {
-          setCurrentModel(data.current_model);
+        // Use current_model from API, or defaultModel, or first available model
+        if (!currentModel) {
+          if (data.current_model) {
+            setCurrentModel(data.current_model);
+          } else if (defaultModel) {
+            setCurrentModel(defaultModel);
+          } else if (data.models?.length > 0) {
+            setCurrentModel(data.models[0].id);
+          }
         }
       } else {
         setError('Failed to load models');
@@ -135,19 +150,31 @@ export function ModelSelector({ sessionId, onModelChange, compact = false }: Mod
     }
   };
 
-  // Group models by provider
-  const modelsByProvider = models.reduce((acc, model) => {
-    if (!acc[model.provider]) {
-      acc[model.provider] = [];
-    }
-    acc[model.provider].push(model);
-    return acc;
-  }, {} as Record<string, ModelInfo[]>);
+  // Group models by provider - memoized for performance
+  const modelsByProvider = useMemo(() => 
+    models.reduce((acc, model) => {
+      if (!acc[model.provider]) {
+        acc[model.provider] = [];
+      }
+      acc[model.provider].push(model);
+      return acc;
+    }, {} as Record<string, ModelInfo[]>),
+    [models]
+  );
 
-  // Get current model info
-  const currentModelInfo = models.find(m => m.id === currentModel);
-  const displayName = currentModelInfo?.name || currentModel?.split('/')[1] || 'Select model';
-  const providerColor = currentModelInfo ? PROVIDER_COLORS[currentModelInfo.provider] || 'text-content-secondary' : 'text-content-secondary';
+  // Get current model info - memoized for performance
+  const currentModelInfo = useMemo(() => 
+    models.find(m => m.id === currentModel),
+    [models, currentModel]
+  );
+  const displayName = useMemo(() => 
+    currentModelInfo?.name || currentModel?.split('/')[1] || 'Select model',
+    [currentModelInfo, currentModel]
+  );
+  const providerColor = useMemo(() => 
+    currentModelInfo ? PROVIDER_COLORS[currentModelInfo.provider] || 'text-content-secondary' : 'text-content-secondary',
+    [currentModelInfo]
+  );
 
   if (loading) {
     return (
@@ -164,11 +191,15 @@ export function ModelSelector({ sessionId, onModelChange, compact = false }: Mod
       <button
         onClick={() => setIsOpen(!isOpen)}
         disabled={changing}
+        aria-label="Select AI model"
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
         className={`
           flex items-center gap-1.5 px-2 py-1 rounded-lg
           border border-edge-subtle bg-surface-secondary
           hover:bg-surface-tertiary hover:border-edge-medium
-          transition-all cursor-pointer
+          transition-all cursor-pointer focus:outline-none focus:ring-2 
+          focus:ring-inset focus:ring-neon-cyan/30
           ${compact ? 'text-xs' : 'text-sm'}
           ${changing ? 'opacity-50 cursor-wait' : ''}
         `}
@@ -186,12 +217,19 @@ export function ModelSelector({ sessionId, onModelChange, compact = false }: Mod
 
       {/* Dropdown */}
       {isOpen && (
-        <div className="absolute top-full mt-1 right-0 z-50 min-w-[280px] max-h-[400px] overflow-y-auto
-                        bg-surface-elevated border border-edge-subtle rounded-xl shadow-2xl">
+        <div 
+          role="listbox"
+          aria-label="Select AI model"
+          className="absolute top-full mt-1 right-0 z-50 min-w-[280px] max-h-[400px] overflow-y-auto
+                          bg-surface-elevated border border-edge-subtle rounded-xl shadow-2xl"
+        >
           {Object.entries(modelsByProvider).map(([provider, providerModels]) => (
             <div key={provider}>
               {/* Provider Header */}
-              <div className="px-3 py-2 text-xs font-semibold text-content-tertiary bg-surface-tertiary/50 sticky top-0">
+              <div 
+                role="presentation"
+                className="px-3 py-2 text-xs font-semibold text-content-tertiary bg-surface-tertiary/50 sticky top-0"
+              >
                 {PROVIDER_NAMES[provider] || provider}
               </div>
               {/* Models */}
@@ -199,18 +237,21 @@ export function ModelSelector({ sessionId, onModelChange, compact = false }: Mod
                 <button
                   key={model.id}
                   onClick={() => selectModel(model.id)}
+                  role="option"
+                  aria-selected={model.id === currentModel}
                   className={`
                     w-full flex items-center gap-2 px-3 py-2 text-left text-sm
-                    hover:bg-surface-tertiary transition-colors
+                    hover:bg-surface-tertiary transition-colors focus:outline-none 
+                    focus:ring-2 focus:ring-inset focus:ring-neon-cyan/30
                     ${model.id === currentModel ? 'bg-neon-cyan/10' : ''}
                   `}
                 >
-                  <Cpu className={`w-3.5 h-3.5 flex-shrink-0 ${PROVIDER_COLORS[provider] || 'text-content-secondary'}`} />
+                  <Cpu className={`w-3.5 h-3.5 flex-shrink-0 ${PROVIDER_COLORS[provider] || 'text-content-secondary'}`} aria-hidden="true" />
                   <span className="flex-1 truncate text-content-secondary">
                     {model.name}
                   </span>
                   {model.id === currentModel && (
-                    <Check className="w-4 h-4 text-neon-cyan flex-shrink-0" />
+                    <Check className="w-4 h-4 text-neon-cyan flex-shrink-0" aria-hidden="true" />
                   )}
                 </button>
               ))}

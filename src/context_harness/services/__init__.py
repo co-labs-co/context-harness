@@ -21,6 +21,7 @@ from context_harness.services.skill_service import (
     DefaultGitHubClient,
     SkillService,
 )
+from context_harness.services.theme_service import ThemeService
 
 __all__ = [
     # Config
@@ -34,4 +35,6 @@ __all__ = [
     # Skill
     "DefaultGitHubClient",
     "SkillService",
+    # Theme
+    "ThemeService",
 ]

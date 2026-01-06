@@ -68,6 +68,15 @@ from context_harness.primitives.voice import (
     VoiceSource,
     VoiceTranscription,
 )
+from context_harness.primitives.theme import (
+    Theme,
+    ThemeCategory,
+    ThemeColors,
+    ThemeMetadata,
+    ThemePreference,
+    ThemeType,
+    ThemeValidationError,
+)
 
 __all__ = [
     # Result types
@@ -118,4 +127,12 @@ __all__ = [
     "VoiceSettings",
     "VoiceSource",
     "VoiceTranscription",
+    # Theme types
+    "Theme",
+    "ThemeCategory",
+    "ThemeColors",
+    "ThemeMetadata",
+    "ThemePreference",
+    "ThemeType",
+    "ThemeValidationError",
 ]

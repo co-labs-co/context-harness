@@ -3,7 +3,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { SessionList } from '@/components/SessionList';
 import { ChatInterface } from '@/components/ChatInterface';
-import { MessageSquare, Sparkles, Terminal, AlertCircle, X, RefreshCw, WifiOff, Menu, ChevronLeft } from 'lucide-react';
+import { SettingsModal } from '@/components/SettingsModal';
+import { applyThemeByName, initializeTheme } from '@/lib/theme';
+import { MessageSquare, Sparkles, Terminal, AlertCircle, X, RefreshCw, WifiOff, Menu, ChevronLeft, Settings } from 'lucide-react';
 
 interface GitHubLink {
   url: string | null;
@@ -34,6 +36,8 @@ interface Toast {
 }
 
 const STORAGE_KEY = 'contextharness_active_session';
+const THEME_STORAGE_KEY = 'selectedTheme';
+const DEFAULT_MODEL_STORAGE_KEY = 'contextharness_default_model';
 
 export default function Home() {
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -42,8 +46,11 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [showNewSessionModal, setShowNewSessionModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [currentTheme, setCurrentTheme] = useState('solarized_light');
+  const [defaultModel, setDefaultModel] = useState('');
   const sessionListRef = useRef<{ focusNewSession: () => void } | null>(null);
 
   // Detect mobile viewport
@@ -60,6 +67,21 @@ export default function Home() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  // Load saved theme and default model on mount
+  useEffect(() => {
+    // Initialize theme from localStorage and apply CSS variables
+    const savedThemeName = initializeTheme();
+    setCurrentTheme(savedThemeName);
+    
+    // Also fetch from API to get full theme data (in case of custom themes)
+    applyThemeByName(savedThemeName);
+    
+    const savedModel = localStorage.getItem(DEFAULT_MODEL_STORAGE_KEY) || '';
+    if (savedModel !== defaultModel) {
+      setDefaultModel(savedModel);
+    }
+  }, []);
+
   // Add toast notification
   const addToast = useCallback((type: Toast['type'], message: string) => {
     const id = `toast-${Date.now()}`;
@@ -74,6 +96,21 @@ export default function Home() {
   const removeToast = useCallback((id: string) => {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
+
+  // Handle theme change (save to localStorage and apply)
+  const handleThemeChange = useCallback((themeName: string) => {
+    setCurrentTheme(themeName);
+    localStorage.setItem(THEME_STORAGE_KEY, themeName);
+    // Apply theme CSS variables
+    applyThemeByName(themeName);
+  }, []);
+
+  // Handle default model change
+  const handleDefaultModelChange = useCallback((modelId: string) => {
+    setDefaultModel(modelId);
+    localStorage.setItem(DEFAULT_MODEL_STORAGE_KEY, modelId);
+    addToast('success', 'Default model updated');
+  }, [addToast]);
 
   // Restore active session from localStorage
   useEffect(() => {
@@ -101,6 +138,11 @@ export default function Home() {
         e.preventDefault();
         setShowNewSessionModal(true);
       }
+      // ⌘+, or Ctrl+,: Open settings
+      if ((e.metaKey || e.ctrlKey) && e.key === ',') {
+        e.preventDefault();
+        setShowSettingsModal(true);
+      }
       // ⌘+R or Ctrl+R: Refresh sessions (when not in input)
       if ((e.metaKey || e.ctrlKey) && e.key === 'r' && document.activeElement?.tagName !== 'TEXTAREA' && document.activeElement?.tagName !== 'INPUT') {
         e.preventDefault();
@@ -109,7 +151,9 @@ export default function Home() {
       }
       // Escape: Close modals, sidebar, deselect
       if (e.key === 'Escape') {
-        if (showNewSessionModal) {
+        if (showSettingsModal) {
+          setShowSettingsModal(false);
+        } else if (showNewSessionModal) {
           setShowNewSessionModal(false);
         } else if (sidebarOpen) {
           setSidebarOpen(false);
@@ -128,10 +172,10 @@ export default function Home() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showNewSessionModal, sidebarOpen, sessions, addToast]);
+  }, [showNewSessionModal, showSettingsModal, sidebarOpen, sessions, addToast]);
 
-  const fetchSessions = async () => {
-    setError(null);
+  const fetchSessions = async (silent = false) => {
+    if (!silent) setError(null);
     try {
       const response = await fetch('/api/sessions');
       if (!response.ok) {
@@ -140,6 +184,17 @@ export default function Home() {
       const data = await response.json();
       setSessions(data.sessions);
       
+      // Update active session with fresh data if it exists
+      if (activeSession) {
+        const updatedActiveSession = data.sessions.find((s: Session) => s.id === activeSession.id);
+        if (updatedActiveSession) {
+          // Only update if something changed (avoid unnecessary re-renders)
+          if (JSON.stringify(updatedActiveSession) !== JSON.stringify(activeSession)) {
+            setActiveSession(updatedActiveSession);
+          }
+        }
+      }
+      
       // Auto-select first session if none selected and no saved session
       if (data.sessions.length > 0 && !activeSession) {
         const savedSessionId = localStorage.getItem(STORAGE_KEY);
@@ -147,17 +202,32 @@ export default function Home() {
         setActiveSession(savedSession || data.sessions[0]);
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to fetch sessions';
-      setError(message);
-      addToast('error', message);
+      if (!silent) {
+        const message = err instanceof Error ? err.message : 'Failed to fetch sessions';
+        setError(message);
+        addToast('error', message);
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
+  // Initial fetch
   useEffect(() => {
     fetchSessions();
   }, []);
+
+  // Poll for session updates every 5 seconds when there's an active session
+  // This catches changes made by the agent (commits, PRs, etc.)
+  useEffect(() => {
+    if (!activeSession) return;
+    
+    const pollInterval = setInterval(() => {
+      fetchSessions(true); // silent = true, don't show loading/errors
+    }, 5000);
+    
+    return () => clearInterval(pollInterval);
+  }, [activeSession?.id]);
 
   const handleSelectSession = (session: Session) => {
     setActiveSession(session);
@@ -216,6 +286,16 @@ export default function Home() {
         ))}
       </div>
 
+      {/* Settings Modal */}
+      <SettingsModal
+        isOpen={showSettingsModal}
+        onClose={() => setShowSettingsModal(false)}
+        currentTheme={currentTheme}
+        onThemeChange={handleThemeChange}
+        defaultModel={defaultModel}
+        onDefaultModelChange={handleDefaultModelChange}
+      />
+
       {/* Mobile Overlay */}
       {isMobile && sidebarOpen && (
         <div 
@@ -271,6 +351,17 @@ export default function Home() {
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
+            {/* Settings button - Desktop */}
+            <div className="hidden md:block">
+              <button
+                onClick={() => setShowSettingsModal(true)}
+                className="flex items-center gap-2 p-2 text-content-tertiary hover:text-content-primary 
+                           hover:bg-surface-tertiary rounded-lg transition-colors"
+                title="Settings (⌘+,)"
+              >
+                <Settings className="w-5 h-5" />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -283,7 +374,7 @@ export default function Home() {
             </div>
             <p className="text-xs text-content-tertiary mt-1 break-words">{error}</p>
             <button
-              onClick={fetchSessions}
+              onClick={() => fetchSessions()}
               className="mt-2 text-xs text-neon-cyan hover:underline"
             >
               Try again
@@ -327,6 +418,15 @@ export default function Home() {
                 <p className="text-content-secondary">Select a session</p>
               )}
             </div>
+            {/* Settings button - Mobile */}
+            <button
+              onClick={() => setShowSettingsModal(true)}
+              className="p-2 text-content-tertiary hover:text-content-primary 
+                         hover:bg-surface-tertiary rounded-lg transition-colors"
+              title="Settings"
+            >
+              <Settings className="w-5 h-5" />
+            </button>
           </div>
         )}
 
@@ -335,6 +435,7 @@ export default function Home() {
             session={activeSession} 
             onError={(msg) => addToast('error', msg)} 
             isMobile={isMobile}
+            defaultModel={defaultModel}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center p-4">
