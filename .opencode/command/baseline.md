@@ -1,5 +1,5 @@
 ---
-description: Generate comprehensive PROJECT-CONTEXT.md through 4-phase analysis with parallel question answering and skill extraction
+description: Generate comprehensive PROJECT-CONTEXT.md and AGENTS.md through 5-phase analysis with parallel question answering, skill extraction, and agent instructions
 agent: context-harness
 ---
 
@@ -7,7 +7,7 @@ Run baseline project analysis: $ARGUMENTS
 
 ## Instructions
 
-Execute the 4-phase baseline analysis pipeline to generate `PROJECT-CONTEXT.md`:
+Execute the 5-phase baseline analysis pipeline to generate `PROJECT-CONTEXT.md` and `AGENTS.md`:
 
 ### Phase Overview
 
@@ -71,6 +71,18 @@ Execute the 4-phase baseline analysis pipeline to generate `PROJECT-CONTEXT.md`:
 │                         ▼                                   │
 │              skeleton skills in .opencode/skill/            │
 └─────────────────────────────────────────────────────────────┘
+                 │
+                 ▼
+┌─────────────────────────────────────────────────────────────┐
+│  PHASE 5: AGENTS.MD GENERATION                              │
+│                                                              │
+│              ┌─────────────────────┐                        │
+│              │ @baseline-agents    │                        │
+│              └─────────────────────┘                        │
+│                         │                                   │
+│                         ▼                                   │
+│              AGENTS.md (OpenCode rules file)                │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ### Execution Steps
@@ -79,8 +91,8 @@ Execute the 4-phase baseline analysis pipeline to generate `PROJECT-CONTEXT.md`:
    ```
    🔍 Starting baseline analysis...
    
-   This will analyze your project and generate PROJECT-CONTEXT.md
-   Phases: Discovery → Questions → Parallel Answers → Parallel Skills
+   This will analyze your project and generate PROJECT-CONTEXT.md + AGENTS.md
+   Phases: Discovery → Questions → Parallel Answers → Parallel Skills → AGENTS.md
    
    Estimated time: 2-5 minutes depending on project size
    ```
@@ -268,13 +280,75 @@ Execute the 4-phase baseline analysis pipeline to generate `PROJECT-CONTEXT.md`:
       - Location: .opencode/skill/
    ```
 
-6. **Write Output**
-   - Write `project_context_content` to `PROJECT-CONTEXT.md` in project root
+6. **Phase 5: AGENTS.md Generation** (unless `--skip-agents` flag)
+   
+   This phase generates the `AGENTS.md` file following the [OpenCode specification](https://opencode.ai/docs/rules/).
+   
+   **Step 5a: Gather Inputs**
+   
+   ```
+   Collect from previous phases:
+   - PROJECT-CONTEXT.md content (from Phase 3)
+   - Skill metadata from .opencode/skill/ (from Phase 4)
+   - discovery_report (from Phase 1)
+   - Existing AGENTS.md (if present, for update mode)
+   ```
+   
+   **Step 5b: Invoke @baseline-agents**
+   
+   - Invoke `@baseline-agents` subagent via Task tool
+   - Prompt: Include:
+     - `project_context` (PROJECT-CONTEXT.md content)
+     - `skills` array (metadata for each skill created)
+     - `discovery_report` JSON
+     - `existing_agents_md` (if file exists)
+   - Request: "Generate AGENTS.md content following OpenCode specification."
+   - Store result as `agents_md_content`
+   
+   Example invocation:
+   ```
+   Task(@baseline-agents, {
+     project_context: {
+       content: "...",  // Full PROJECT-CONTEXT.md
+       path: "PROJECT-CONTEXT.md"
+     },
+     skills: [
+       {
+         name: "python-result-pattern",
+         path: ".opencode/skill/python-result-pattern/SKILL.md",
+         description: "Result[T] pattern for error handling",
+         triggers: ["error handling", "Result pattern"]
+       },
+       ...
+     ],
+     discovery_report: {...},
+     existing_agents_md: null  // or existing content
+   })
+   ```
+   
+   **Step 5c: Write AGENTS.md**
+   
+   - Write `agents_md_content` to `AGENTS.md` in project root
+   - If file exists and `--agents-update` flag, merge with existing content
+   
+   Display progress:
+   ```
+   ✅ Phase 5 Complete: AGENTS.md
+      - Generated: AGENTS.md
+      - Skills referenced: [count]
+      - Mode: [create/update]
+   ```
+
+7. **Write Output**
+   - Write `project_context_content` to `PROJECT-CONTEXT.md` in project root (if not already written)
+   - Write `agents_md_content` to `AGENTS.md` in project root (if Phase 5 ran)
    - Display completion:
      ```
      ✅ Baseline Analysis Complete!
      
-     📄 Generated: PROJECT-CONTEXT.md
+     📄 Generated Files:
+        - PROJECT-CONTEXT.md (comprehensive project context)
+        - AGENTS.md (OpenCode rules for AI agents)
      
      Summary:
      - Project: [name]
@@ -283,16 +357,20 @@ Execute the 4-phase baseline analysis pipeline to generate `PROJECT-CONTEXT.md`:
      - Questions Answered: [count]/[total]
      - Processing Mode: Parallel
      - Skills Created: [count] skeleton skills
+     - Skills Referenced in AGENTS.md: [count]
      
      The PROJECT-CONTEXT.md file provides comprehensive context about this codebase.
-     Share it with new team members or use it as a reference.
+     The AGENTS.md file provides rules and instructions for AI agents working with this repo.
      
      Skills created in .opencode/skill/:
      - [skill-name-1] (skeleton - needs refinement)
      - [skill-name-2] (skeleton - needs refinement)
      
-     To refine skills: /skill refine [name]
-     To regenerate: /baseline
+     Next steps:
+     - Review AGENTS.md and customize as needed
+     - Commit both files to Git for team sharing
+     - To refine skills: /skill refine [name]
+     - To regenerate: /baseline
      ```
 
 ### Parallel Processing Configuration
@@ -363,10 +441,14 @@ Parse from $ARGUMENTS:
 | Flag | Effect |
 |------|--------|
 | `--discovery-only` | Run only Phase 1, output discovery report |
-| `--questions-only` | Run Phases 1-2, output questions (skip answers and skills) |
-| `--skip-skills` | Run Phases 1-3, skip skill extraction |
+| `--questions-only` | Run Phases 1-2, output questions (skip answers, skills, and agents) |
+| `--skip-skills` | Run Phases 1-3 and 5, skip skill extraction |
+| `--skip-agents` | Run Phases 1-4, skip AGENTS.md generation |
 | `--skills-only` | Run only Phase 4 with existing discovery report |
+| `--agents-only` | Run only Phase 5 with existing PROJECT-CONTEXT.md and skills |
+| `--agents-update` | Update existing AGENTS.md instead of overwriting |
 | `--output [path]` | Write to custom path instead of PROJECT-CONTEXT.md |
+| `--agents-output [path]` | Write AGENTS.md to custom path |
 | `--json` | Output raw JSON instead of markdown |
 | `--verbose` | Show detailed progress for each phase |
 | `--sequential` | Disable parallel processing (legacy mode for ALL phases) |
@@ -377,12 +459,16 @@ Parse from $ARGUMENTS:
 ### Example Invocations
 
 ```
-/baseline                           # Full analysis with parallel answers + skills
+/baseline                           # Full analysis: PROJECT-CONTEXT.md + skills + AGENTS.md
 /baseline --verbose                 # Full analysis with detailed progress
 /baseline --discovery-only          # Just discovery phase
-/baseline --skip-skills             # Generate PROJECT-CONTEXT.md without skills
+/baseline --skip-skills             # Generate PROJECT-CONTEXT.md + AGENTS.md without skills
+/baseline --skip-agents             # Generate PROJECT-CONTEXT.md + skills without AGENTS.md
 /baseline --skills-only             # Only generate skills (uses cached discovery)
-/baseline --output docs/CONTEXT.md  # Custom output location
+/baseline --agents-only             # Only generate AGENTS.md (uses existing context + skills)
+/baseline --agents-update           # Update existing AGENTS.md with new context
+/baseline --output docs/CONTEXT.md  # Custom output location for PROJECT-CONTEXT.md
+/baseline --agents-output docs/AGENTS.md  # Custom output location for AGENTS.md
 /baseline --sequential              # Use legacy sequential mode for all phases
 /baseline --batch-size 5            # Use smaller batches for questions
 /baseline --skill-batch-size 3      # Use smaller batches for skills
@@ -454,6 +540,24 @@ If `--sequential` flag is passed, use the original single-worker approach for AL
    You can manually create skills or lower threshold with --skill-threshold 5.0
 ```
 
+**Phase 5 Failure** (AGENTS.md generation):
+```
+⚠️ AGENTS.md generation warning
+   
+   [error message]
+   
+   PROJECT-CONTEXT.md and skills were generated successfully.
+   AGENTS.md can be generated later with: /baseline --agents-only
+```
+
+**No PROJECT-CONTEXT.md for --agents-only**:
+```
+❌ Cannot generate AGENTS.md: PROJECT-CONTEXT.md not found
+   
+   Run /baseline first to generate PROJECT-CONTEXT.md,
+   or run /baseline without --agents-only flag.
+```
+
 ### Caching (Future Enhancement)
 
 For projects that haven't changed:
@@ -465,11 +569,23 @@ For projects that haven't changed:
 
 If running within an active session:
 1. Add PROJECT-CONTEXT.md to session's Key Files
-2. Reference in Documentation References
-3. Note in SESSION.md:
+2. Add AGENTS.md to session's Key Files
+3. Reference in Documentation References
+4. Note in SESSION.md:
    ```markdown
    ## Notes
    
    PROJECT-CONTEXT.md generated via /baseline on [date]
+   AGENTS.md generated via /baseline on [date]
    Processing mode: Parallel (questions: [N] workers, skills: [M] workers)
    ```
+
+### AGENTS.md Best Practices
+
+The generated AGENTS.md follows the [OpenCode specification](https://opencode.ai/docs/rules/):
+
+1. **Commit to Git** - Share with your team
+2. **Customize** - Add project-specific rules after generation
+3. **Lazy Loading** - Skills are referenced with `@path/to/skill.md` syntax
+4. **Precedence** - Local AGENTS.md combines with global `~/.config/opencode/AGENTS.md`
+5. **External Files** - Can reference other files via `opencode.json` instructions field
