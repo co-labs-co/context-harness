@@ -17,6 +17,7 @@ from typing import List, Optional, Protocol
 import yaml
 
 from context_harness.primitives import (
+    DEFAULT_SKILLS_REPO,
     ErrorCode,
     Failure,
     Result,
@@ -27,8 +28,6 @@ from context_harness.primitives import (
 )
 
 
-# Central skills repository
-SKILLS_REPO = "co-labs-co/context-harness-skills"
 SKILLS_REGISTRY_PATH = "skills.json"
 SKILLS_DIR = "skill"
 
@@ -181,7 +180,7 @@ class SkillService:
     def __init__(
         self,
         github_client: Optional[GitHubClient] = None,
-        skills_repo: str = SKILLS_REPO,
+        skills_repo: str = DEFAULT_SKILLS_REPO,
     ):
         """Initialize the skill service.
 

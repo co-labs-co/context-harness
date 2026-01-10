@@ -12,6 +12,110 @@ from typing import Any, Dict, List, Optional
 from context_harness.primitives.mcp import MCPServerConfig
 
 
+# Default skills repository
+DEFAULT_SKILLS_REPO = "co-labs-co/context-harness-skills"
+
+# Environment variable for skills repo override
+SKILLS_REPO_ENV_VAR = "CONTEXT_HARNESS_SKILLS_REPO"
+
+
+@dataclass(frozen=True)
+class SkillsRegistryConfig:
+    """Configuration for skills registry sources.
+
+    Attributes:
+        default: Default skills repository (owner/repo format)
+    """
+
+    default: str = DEFAULT_SKILLS_REPO
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "SkillsRegistryConfig":
+        """Create from dictionary.
+
+        Args:
+            data: Dictionary with registry config
+
+        Returns:
+            SkillsRegistryConfig instance
+        """
+        return cls(
+            default=data.get("default", DEFAULT_SKILLS_REPO),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization.
+
+        Returns:
+            Dictionary representation
+        """
+        result: Dict[str, Any] = {}
+        if self.default != DEFAULT_SKILLS_REPO:
+            result["default"] = self.default
+        return result
+
+
+@dataclass(frozen=True)
+class UserConfig:
+    """User-level ContextHarness configuration (~/.context-harness/config.json).
+
+    This configuration is stored in the user's home directory and applies
+    to all projects unless overridden by project-level config.
+
+    Attributes:
+        skills_registry: Skills registry configuration
+    """
+
+    skills_registry: Optional[SkillsRegistryConfig] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "UserConfig":
+        """Create from dictionary.
+
+        Args:
+            data: Dictionary from parsing config.json
+
+        Returns:
+            UserConfig instance
+        """
+        skills_registry = None
+        if "skillsRegistry" in data:
+            skills_registry = SkillsRegistryConfig.from_dict(data["skillsRegistry"])
+
+        return cls(skills_registry=skills_registry)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization.
+
+        Returns:
+            Dictionary representation
+        """
+        result: Dict[str, Any] = {}
+        if self.skills_registry:
+            registry_dict = self.skills_registry.to_dict()
+            if registry_dict:
+                result["skillsRegistry"] = registry_dict
+        return result
+
+    @staticmethod
+    def config_dir() -> Path:
+        """Get the user config directory path.
+
+        Returns:
+            Path to ~/.context-harness/
+        """
+        return Path.home() / ".context-harness"
+
+    @staticmethod
+    def config_path() -> Path:
+        """Get the user config file path.
+
+        Returns:
+            Path to ~/.context-harness/config.json
+        """
+        return UserConfig.config_dir() / "config.json"
+
+
 @dataclass(frozen=True)
 class AgentConfig:
     """Configuration for an agent in opencode.json.
@@ -55,6 +159,7 @@ class OpenCodeConfig:
         agents: Agent configurations keyed by agent name
         commands: Custom command configurations keyed by command name
         skills: Skill configurations
+        skills_registry: Skills registry configuration
         project_context: Path to project context file
         raw_data: The original parsed JSON data for fields not explicitly modeled
     """
@@ -64,6 +169,7 @@ class OpenCodeConfig:
     agents: Dict[str, AgentConfig] = field(default_factory=dict)
     commands: Dict[str, CommandConfig] = field(default_factory=dict)
     skills: Dict[str, Any] = field(default_factory=dict)
+    skills_registry: Optional[SkillsRegistryConfig] = None
     project_context: Optional[str] = None
     raw_data: Dict[str, Any] = field(default_factory=dict)
 
@@ -103,12 +209,17 @@ class OpenCodeConfig:
                     prompt=config.get("prompt"),
                 )
 
+        skills_registry = None
+        if "skillsRegistry" in data:
+            skills_registry = SkillsRegistryConfig.from_dict(data["skillsRegistry"])
+
         return cls(
             schema_version=data.get("$schema", "1.0"),
             mcp=mcp_servers,
             agents=agents,
             commands=commands,
             skills=data.get("skills", {}),
+            skills_registry=skills_registry,
             project_context=data.get("projectContext"),
             raw_data=data,
         )
@@ -153,6 +264,11 @@ class OpenCodeConfig:
 
         if self.skills:
             result["skills"] = self.skills
+
+        if self.skills_registry:
+            registry_dict = self.skills_registry.to_dict()
+            if registry_dict:
+                result["skillsRegistry"] = registry_dict
 
         if self.project_context:
             result["projectContext"] = self.project_context

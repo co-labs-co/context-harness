@@ -34,6 +34,15 @@ from context_harness.skills import (
     extract_skill,
     SkillResult,
 )
+from context_harness.primitives import (
+    Failure,
+    SKILLS_REPO_ENV_VAR,
+    SkillsRegistryConfig,
+    UserConfig,
+)
+from context_harness.services.skills_registry import get_skills_repo_info
+from context_harness.services.user_config_service import UserConfigService
+from context_harness.services.config_service import ConfigService
 from context_harness.completion import (
     complete_skill_names,
     interactive_skill_picker,
@@ -708,6 +717,402 @@ def skill_extract_cmd(skill_name: str | None, source: str):
         console.print()
         console.print("[red]❌ Failed to extract skill.[/red]")
         raise SystemExit(1)
+
+
+# =============================================================================
+# Config Management Commands
+# =============================================================================
+
+
+@main.group()
+def config():
+    """Manage ContextHarness configuration.
+
+    View and modify configuration settings at user or project level.
+    Configuration is resolved with the following precedence:
+
+    \b
+    1. Environment variable (highest priority)
+    2. Project config (opencode.json)
+    3. User config (~/.context-harness/config.json)
+    4. Default values (lowest priority)
+    """
+    pass
+
+
+@config.command("get")
+@click.argument("key")
+def config_get(key: str):
+    """Get a configuration value.
+
+    Shows the current value and where it comes from.
+
+    \b
+    Supported keys:
+      skills-repo    The skills repository (owner/repo format)
+
+    Examples:
+
+        context-harness config get skills-repo
+    """
+    if key == "skills-repo":
+        result = get_skills_repo_info()
+        if isinstance(result, Failure):
+            console.print(f"[red]Error: {result.error}[/red]")
+            raise SystemExit(1)
+
+        info = result.value
+        console.print()
+        console.print(f"[bold cyan]skills-repo[/bold cyan]: {info['repo']}")
+        console.print(f"[dim]Source: {info['source']}[/dim]")
+        console.print()
+
+        # Show all configured values
+        console.print("[dim]Configuration layers:[/dim]")
+        env_val = info["env_value"] or "(not set)"
+        proj_val = info["project_value"] or "(not set)"
+        user_val = info["user_value"] or "(not set)"
+        default_val = info["default_value"]
+
+        source = info["source"]
+        console.print(
+            f"  1. Environment ({SKILLS_REPO_ENV_VAR}): {env_val}"
+            + (" [green]← active[/green]" if source == "environment" else "")
+        )
+        console.print(
+            f"  2. Project (opencode.json): {proj_val}"
+            + (" [green]← active[/green]" if source == "project" else "")
+        )
+        console.print(
+            f"  3. User (~/.context-harness/config.json): {user_val}"
+            + (" [green]← active[/green]" if source == "user" else "")
+        )
+        console.print(
+            f"  4. Default: {default_val}"
+            + (" [green]← active[/green]" if source == "default" else "")
+        )
+        console.print()
+    else:
+        console.print(f"[red]Error: Unknown configuration key: {key}[/red]")
+        console.print()
+        console.print("[dim]Supported keys: skills-repo[/dim]")
+        raise SystemExit(1)
+
+
+def _parse_repo_value(value: str) -> Optional[str]:
+    """Parse a repository value, accepting owner/repo or full GitHub URL.
+
+    Args:
+        value: Repository in format "owner/repo" or "https://github.com/owner/repo"
+
+    Returns:
+        Normalized "owner/repo" format, or None if invalid
+    """
+    import re
+
+    # Strip whitespace and trailing slashes
+    value = value.strip().rstrip("/")
+
+    # Check if it's a full GitHub URL
+    github_url_pattern = r"^https?://(?:www\.)?github\.com/([^/]+)/([^/]+?)(?:\.git)?$"
+    match = re.match(github_url_pattern, value)
+    if match:
+        owner, repo = match.groups()
+        return f"{owner}/{repo}"
+
+    # Check if it's already in owner/repo format
+    if "/" in value and value.count("/") == 1:
+        owner, repo = value.split("/")
+        # Basic validation: both parts should be non-empty and contain valid chars
+        if (
+            owner
+            and repo
+            and re.match(r"^[\w.-]+$", owner)
+            and re.match(r"^[\w.-]+$", repo)
+        ):
+            return value
+
+    return None
+
+
+@config.command("set")
+@click.argument("key")
+@click.argument("value")
+@click.option(
+    "--user",
+    "scope",
+    flag_value="user",
+    help="Set in user config (~/.context-harness/config.json)",
+)
+@click.option(
+    "--project",
+    "scope",
+    flag_value="project",
+    default=True,
+    help="Set in project config (opencode.json) [default]",
+)
+def config_set(key: str, value: str, scope: str):
+    """Set a configuration value.
+
+    By default, sets values in project config (opencode.json).
+    Use --user to set in user config (~/.context-harness/config.json).
+
+    \b
+    Supported keys:
+      skills-repo    The skills repository (owner/repo or full GitHub URL)
+
+    Examples:
+
+        context-harness config set skills-repo my-org/my-skills
+
+        context-harness config set skills-repo https://github.com/my-org/my-skills
+
+        context-harness config set skills-repo my-org/my-skills --user
+
+        context-harness config set skills-repo my-org/my-skills --project
+    """
+    if key == "skills-repo":
+        # Parse and normalize repo value (accepts owner/repo or full GitHub URL)
+        repo = _parse_repo_value(value)
+        if repo is None:
+            console.print(f"[red]Error: Invalid repository format: {value}[/red]")
+            console.print()
+            console.print(
+                "[dim]Expected format: owner/repo or https://github.com/owner/repo[/dim]"
+            )
+            raise SystemExit(1)
+
+        if scope == "user":
+            _set_user_skills_repo(repo)
+        else:
+            _set_project_skills_repo(repo)
+    else:
+        console.print(f"[red]Error: Unknown configuration key: {key}[/red]")
+        console.print()
+        console.print("[dim]Supported keys: skills-repo[/dim]")
+        raise SystemExit(1)
+
+
+def _set_user_skills_repo(repo: str) -> None:
+    """Set skills repo in user config."""
+    service = UserConfigService()
+
+    # Load existing config
+    result = service.load()
+    if isinstance(result, Failure):
+        console.print(f"[red]Error: {result.error}[/red]")
+        raise SystemExit(1)
+
+    # Create new config with updated skills registry
+    new_config = UserConfig(
+        skills_registry=SkillsRegistryConfig(default=repo),
+    )
+
+    # Save
+    save_result = service.save(new_config)
+    if isinstance(save_result, Failure):
+        console.print(f"[red]Error: {save_result.error}[/red]")
+        raise SystemExit(1)
+
+    console.print()
+    console.print(f"[green]✓ Set skills-repo to '{repo}' in user config[/green]")
+    console.print(f"[dim]Location: {service.config_path}[/dim]")
+    console.print()
+
+
+def _set_project_skills_repo(repo: str) -> None:
+    """Set skills repo in project config."""
+    service = ConfigService()
+
+    # Load or create config
+    result = service.load_or_create()
+    if isinstance(result, Failure):
+        console.print(f"[red]Error: {result.error}[/red]")
+        raise SystemExit(1)
+
+    config = result.value
+
+    # Import here to avoid circular import
+    from context_harness.primitives.config import OpenCodeConfig
+
+    # Create new config with updated skills registry
+    new_config = OpenCodeConfig(
+        schema_version=config.schema_version,
+        mcp=config.mcp,
+        agents=config.agents,
+        commands=config.commands,
+        skills=config.skills,
+        skills_registry=SkillsRegistryConfig(default=repo),
+        project_context=config.project_context,
+        raw_data=config.raw_data,
+    )
+
+    # Save
+    save_result = service.save(new_config)
+    if isinstance(save_result, Failure):
+        console.print(f"[red]Error: {save_result.error}[/red]")
+        raise SystemExit(1)
+
+    console.print()
+    console.print(f"[green]✓ Set skills-repo to '{repo}' in project config[/green]")
+    console.print(f"[dim]Location: {service.project_config.opencode_json_path}[/dim]")
+    console.print()
+
+
+@config.command("list")
+def config_list():
+    """List all configuration values.
+
+    Shows current values and their sources.
+
+    Example:
+
+        context-harness config list
+    """
+    from pathlib import Path
+
+    console.print()
+    console.print(
+        Panel.fit(
+            "[bold blue]ContextHarness[/bold blue] Configuration",
+            subtitle=f"v{__version__}",
+        )
+    )
+    console.print()
+
+    # Skills repo
+    result = get_skills_repo_info()
+    if isinstance(result, Failure):
+        console.print(f"[red]Error: {result.error}[/red]")
+        raise SystemExit(1)
+
+    info = result.value
+    console.print("[bold]Skills Registry[/bold]")
+    console.print(f"  skills-repo: [cyan]{info['repo']}[/cyan]")
+    console.print(f"  [dim]Source: {info['source']}[/dim]")
+    console.print()
+
+    # Show paths
+    console.print("[bold]Configuration Paths[/bold]")
+    console.print(f"  User config: [dim]{UserConfig.config_path()}[/dim]")
+    console.print(f"  Project config: [dim]{Path.cwd() / 'opencode.json'}[/dim]")
+    console.print()
+
+    # Show environment variable
+    console.print("[bold]Environment Variables[/bold]")
+    env_val = info["env_value"]
+    if env_val:
+        console.print(f"  {SKILLS_REPO_ENV_VAR}={env_val}")
+    else:
+        console.print(f"  [dim]{SKILLS_REPO_ENV_VAR} (not set)[/dim]")
+    console.print()
+
+
+@config.command("unset")
+@click.argument("key")
+@click.option(
+    "--user",
+    "scope",
+    flag_value="user",
+    help="Unset in user config",
+)
+@click.option(
+    "--project",
+    "scope",
+    flag_value="project",
+    default=True,
+    help="Unset in project config [default]",
+)
+def config_unset(key: str, scope: str):
+    """Remove a configuration value.
+
+    Removes the configuration value, falling back to the next layer.
+
+    \b
+    Supported keys:
+      skills-repo    The skills repository
+
+    Examples:
+
+        context-harness config unset skills-repo
+
+        context-harness config unset skills-repo --user
+    """
+    if key == "skills-repo":
+        if scope == "user":
+            _unset_user_skills_repo()
+        else:
+            _unset_project_skills_repo()
+    else:
+        console.print(f"[red]Error: Unknown configuration key: {key}[/red]")
+        console.print()
+        console.print("[dim]Supported keys: skills-repo[/dim]")
+        raise SystemExit(1)
+
+
+def _unset_user_skills_repo() -> None:
+    """Remove skills repo from user config."""
+    service = UserConfigService()
+
+    if not service.exists():
+        console.print("[dim]User config does not exist, nothing to unset.[/dim]")
+        return
+
+    result = service.load()
+    if isinstance(result, Failure):
+        console.print(f"[red]Error: {result.error}[/red]")
+        raise SystemExit(1)
+
+    # Create new config without skills registry
+    new_config = UserConfig(skills_registry=None)
+
+    save_result = service.save(new_config)
+    if isinstance(save_result, Failure):
+        console.print(f"[red]Error: {save_result.error}[/red]")
+        raise SystemExit(1)
+
+    console.print()
+    console.print("[green]✓ Removed skills-repo from user config[/green]")
+    console.print()
+
+
+def _unset_project_skills_repo() -> None:
+    """Remove skills repo from project config."""
+    service = ConfigService()
+
+    if not service.exists():
+        console.print("[dim]Project config does not exist, nothing to unset.[/dim]")
+        return
+
+    result = service.load()
+    if isinstance(result, Failure):
+        console.print(f"[red]Error: {result.error}[/red]")
+        raise SystemExit(1)
+
+    config = result.value
+
+    from context_harness.primitives.config import OpenCodeConfig
+
+    # Create new config without skills registry
+    new_config = OpenCodeConfig(
+        schema_version=config.schema_version,
+        mcp=config.mcp,
+        agents=config.agents,
+        commands=config.commands,
+        skills=config.skills,
+        skills_registry=None,
+        project_context=config.project_context,
+        raw_data=config.raw_data,
+    )
+
+    save_result = service.save(new_config)
+    if isinstance(save_result, Failure):
+        console.print(f"[red]Error: {save_result.error}[/red]")
+        raise SystemExit(1)
+
+    console.print()
+    console.print("[green]✓ Removed skills-repo from project config[/green]")
+    console.print()
 
 
 # =============================================================================

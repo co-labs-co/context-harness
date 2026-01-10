@@ -49,8 +49,12 @@ from context_harness.primitives.mcp import (
 from context_harness.primitives.config import (
     AgentConfig,
     CommandConfig,
+    DEFAULT_SKILLS_REPO,
     OpenCodeConfig,
     ProjectConfig,
+    SKILLS_REPO_ENV_VAR,
+    SkillsRegistryConfig,
+    UserConfig,
 )
 from context_harness.primitives.message import (
     Conversation,
@@ -102,8 +106,12 @@ __all__ = [
     # Config types
     "AgentConfig",
     "CommandConfig",
+    "DEFAULT_SKILLS_REPO",
     "OpenCodeConfig",
     "ProjectConfig",
+    "SKILLS_REPO_ENV_VAR",
+    "SkillsRegistryConfig",
+    "UserConfig",
     # Message types
     "Conversation",
     "Message",
