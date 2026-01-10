@@ -33,6 +33,7 @@ context-harness = "context_harness.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/co-labs-co/context-harness"
+Documentation = "https://co-labs-co.github.io/context-harness/"
 Repository = "https://github.com/co-labs-co/context-harness"
 Issues = "https://github.com/co-labs-co/context-harness/issues"
 
@@ -75,6 +76,10 @@ include = [
 dev = [
     "pytest>=8.0",
     "pytest-cov>=4.0",
+]
+docs = [
+    "mkdocs-material>=9.5",
+    "mkdocs-minify-plugin>=0.8",
 ]
 
 [tool.pytest.ini_options]

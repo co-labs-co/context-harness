@@ -2,6 +2,18 @@
 
 > Context-aware agent framework for [OpenCode.ai](https://opencode.ai) that maintains session continuity.
 
+## Requirements
+
+**Required:**
+- [OpenCode.ai](https://opencode.ai) — AI coding assistant (ContextHarness is a framework for this)
+- [uv](https://docs.astral.sh/uv/) — Python package installer
+
+**Optional:**
+- [GitHub CLI](https://cli.github.com/) `gh` — For `/issue`, `/pr` commands
+- [Context7 MCP](https://context7.com/) — For research features via `@research-subagent`
+
+---
+
 ## Quickstart
 
 ```bash
@@ -109,6 +121,47 @@ context-harness config set skills-repo <repo>  # Set project-level skills repo
 context-harness config set skills-repo <repo> --user  # Set user-level default
 context-harness config unset skills-repo       # Remove project-level setting
 ```
+
+---
+
+## How It Works
+
+ContextHarness maintains a `SESSION.md` file for each feature/task you work on:
+
+```
+.context-harness/sessions/
+├── login-feature/
+│   └── SESSION.md          # Your context for this feature
+├── TICKET-1234/
+│   └── SESSION.md
+└── api-refactor/
+    └── SESSION.md
+```
+
+When you run `/compact`, your current work context is saved. When you switch sessions with `/ctx`, the previous context is preserved and the new session's context is loaded.
+
+### Typical Workflow
+
+```
+/ctx login-feature          # Start new session, creates feature/login-feature branch
+# ... work on login ...
+/compact                    # Save progress
+# ... more work ...
+/issue                      # Create GitHub issue from context
+# ... finish feature ...
+/pr                         # Create pull request
+```
+
+### GitHub Integration
+
+When `gh` CLI is available and authenticated:
+
+- `/ctx {name}` creates a `feature/{name}` branch
+- `/issue` creates a GitHub issue with full context
+- `/issue update` posts progress comments
+- `/pr` creates a PR linked to the issue
+
+Graceful fallback: works locally without GitHub.
 
 ---
 
@@ -227,57 +280,9 @@ The official repository [`co-labs-co/context-harness-skills`](https://github.com
 
 ---
 
-## How It Works
-
-ContextHarness maintains a `SESSION.md` file for each feature/task you work on:
-
-```
-.context-harness/sessions/
-├── login-feature/
-│   └── SESSION.md          # Your context for this feature
-├── TICKET-1234/
-│   └── SESSION.md
-└── api-refactor/
-    └── SESSION.md
-```
-
-When you run `/compact`, your current work context is saved. When you switch sessions with `/ctx`, the previous context is preserved and the new session's context is loaded.
-
-### Typical Workflow
-
-```
-/ctx login-feature          # Start new session, creates feature/login-feature branch
-# ... work on login ...
-/compact                    # Save progress
-# ... more work ...
-/issue                      # Create GitHub issue from context
-# ... finish feature ...
-/pr                         # Create pull request
-```
-
-### GitHub Integration
-
-When `gh` CLI is available and authenticated:
-
-- `/ctx {name}` creates a `feature/{name}` branch
-- `/issue` creates a GitHub issue with full context
-- `/issue update` posts progress comments
-- `/pr` creates a PR linked to the issue
-
-Graceful fallback: works locally without GitHub.
-
----
-
-## Requirements
-
-- [OpenCode.ai](https://opencode.ai)
-- [uv](https://docs.astral.sh/uv/) (for installation)
-- [GitHub CLI](https://cli.github.com/) `gh` (optional, for GitHub features)
-- [Context7 MCP](DOCS.md#context7-mcp-setup) (optional, for research features)
-
----
-
 ## Documentation
+
+**Full documentation**: [co-labs-co.github.io/context-harness](https://co-labs-co.github.io/context-harness/)
 
 See [DOCS.md](DOCS.md) for:
 
