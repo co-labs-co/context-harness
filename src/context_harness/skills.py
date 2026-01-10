@@ -22,12 +22,28 @@ import yaml
 from rich.console import Console
 from rich.table import Table
 
+from context_harness.services.skills_registry import resolve_skills_repo_with_loading
+
 console = Console()
 
-# Central skills repository
-SKILLS_REPO = "co-labs-co/context-harness-skills"
 SKILLS_REGISTRY_PATH = "skills.json"
 SKILLS_DIR = "skill"  # singular, matching OpenCode standard
+
+
+def get_current_skills_repo() -> str:
+    """Get the currently configured skills repository.
+
+    Uses the layered configuration resolution:
+    1. CONTEXT_HARNESS_SKILLS_REPO environment variable
+    2. Project config (opencode.json skillsRegistry.default)
+    3. User config (~/.context-harness/config.json)
+    4. Default (co-labs-co/context-harness-skills)
+
+    Returns:
+        The skills repository in owner/repo format
+    """
+    repo, _ = resolve_skills_repo_with_loading()
+    return repo
 
 
 class SkillResult(Enum):
@@ -81,16 +97,18 @@ def check_gh_auth(quiet: bool = False) -> bool:
         return False
 
 
-def check_repo_access(repo: str = SKILLS_REPO, quiet: bool = False) -> bool:
+def check_repo_access(repo: Optional[str] = None, quiet: bool = False) -> bool:
     """Check if user has access to the skills repository.
 
     Args:
-        repo: Repository in owner/name format
+        repo: Repository in owner/name format (uses configured repo if None)
         quiet: If True, suppress output messages
 
     Returns:
         True if user has access, False otherwise
     """
+    if repo is None:
+        repo = get_current_skills_repo()
     result = subprocess.run(
         ["gh", "api", f"/repos/{repo}", "--silent"],
         capture_output=True,
@@ -120,12 +138,13 @@ def get_skills_registry(quiet: bool = False) -> Optional[Dict[str, Any]]:
     if not check_repo_access(quiet=quiet):
         return None
 
+    skills_repo = get_current_skills_repo()
     try:
         result = subprocess.run(
             [
                 "gh",
                 "api",
-                f"/repos/{SKILLS_REPO}/contents/{SKILLS_REGISTRY_PATH}",
+                f"/repos/{skills_repo}/contents/{SKILLS_REGISTRY_PATH}",
                 "-H",
                 "Accept: application/vnd.github.raw+json",
             ],
@@ -359,7 +378,8 @@ def install_skill(
         console.print(f"[cyan]Installing skill: {skill_name}...[/cyan]")
 
     # Fetch skill files
-    if not _fetch_directory_recursive(SKILLS_REPO, skill.path, skill_dest, quiet):
+    skills_repo = get_current_skills_repo()
+    if not _fetch_directory_recursive(skills_repo, skill.path, skill_dest, quiet):
         if not quiet:
             console.print(f"[red]Failed to install skill '{skill_name}'.[/red]")
         return SkillResult.ERROR
@@ -533,10 +553,11 @@ def extract_skill(
             tmppath = Path(tmpdir)
 
             # Clone the skills repo (shallow)
+            skills_repo = get_current_skills_repo()
             if not quiet:
                 console.print("[dim]Cloning skills repository...[/dim]")
             subprocess.run(
-                ["gh", "repo", "clone", SKILLS_REPO, tmpdir, "--", "--depth=1"],
+                ["gh", "repo", "clone", skills_repo, tmpdir, "--", "--depth=1"],
                 capture_output=True,
                 check=True,
             )
@@ -642,7 +663,7 @@ _Extracted via ContextHarness skill extractor_
                     "pr",
                     "create",
                     "--repo",
-                    SKILLS_REPO,
+                    skills_repo,
                     "--title",
                     f"Add skill: {skill_name}",
                     "--body",

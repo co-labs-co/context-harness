@@ -100,6 +100,131 @@ context-harness skill extract <name>    # Share a specific local skill
    fastapi-crud - FastAPI CRUD patterns
 ```
 
+### Configuration Management
+
+```bash
+context-harness config list                    # Show all configuration
+context-harness config get skills-repo         # Get skills repository
+context-harness config set skills-repo <repo>  # Set project-level skills repo
+context-harness config set skills-repo <repo> --user  # Set user-level default
+context-harness config unset skills-repo       # Remove project-level setting
+```
+
+---
+
+## Custom Skills Repository
+
+You can configure a custom skills repository (e.g., your organization's private skills repo or a personal fork).
+
+### Configuration Precedence
+
+ContextHarness resolves the skills repository in this order:
+
+| Priority | Source | Location | Use Case |
+|----------|--------|----------|----------|
+| 1 (Highest) | Environment Variable | `CONTEXT_HARNESS_SKILLS_REPO` | CI/CD, temporary overrides |
+| 2 | Project Config | `opencode.json` → `skillsRegistry.default` | Per-project custom repo |
+| 3 | User Config | `~/.context-harness/config.json` | Personal default |
+| 4 (Lowest) | Default | Hardcoded | Official skills repository |
+
+### Setting a Custom Skills Repository
+
+You can specify the repository using either the short `owner/repo` format or the full GitHub URL:
+
+```bash
+# Short format
+context-harness config set skills-repo my-org/my-skills-repo
+
+# Full GitHub URL (automatically normalized to owner/repo)
+context-harness config set skills-repo https://github.com/my-org/my-skills-repo
+```
+
+**Project-level** (for team/project-specific repos):
+```bash
+context-harness config set skills-repo my-org/my-skills-repo
+```
+
+This adds to your `opencode.json`:
+```json
+{
+  "skillsRegistry": {
+    "default": "my-org/my-skills-repo"
+  }
+}
+```
+
+**User-level** (personal default across all projects):
+```bash
+context-harness config set skills-repo my-fork/context-harness-skills --user
+```
+
+This creates/updates `~/.context-harness/config.json`:
+```json
+{
+  "skillsRegistry": {
+    "default": "my-fork/context-harness-skills"
+  }
+}
+```
+
+**Environment variable** (CI/CD or temporary override):
+```bash
+export CONTEXT_HARNESS_SKILLS_REPO=my-org/private-skills
+context-harness skill list  # Uses my-org/private-skills
+```
+
+### Creating a Custom Skills Repository
+
+To create your own skills repository:
+
+1. Fork or create a new repo with this structure:
+   ```
+   my-skills-repo/
+   ├── skills.json          # Registry of available skills
+   └── skill/               # Directory containing skills
+       ├── my-skill/
+       │   └── SKILL.md     # Skill definition with YAML frontmatter
+       └── another-skill/
+           └── SKILL.md
+   ```
+
+2. Create `skills.json`:
+   ```json
+   {
+     "schema_version": "1.0",
+     "skills": [
+       {
+         "name": "my-skill",
+         "description": "What this skill does",
+         "version": "0.1.0",
+         "author": "your-username",
+         "tags": ["category"],
+         "path": "skill/my-skill"
+       }
+     ]
+   }
+   ```
+
+3. Each skill needs a `SKILL.md` with frontmatter:
+   ```markdown
+   ---
+   name: my-skill
+   description: What this skill does
+   version: 0.1.0
+   ---
+   
+   # My Skill
+   
+   Instructions for the AI agent...
+   ```
+
+4. Configure your repo:
+   ```bash
+   context-harness config set skills-repo my-org/my-skills-repo
+   ```
+
+The official repository [`co-labs-co/context-harness-skills`](https://github.com/co-labs-co/context-harness-skills) serves as a reference implementation.
+
 ---
 
 ## How It Works
