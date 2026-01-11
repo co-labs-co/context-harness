@@ -5,28 +5,29 @@ ContextHarness uses a single-executor model with advisory subagents.
 ## System Overview
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                  CONTEXT-HARNESS AGENT                  │
-│  - Executes ALL work (code, files, commands)            │
-│  - Manages named sessions                               │
-│  - Reads/writes SESSION.md                              │
-│  - Invokes subagents for guidance only                  │
-└────────────┬──────────────────────────────────┬─────────┘
-             │                                  │
-    @research-subagent                  @compaction-guide
-    @docs-subagent                             │
-             │                                  │
-             ▼                                  ▼
-┌──────────────────────────┐      ┌─────────────────────────┐
-│ Grounded Research        │      │ Compaction Guide        │
-│ & Docs Subagents         │      │ Subagent                │
-│                          │      │                         │
-│ - Context7 MCP access    │      │ - Analyze session       │
-│ - Web search verification│      │ - Recommend what to     │
-│ - Provide guidance       │      │   preserve              │
-│ - Return recommendations │      │ - NO execution          │
-│ - NO execution           │      │                         │
-└──────────────────────────┘      └─────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                    CONTEXT-HARNESS AGENT                     │
+│                                                              │
+│  • Executes ALL work (code, files, commands)                 │
+│  • Manages named sessions                                    │
+│  • Reads/writes SESSION.md                                   │
+│  • Invokes subagents for guidance only                       │
+└───────────────┬────────────────────────────────┬─────────────┘
+                │                                │
+                │                                │
+                ▼                                ▼
+┌───────────────────────────────┐  ┌───────────────────────────┐
+│  Research & Docs Subagents    │  │   Compaction Guide        │
+│                               │  │   Subagent                │
+│  @research-subagent           │  │                           │
+│  @docs-subagent               │  │  • Analyze session        │
+│                               │  │  • Recommend what to      │
+│  • Context7 MCP access        │  │    preserve               │
+│  • Web search verification    │  │  • NO execution           │
+│  • Provide guidance           │  │                           │
+│  • Return recommendations     │  │                           │
+│  • NO execution               │  │                           │
+└───────────────────────────────┘  └───────────────────────────┘
 ```
 
 ## Key Principles
