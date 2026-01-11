@@ -115,6 +115,7 @@ When editing a file, AI agents traverse UP the directory tree and use the CLOSES
    ```
    IF --path flag provided:
      target_dir = resolve(cwd + path_argument)
+     repo_root = find_git_root(target_dir) OR target_dir
      IF not exists(target_dir) OR not is_directory(target_dir):
        ERROR: "Path does not exist or is not a directory: {path}"
      
@@ -123,12 +124,13 @@ When editing a file, AI agents traverse UP the directory tree and use the CLOSES
         (Running baseline for subdirectory, not repository root)
    ELSE:
      target_dir = cwd
+     repo_root = cwd
    
-   # All output paths are relative to target_dir:
+   # Output paths:
    # - {target_dir}/PROJECT-CONTEXT.md
    # - {target_dir}/AGENTS.md
    # - {target_dir}/.context-harness/baseline/
-   # - {target_dir}/.opencode/skill/ (if skills generated)
+   # - {repo_root}/.opencode/skill/ (skills always at repo root for sharing)
    ```
 
 1. **Announce Start**:
@@ -352,8 +354,9 @@ When editing a file, AI agents traverse UP the directory tree and use the CLOSES
    - Prompt: Include:
      - `project_context` (PROJECT-CONTEXT.md content)
      - `skills` array (metadata for each skill created)
-     - `discovery_report` JSON
+     - `discovery_report` JSON (includes `target_info` for monorepo context)
      - `existing_agents_md` (if file exists)
+   - **Note**: The `discovery_report.target_info` contains monorepo context (`is_subproject`, `repository_root`, etc.) that the agent uses to generate self-contained AGENTS.md for subdirectories
    - Request: "Generate AGENTS.md content following OpenCode specification."
    - Store result as `agents_md_content`
    
@@ -373,7 +376,15 @@ When editing a file, AI agents traverse UP the directory tree and use the CLOSES
        },
        ...
      ],
-     discovery_report: {...},
+     discovery_report: {
+       // ... other discovery data ...
+       target_info: {
+         target_directory: "apps/frontend",
+         is_subproject: true,
+         repository_root: "/path/to/repo",
+         monorepo_type: "turborepo"
+       }
+     },
      existing_agents_md: null  // or existing content
    })
    ```
@@ -515,7 +526,9 @@ Parse from $ARGUMENTS:
 **Path Resolution**:
 - `--path` is resolved relative to the current working directory
 - If the path doesn't exist or is not a directory, an error is returned
-- All output paths (PROJECT-CONTEXT.md, AGENTS.md, .context-harness/) are relative to `--path`
+- Context outputs are relative to `--path`: `PROJECT-CONTEXT.md`, `AGENTS.md`, `.context-harness/baseline/`
+- Skills are always written to repo root `.opencode/skill/` for sharing across projects
+- Skill references in nested AGENTS.md use `@/.opencode/skill/...` (absolute from repo root)
 
 ### Example Invocations
 

@@ -57,27 +57,32 @@ You produce the complete AGENTS.md content but NEVER write files - Primary Agent
     }
   ],
   "existing_agents_md": null,  // or existing content for update mode
-  "discovery_report": {...},   // Optional: from Phase 1
-  "target_info": {             // NEW: For monorepo/subdirectory support
-    "target_directory": "apps/frontend",  // or null for root
-    "is_subproject": true,
-    "repository_root": "/path/to/repo",
-    "monorepo_type": "turborepo"  // or null
+  "discovery_report": {        // From Phase 1, includes target_info
+    "project_name": "...",
+    "target_info": {           // Monorepo/subdirectory context
+      "target_directory": "apps/frontend",  // or null for root
+      "is_subproject": true,
+      "repository_root": "/path/to/repo",
+      "monorepo_type": "turborepo"  // or null
+    }
+    // ... other discovery fields
   }
 }
 ```
+
+**Note**: Access monorepo context via `discovery_report.target_info`. This avoids redundancy since target_info is already part of the discovery output.
 
 ---
 
 ## Monorepo / Subdirectory Support
 
-When `target_info.is_subproject` is `true`, the generated AGENTS.md must be **self-contained**:
+When `discovery_report.target_info.is_subproject` is `true`, the generated AGENTS.md must be **self-contained**:
 
 ### Self-Contained Requirements
 
 1. **No inheritance**: The AGENTS.md should NOT reference or depend on a root AGENTS.md
 2. **Complete context**: Include all necessary project information for the subdirectory
-3. **Skill paths**: Use paths relative to the target directory OR absolute from repo root with `@/` prefix
+3. **Skill paths**: Use absolute paths from repo root with `@/` prefix (skills are shared at repo root)
 4. **Clear scope**: Make it clear this is for a specific project within a larger repo
 
 ### Skill Path Resolution for Subdirectories
