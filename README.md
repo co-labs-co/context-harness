@@ -21,7 +21,7 @@
 uv tool install "git+https://github.com/co-labs-co/context-harness.git"
 
 # Initialize in your project
-context-harness init
+ch init                    # or: context-harness init
 
 # Open OpenCode and start working
 /baseline              # Analyze project (first time)
@@ -32,6 +32,8 @@ context-harness init
 ```
 
 That's it. Your context persists across sessions.
+
+> **Tip**: Use `ch` instead of `context-harness` for faster typing. Both commands work identically.
 
 ---
 
@@ -64,6 +66,8 @@ That's it. Your context persists across sessions.
 
 ## CLI Reference
 
+> **Note**: Both `ch` and `context-harness` commands work identically. Use `ch` for convenience.
+
 ### Installation
 
 ```bash
@@ -71,36 +75,36 @@ That's it. Your context persists across sessions.
 uv tool install "git+https://github.com/co-labs-co/context-harness.git"
 
 # Or run without installing
-uvx --from "git+https://github.com/co-labs-co/context-harness.git" context-harness init
+uvx --from "git+https://github.com/co-labs-co/context-harness.git" ch init
 ```
 
 ### Core Commands
 
 ```bash
-context-harness init                    # Initialize in current project
-context-harness init --force            # Overwrite existing files
-context-harness init --target ./path    # Install in specific directory
+ch init                    # Initialize in current project
+ch init --force            # Overwrite existing files
+ch init --target ./path    # Install in specific directory
 ```
 
 ### MCP Configuration
 
 ```bash
-context-harness mcp add context7        # Add Context7 for docs lookup
-context-harness mcp add context7 -k KEY # With API key for higher limits
-context-harness mcp list                # List configured MCP servers
+ch mcp add context7        # Add Context7 for docs lookup
+ch mcp add context7 -k KEY # With API key for higher limits
+ch mcp list                # List configured MCP servers
 ```
 
 ### Skill Management
 
 ```bash
-context-harness skill list              # List available skills
-context-harness skill list --tags react # Filter by tag
-context-harness skill list-local        # List installed skills
-context-harness skill info <name>       # Show skill details
-context-harness skill install           # Interactive picker (type to filter)
-context-harness skill install <name>    # Install specific skill
-context-harness skill extract           # Interactive picker for local skills
-context-harness skill extract <name>    # Share a specific local skill
+ch skill list              # List available skills
+ch skill list --tags react # Filter by tag
+ch skill list-local        # List installed skills
+ch skill info <name>       # Show skill details
+ch skill install           # Interactive picker (type to filter)
+ch skill install <name>    # Install specific skill
+ch skill extract           # Interactive picker for local skills
+ch skill extract <name>    # Share a specific local skill
 ```
 
 **Interactive skill selection**: Run `skill install` or `skill extract` without a name to get a fuzzy-searchable picker:
@@ -115,11 +119,11 @@ context-harness skill extract <name>    # Share a specific local skill
 ### Configuration Management
 
 ```bash
-context-harness config list                    # Show all configuration
-context-harness config get skills-repo         # Get skills repository
-context-harness config set skills-repo <repo>  # Set project-level skills repo
-context-harness config set skills-repo <repo> --user  # Set user-level default
-context-harness config unset skills-repo       # Remove project-level setting
+ch config list                    # Show all configuration
+ch config get skills-repo         # Get skills repository
+ch config set skills-repo <repo>  # Set project-level skills repo
+ch config set skills-repo <repo> --user  # Set user-level default
+ch config unset skills-repo       # Remove project-level setting
 ```
 
 ---
@@ -194,7 +198,7 @@ context-harness config set skills-repo https://github.com/my-org/my-skills-repo
 
 **Project-level** (for team/project-specific repos):
 ```bash
-context-harness config set skills-repo my-org/my-skills-repo
+ch config set skills-repo my-org/my-skills-repo
 ```
 
 This adds to your `opencode.json`:
@@ -208,7 +212,7 @@ This adds to your `opencode.json`:
 
 **User-level** (personal default across all projects):
 ```bash
-context-harness config set skills-repo my-fork/context-harness-skills --user
+ch config set skills-repo my-fork/context-harness-skills --user
 ```
 
 This creates/updates `~/.context-harness/config.json`:
@@ -223,7 +227,7 @@ This creates/updates `~/.context-harness/config.json`:
 **Environment variable** (CI/CD or temporary override):
 ```bash
 export CONTEXT_HARNESS_SKILLS_REPO=my-org/private-skills
-context-harness skill list  # Uses my-org/private-skills
+ch skill list  # Uses my-org/private-skills
 ```
 
 ### Creating a Custom Skills Repository
@@ -273,7 +277,7 @@ To create your own skills repository:
 
 4. Configure your repo:
    ```bash
-   context-harness config set skills-repo my-org/my-skills-repo
+   ch config set skills-repo my-org/my-skills-repo
    ```
 
 The official repository [`co-labs-co/context-harness-skills`](https://github.com/co-labs-co/context-harness-skills) serves as a reference implementation.

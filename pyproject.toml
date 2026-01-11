@@ -30,6 +30,7 @@ dependencies = [
 
 [project.scripts]
 context-harness = "context_harness.cli:main"
+ch = "context_harness.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/co-labs-co/context-harness"
