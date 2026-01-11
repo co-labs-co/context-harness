@@ -7,9 +7,13 @@
 - [OpenCode.ai](https://opencode.ai) — AI coding assistant (ContextHarness is a framework for this)
 - [uv](https://docs.astral.sh/uv/) — Python package installer
 
+**Recommended:**
+
+- [Git](https://git-scm.com/) — Version control (required for `/baseline --path` to properly locate repository root)
+
 **Optional:**
 
-- [GitHub CLI](https://cli.github.com/) `gh` — For `/issue`, `/pr` commands
+- [GitHub CLI](https://cli.github.com/) `gh` — For `/issue`, `/pr`, `/ctx` branch creation
 - [Context7 MCP](https://context7.com/) — For research features via `@research-subagent`
 
 ## Install with uv

@@ -116,7 +116,8 @@ Creates a pull request:
 
 | Command | Description | Example |
 |---------|-------------|---------|
-| `/baseline` | Analyze project and generate PROJECT-CONTEXT.md | `/baseline` |
+| `/baseline` | Analyze project and generate PROJECT-CONTEXT.md + AGENTS.md | `/baseline` |
+| `/baseline --path` | Analyze specific directory (monorepo support) | `/baseline --path apps/frontend` |
 | `/baseline --full` | Force full regeneration | `/baseline --full` |
 
 ### `/baseline`
@@ -132,8 +133,54 @@ Analyzes your project structure:
 1. **Discovery**: Analyzes directory structure, language, tools
 2. **Question Generation**: Creates 30-50 questions about the project
 3. **Answer Generation**: Answers questions using codebase analysis
+4. **Skill Extraction**: Identifies patterns for reusable skills
+5. **AGENTS.md Generation**: Creates AI agent instructions
 
-**Output:** `.context-harness/PROJECT-CONTEXT.md`
+**Output:** 
+- `PROJECT-CONTEXT.md` — Comprehensive project context
+- `AGENTS.md` — AI agent instructions (OpenCode rules file)
+
+### `/baseline --path`
+
+Analyzes a specific directory within a monorepo:
+
+```
+/baseline --path apps/frontend
+```
+
+**What it does:**
+
+1. Scopes analysis to the target directory only
+2. Generates outputs in the target directory:
+   - `apps/frontend/PROJECT-CONTEXT.md`
+   - `apps/frontend/AGENTS.md`
+3. Creates self-contained AGENTS.md (no inheritance from root)
+
+**Use cases:**
+
+- Monorepos with multiple projects (apps, packages, services)
+- Polyglot repos where different directories use different languages
+- Large repos where full analysis is too slow
+
+**Examples:**
+
+```
+/baseline --path apps/frontend      # Analyze frontend app
+/baseline --path packages/shared    # Analyze shared package
+/baseline --path services/api       # Analyze API service
+
+# Combine with other flags
+/baseline --path apps/web --skip-skills --verbose
+/baseline --path packages/ui --agents-only
+```
+
+!!! note "AGENTS.md Precedence"
+    Per the [AGENTS.md standard](https://agents.md/), AI agents read the **nearest** AGENTS.md in the directory tree. Nested files completely override root files (no merging). This is why `/baseline --path` generates self-contained AGENTS.md files.
+
+!!! info "Git Repository Recommended"
+    The `--path` flag uses git to find the repository root for shared skill placement. Skills are written to `{repo_root}/.opencode/skill/` so they can be shared across all projects in a monorepo.
+    
+    **Without git**: Skills are placed in the target directory instead, and skill references may need manual adjustment.
 
 ### `/baseline --full`
 

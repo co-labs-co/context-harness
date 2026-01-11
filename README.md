@@ -59,8 +59,20 @@ That's it. Your context persists across sessions.
 
 | Command | Description | Example |
 |---------|-------------|---------|
-| `/baseline` | Analyze project and generate PROJECT-CONTEXT.md | `/baseline` |
+| `/baseline` | Analyze project and generate PROJECT-CONTEXT.md + AGENTS.md | `/baseline` |
+| `/baseline --path` | Analyze specific directory (monorepo support) | `/baseline --path apps/frontend` |
 | `/baseline --full` | Force full regeneration | `/baseline --full` |
+
+#### Monorepo Support
+
+For monorepos with multiple projects, use `--path` to generate project-specific context:
+
+```bash
+/baseline --path apps/frontend      # Generates apps/frontend/AGENTS.md
+/baseline --path packages/shared    # Generates packages/shared/AGENTS.md
+```
+
+Each generated `AGENTS.md` is self-contained—AI agents read the nearest one in the directory tree.
 
 ---
 

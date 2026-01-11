@@ -8,7 +8,17 @@ This guide walks you through your first ContextHarness session.
 /baseline
 ```
 
-This analyzes your codebase and generates `PROJECT-CONTEXT.md` with information about your project's structure, patterns, and conventions.
+This analyzes your codebase and generates:
+
+- `PROJECT-CONTEXT.md` — Information about your project's structure, patterns, and conventions
+- `AGENTS.md` — AI agent instructions for working with your codebase
+
+!!! tip "Working in a Monorepo?"
+    Use `--path` to analyze specific projects:
+    ```
+    /baseline --path apps/frontend
+    ```
+    This generates `apps/frontend/PROJECT-CONTEXT.md` and `apps/frontend/AGENTS.md` for that specific project.
 
 ## 2. Start a Session
 

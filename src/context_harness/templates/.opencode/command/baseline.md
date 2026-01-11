@@ -7,7 +7,31 @@ Run baseline project analysis: $ARGUMENTS
 
 ## Instructions
 
-Execute the 5-phase baseline analysis pipeline to generate `PROJECT-CONTEXT.md` and `AGENTS.md`:
+Execute the 5-phase baseline analysis pipeline to generate `PROJECT-CONTEXT.md` and `AGENTS.md`.
+
+### Monorepo Support
+
+The baseline command supports **directory-scoped analysis** for monorepos. Use the `--path` flag to target a specific project within a monorepo:
+
+```bash
+# Analyze specific project in monorepo
+/baseline --path apps/frontend
+
+# Output files are placed in the target directory:
+# - apps/frontend/PROJECT-CONTEXT.md
+# - apps/frontend/AGENTS.md
+```
+
+**How it works**:
+- Discovery phase analyzes only the target directory
+- Output files are generated relative to the target directory
+- The generated AGENTS.md is **self-contained** (no inheritance from root)
+- All other flags work normally with `--path`
+
+**AGENTS.md Precedence** (per [agents.md](https://agents.md/) standard):
+> "For large monorepos, use nested AGENTS.md files for subprojects. Agents automatically read the nearest file in the directory tree."
+
+When editing a file, AI agents traverse UP the directory tree and use the CLOSEST `AGENTS.md` found. No merging occurs - the nearest file wins entirely.
 
 ### Phase Overview
 
@@ -87,6 +111,28 @@ Execute the 5-phase baseline analysis pipeline to generate `PROJECT-CONTEXT.md` 
 
 ### Execution Steps
 
+0. **Parse Arguments and Resolve Target Path**:
+   ```
+   IF --path flag provided:
+     target_dir = resolve(cwd + path_argument)
+     repo_root = find_git_root(target_dir) OR target_dir
+     IF not exists(target_dir) OR not is_directory(target_dir):
+       ERROR: "Path does not exist or is not a directory: {path}"
+     
+     Display:
+     📂 Target directory: {target_dir}
+        (Running baseline for subdirectory, not repository root)
+   ELSE:
+     target_dir = cwd
+     repo_root = cwd
+   
+   # Output paths:
+   # - {target_dir}/PROJECT-CONTEXT.md
+   # - {target_dir}/AGENTS.md
+   # - {target_dir}/.context-harness/baseline/
+   # - {repo_root}/.opencode/skill/ (skills always at repo root for sharing)
+   ```
+
 1. **Announce Start**:
    ```
    🔍 Starting baseline analysis...
@@ -96,14 +142,22 @@ Execute the 5-phase baseline analysis pipeline to generate `PROJECT-CONTEXT.md` 
    
    Estimated time: 2-5 minutes depending on project size
    ```
+   
+   If `--path` was provided, also show:
+   ```
+   📂 Target: {target_dir}
+      Outputs will be placed in this directory.
+   ```
 
 2. **Phase 1: Discovery**
    - Invoke `@baseline-discovery` subagent via Task tool
-   - Prompt: "Analyze this project and generate a comprehensive discovery report. Return JSON."
+   - Prompt: "Analyze the project at {target_dir} and generate a comprehensive discovery report. Return JSON."
+   - **Important**: Pass `target_directory: "{target_dir}"` to the subagent so it knows to analyze only that directory
    - Store result as `discovery_report`
    - Display progress:
      ```
      ✅ Phase 1 Complete: Discovery
+        - Target: {target_dir}
         - Languages: [detected languages]
         - Framework: [detected framework]
         - Files analyzed: [count]
@@ -300,8 +354,9 @@ Execute the 5-phase baseline analysis pipeline to generate `PROJECT-CONTEXT.md` 
    - Prompt: Include:
      - `project_context` (PROJECT-CONTEXT.md content)
      - `skills` array (metadata for each skill created)
-     - `discovery_report` JSON
+     - `discovery_report` JSON (includes `target_info` for monorepo context)
      - `existing_agents_md` (if file exists)
+   - **Note**: The `discovery_report.target_info` contains monorepo context (`is_subproject`, `repository_root`, etc.) that the agent uses to generate self-contained AGENTS.md for subdirectories
    - Request: "Generate AGENTS.md content following OpenCode specification."
    - Store result as `agents_md_content`
    
@@ -321,37 +376,48 @@ Execute the 5-phase baseline analysis pipeline to generate `PROJECT-CONTEXT.md` 
        },
        ...
      ],
-     discovery_report: {...},
+     discovery_report: {
+       // ... other discovery data ...
+       target_info: {
+         target_directory: "apps/frontend",
+         is_subproject: true,
+         repository_root: "/path/to/repo",
+         monorepo_type: "turborepo"
+       }
+     },
      existing_agents_md: null  // or existing content
    })
    ```
    
    **Step 5c: Write AGENTS.md**
    
-   - Write `agents_md_content` to `AGENTS.md` in project root
+   - Write `agents_md_content` to `AGENTS.md` in **target directory** (not necessarily project root)
+   - Path: `{target_dir}/AGENTS.md`
    - If file exists and `--agents-update` flag, merge with existing content
+   - **For nested directories**: The AGENTS.md is self-contained and does NOT inherit from root
    
    Display progress:
    ```
    ✅ Phase 5 Complete: AGENTS.md
-      - Generated: AGENTS.md
+      - Generated: {target_dir}/AGENTS.md
       - Skills referenced: [count]
       - Mode: [create/update]
    ```
 
 7. **Write Output**
-   - Write `project_context_content` to `PROJECT-CONTEXT.md` in project root (if not already written)
-   - Write `agents_md_content` to `AGENTS.md` in project root (if Phase 5 ran)
+   - Write `project_context_content` to `{target_dir}/PROJECT-CONTEXT.md` (if not already written)
+   - Write `agents_md_content` to `{target_dir}/AGENTS.md` (if Phase 5 ran)
    - Display completion:
      ```
      ✅ Baseline Analysis Complete!
      
      📄 Generated Files:
-        - PROJECT-CONTEXT.md (comprehensive project context)
-        - AGENTS.md (OpenCode rules for AI agents)
+        - {target_dir}/PROJECT-CONTEXT.md (comprehensive project context)
+        - {target_dir}/AGENTS.md (OpenCode rules for AI agents)
      
      Summary:
      - Project: [name]
+     - Target Directory: {target_dir}
      - Primary Language: [language]
      - Framework: [framework]
      - Questions Answered: [count]/[total]
@@ -440,6 +506,7 @@ Parse from $ARGUMENTS:
 
 | Flag | Effect |
 |------|--------|
+| `--path [dir]` | **Target directory for analysis** (default: current directory). Outputs are placed in this directory. |
 | `--discovery-only` | Run only Phase 1, output discovery report |
 | `--questions-only` | Run Phases 1-2, output questions (skip answers, skills, and agents) |
 | `--skip-skills` | Run Phases 1-3 and 5, skip skill extraction |
@@ -456,10 +523,19 @@ Parse from $ARGUMENTS:
 | `--skill-batch-size [N]` | Override automatic batch size for skills (max 5) |
 | `--skill-threshold [N]` | Override skill score threshold (default 6.0) |
 
+**Path Resolution**:
+- `--path` is resolved relative to the current working directory
+- If the path doesn't exist or is not a directory, an error is returned
+- Context outputs are relative to `--path`: `PROJECT-CONTEXT.md`, `AGENTS.md`, `.context-harness/baseline/`
+- Skills are always written to repo root `.opencode/skill/` for sharing across projects
+- Skill references in nested AGENTS.md use `@/.opencode/skill/...` (absolute from repo root)
+
 ### Example Invocations
 
 ```
 /baseline                           # Full analysis: PROJECT-CONTEXT.md + skills + AGENTS.md
+/baseline --path apps/frontend      # Analyze specific directory (monorepo support)
+/baseline --path packages/shared    # Analyze shared package in monorepo
 /baseline --verbose                 # Full analysis with detailed progress
 /baseline --discovery-only          # Just discovery phase
 /baseline --skip-skills             # Generate PROJECT-CONTEXT.md + AGENTS.md without skills
@@ -473,6 +549,10 @@ Parse from $ARGUMENTS:
 /baseline --batch-size 5            # Use smaller batches for questions
 /baseline --skill-batch-size 3      # Use smaller batches for skills
 /baseline --skill-threshold 5.0     # Lower threshold for skill creation
+
+# Combining flags with --path
+/baseline --path apps/api --skip-skills --verbose
+/baseline --path packages/ui --agents-only
 ```
 
 ### Legacy Sequential Mode
@@ -488,6 +568,38 @@ If `--sequential` flag is passed, use the original single-worker approach for AL
 ```
 
 ### Error Handling
+
+**Invalid --path Argument**:
+```
+❌ Invalid path: [path]
+   
+   The specified path does not exist or is not a directory.
+   
+   Usage:
+   /baseline --path <directory>
+   
+   Examples:
+   /baseline --path apps/frontend
+   /baseline --path packages/shared
+```
+
+**Path Outside Repository**:
+```
+⚠️ Warning: Path is outside the git repository
+   
+   The specified directory is outside the current git repository.
+   Some features may not work correctly (e.g., git-based analysis).
+   
+   Proceeding with limited context...
+```
+
+**Non-Git Project** (when `--path` is used without git):
+```
+ℹ️ Note: No git repository detected
+   
+   Skills will be placed in {target_dir}/.opencode/skill/ instead of repo root.
+   For monorepo support with shared skills, initialize a git repository.
+```
 
 **Phase 1 Failure**:
 ```
