@@ -57,8 +57,57 @@ You produce the complete AGENTS.md content but NEVER write files - Primary Agent
     }
   ],
   "existing_agents_md": null,  // or existing content for update mode
-  "discovery_report": {...}    // Optional: from Phase 1
+  "discovery_report": {...},   // Optional: from Phase 1
+  "target_info": {             // NEW: For monorepo/subdirectory support
+    "target_directory": "apps/frontend",  // or null for root
+    "is_subproject": true,
+    "repository_root": "/path/to/repo",
+    "monorepo_type": "turborepo"  // or null
+  }
 }
+```
+
+---
+
+## Monorepo / Subdirectory Support
+
+When `target_info.is_subproject` is `true`, the generated AGENTS.md must be **self-contained**:
+
+### Self-Contained Requirements
+
+1. **No inheritance**: The AGENTS.md should NOT reference or depend on a root AGENTS.md
+2. **Complete context**: Include all necessary project information for the subdirectory
+3. **Skill paths**: Use paths relative to the target directory OR absolute from repo root with `@/` prefix
+4. **Clear scope**: Make it clear this is for a specific project within a larger repo
+
+### Skill Path Resolution for Subdirectories
+
+When the AGENTS.md is in a subdirectory (e.g., `apps/frontend/AGENTS.md`):
+
+**Option 1: Absolute from repo root** (RECOMMENDED)
+```markdown
+**Reference**: @/.opencode/skill/react-patterns/SKILL.md
+```
+
+**Option 2: Relative from current directory**
+```markdown
+**Reference**: @../../.opencode/skill/react-patterns/SKILL.md
+```
+
+### Subdirectory Header Template
+
+For subdirectory AGENTS.md, include context about the monorepo:
+
+```markdown
+# {Project Name}
+
+> **Monorepo Project**: This is the `{target_directory}` project within the `{parent_project}` monorepo.
+
+{Brief project description}
+
+## Scope
+
+This AGENTS.md applies to files within `{target_directory}/`. For repository-wide context, see the root AGENTS.md (if it exists).
 ```
 
 ---
