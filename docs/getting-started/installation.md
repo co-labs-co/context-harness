@@ -24,7 +24,7 @@ uv tool install "git+https://github.com/co-labs-co/context-harness.git"
 Or run without installing:
 
 ```bash
-uvx --from "git+https://github.com/co-labs-co/context-harness.git" context-harness init
+uvx --from "git+https://github.com/co-labs-co/context-harness.git" ch init
 ```
 
 ## Initialize in Your Project
@@ -32,7 +32,7 @@ uvx --from "git+https://github.com/co-labs-co/context-harness.git" context-harne
 Navigate to your project directory and run:
 
 ```bash
-context-harness init
+ch init
 ```
 
 This creates:
@@ -44,19 +44,21 @@ This creates:
 ### Options
 
 ```bash
-context-harness init --force          # Overwrite existing files
-context-harness init --target ./path  # Install in specific directory
+ch init --force          # Overwrite existing files
+ch init --target ./path  # Install in specific directory
 ```
 
 ## Verify Installation
 
 ```bash
 # Check CLI is available
-context-harness --version
+ch --version
 
 # Verify GitHub CLI (optional)
 gh auth status
 ```
+
+> **Tip**: Both `ch` and `context-harness` commands work identically. Use `ch` for convenience.
 
 ## Next Steps
 

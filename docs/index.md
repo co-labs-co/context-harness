@@ -15,7 +15,7 @@ ContextHarness maintains a `SESSION.md` file for each feature/task you work on. 
 uv tool install "git+https://github.com/co-labs-co/context-harness.git"
 
 # Initialize in your project
-context-harness init
+ch init                    # or: context-harness init
 
 # Open OpenCode and start working
 /baseline              # Analyze project (first time)
