@@ -12,21 +12,21 @@ Skills are markdown files with YAML frontmatter that provide specialized knowled
 
 ```bash
 # List all skills from the registry
-context-harness skill list
+ch skill list
 
 # Filter by tag
-context-harness skill list --tags react
-context-harness skill list --tags python
+ch skill list --tags react
+ch skill list --tags python
 ```
 
 ### Install a Skill
 
 ```bash
 # Interactive picker (recommended)
-context-harness skill install
+ch skill install
 
 # Install specific skill
-context-harness skill install react-forms
+ch skill install react-forms
 ```
 
 **Interactive picker:**
@@ -41,13 +41,13 @@ context-harness skill install react-forms
 ### View Skill Details
 
 ```bash
-context-harness skill info react-forms
+ch skill info react-forms
 ```
 
 ### List Installed Skills
 
 ```bash
-context-harness skill list-local
+ch skill list-local
 ```
 
 ## Skill Structure
@@ -120,10 +120,10 @@ Use this skill when...
 
 ```bash
 # Interactive picker
-context-harness skill extract
+ch skill extract
 
 # Or specify skill name
-context-harness skill extract my-skill
+ch skill extract my-skill
 ```
 
 This generates a JSON file you can submit to a skills repository.
@@ -136,10 +136,10 @@ You can configure a custom skills repository for your organization.
 
 ```bash
 # Project-level (in opencode.json)
-context-harness config set skills-repo my-org/my-skills-repo
+ch config set skills-repo my-org/my-skills-repo
 
 # User-level (in ~/.context-harness/config.json)
-context-harness config set skills-repo my-org/my-skills-repo --user
+ch config set skills-repo my-org/my-skills-repo --user
 
 # Environment variable
 export CONTEXT_HARNESS_SKILLS_REPO=my-org/private-skills
