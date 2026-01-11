@@ -593,6 +593,14 @@ If `--sequential` flag is passed, use the original single-worker approach for AL
    Proceeding with limited context...
 ```
 
+**Non-Git Project** (when `--path` is used without git):
+```
+ℹ️ Note: No git repository detected
+   
+   Skills will be placed in {target_dir}/.opencode/skill/ instead of repo root.
+   For monorepo support with shared skills, initialize a git repository.
+```
+
 **Phase 1 Failure**:
 ```
 ❌ Discovery failed: [error]

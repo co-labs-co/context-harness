@@ -177,6 +177,11 @@ Analyzes a specific directory within a monorepo:
 !!! note "AGENTS.md Precedence"
     Per the [AGENTS.md standard](https://agents.md/), AI agents read the **nearest** AGENTS.md in the directory tree. Nested files completely override root files (no merging). This is why `/baseline --path` generates self-contained AGENTS.md files.
 
+!!! info "Git Repository Recommended"
+    The `--path` flag uses git to find the repository root for shared skill placement. Skills are written to `{repo_root}/.opencode/skill/` so they can be shared across all projects in a monorepo.
+    
+    **Without git**: Skills are placed in the target directory instead, and skill references may need manual adjustment.
+
 ### `/baseline --full`
 
 Forces complete regeneration, ignoring existing context:
