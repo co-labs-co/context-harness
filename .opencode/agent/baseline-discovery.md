@@ -51,6 +51,136 @@ target_directory: null             # Analyze from current working directory (def
 
 ---
 
+## File Exclusion (CRITICAL)
+
+Before scanning files, you MUST check for exclusion patterns from multiple sources. Failing to exclude these paths will result in duplicate analysis, inflated metrics, and slower scans.
+
+### Exclusion Sources (in priority order)
+
+1. **`.contextignore` file** - User-defined patterns (highest priority)
+2. **Git worktrees** - Linked worktrees inside the repository
+3. **Default patterns** - Built-in exclusions for common directories
+
+### .contextignore Support
+
+Check for a `.contextignore` file in the project root. This file uses `.gitignore` syntax:
+
+```bash
+# Check if .contextignore exists
+if [ -f ".contextignore" ]; then
+  echo "Found .contextignore - reading custom exclusion patterns"
+  cat .contextignore
+fi
+```
+
+Or use Python:
+```python
+from context_harness.services import IgnoreService
+from pathlib import Path
+
+service = IgnoreService()
+config = service.load_or_default(Path("."))
+
+# Check if a path should be ignored
+if service.should_ignore(Path("apps/legacy/"), config):
+    print("Skipping apps/legacy/ (excluded by .contextignore)")
+
+# Get all exclusion patterns for shell commands
+result = service.get_exclusion_patterns()
+# Returns patterns like: ['node_modules', '.venv', 'apps/legacy', etc.]
+```
+
+**Common .contextignore patterns**:
+```gitignore
+# Monorepo: exclude apps you're not working on
+apps/legacy-app/
+packages/deprecated/
+
+# Large generated directories
+.generated/
+codegen/
+
+# Test fixtures
+tests/fixtures/large/
+```
+
+### Git Worktree Exclusion
+
+Check for git worktrees inside the repository:
+
+```bash
+# Get worktree paths
+git worktree list --porcelain 2>/dev/null | grep "^worktree " | cut -d' ' -f2-
+```
+
+Or use Python:
+```python
+from context_harness.services import WorktreeService
+service = WorktreeService()
+result = service.get_exclusion_patterns()
+# Returns: ['76-worktree', 'feature-wt', etc.]
+```
+
+If a directory contains a `.git` **file** (not directory), it's a linked worktree:
+```bash
+for dir in */; do
+  if [ -f "$dir/.git" ]; then
+    echo "EXCLUDE: $dir (linked worktree)"
+  fi
+done
+```
+
+### Default Exclusion Patterns
+
+Even without a `.contextignore` file, these directories are ALWAYS excluded:
+
+| Category | Patterns |
+|----------|----------|
+| **Version Control** | `.git/`, `.svn/`, `.hg/` |
+| **Dependencies** | `node_modules/`, `vendor/`, `.venv/`, `venv/`, `__pycache__/` |
+| **Build Artifacts** | `dist/`, `build/`, `.next/`, `.nuxt/`, `out/`, `target/` |
+| **Cache** | `.pytest_cache/`, `.mypy_cache/`, `.ruff_cache/`, `.cache/` |
+| **IDE** | `.idea/`, `.vscode/` |
+| **Lock Files** | `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `poetry.lock`, `uv.lock` |
+
+### Combined Exclusion Example
+
+```bash
+# Build exclusion list from all sources
+EXCLUDES=""
+
+# 1. Add .contextignore patterns (if file exists)
+if [ -f ".contextignore" ]; then
+  while IFS= read -r pattern; do
+    # Skip comments and empty lines
+    [[ "$pattern" =~ ^#.*$ || -z "$pattern" ]] && continue
+    EXCLUDES="$EXCLUDES -not -path './$pattern*'"
+  done < .contextignore
+fi
+
+# 2. Add worktree exclusions
+for wt in $(git worktree list --porcelain 2>/dev/null | grep "^worktree " | cut -d' ' -f2-); do
+  EXCLUDES="$EXCLUDES -not -path './$wt/*'"
+done
+
+# 3. Add default exclusions
+EXCLUDES="$EXCLUDES -not -path './.git/*' -not -path './node_modules/*' -not -path './.venv/*'"
+
+# Use combined exclusions
+eval "find . -name '*.py' $EXCLUDES"
+```
+
+### Why Exclusion Matters
+
+Without proper exclusion:
+- **Duplicate files**: Same source files counted multiple times
+- **Inflated metrics**: File counts, line counts all wrong
+- **Confused analysis**: Which copy is "canonical"?
+- **Slower scans**: Processing 50%+ more files unnecessarily
+- **User frustration**: Analyzing directories they explicitly excluded
+
+---
+
 ## Core Responsibilities
 
 ### Discovery Analysis
