@@ -11,6 +11,7 @@ from context_harness import __version__
 from context_harness.interfaces.cli.init_cmd import init_command
 from context_harness.interfaces.cli.mcp_cmd import mcp_group
 from context_harness.interfaces.cli.skill_cmd import skill_group
+from context_harness.interfaces.cli.worktree_cmd import worktree_group
 
 
 @click.group()
@@ -28,6 +29,7 @@ def main() -> None:
 main.add_command(init_command, name="init")
 main.add_command(mcp_group, name="mcp")
 main.add_command(skill_group, name="skill")
+main.add_command(worktree_group, name="worktree")
 
 
 def cli_main() -> None:

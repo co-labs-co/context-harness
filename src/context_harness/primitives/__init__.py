@@ -72,6 +72,11 @@ from context_harness.primitives.voice import (
     VoiceSource,
     VoiceTranscription,
 )
+from context_harness.primitives.worktree import (
+    WorktreeInfo,
+    WorktreeList,
+    WorktreeSessionId,
+)
 
 __all__ = [
     # Result types
@@ -126,4 +131,8 @@ __all__ = [
     "VoiceSettings",
     "VoiceSource",
     "VoiceTranscription",
+    # Worktree types
+    "WorktreeInfo",
+    "WorktreeList",
+    "WorktreeSessionId",
 ]
