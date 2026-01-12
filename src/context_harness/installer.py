@@ -133,14 +133,16 @@ def install_framework(
                 )
             _copy_preserving_user_skills(opencode_source, opencode_target, force)
 
-        # Copy .contextignore (only if doesn't exist or force)
+        # Copy .contextignore (only if doesn't exist - never overwrite user's config)
         contextignore_source = templates_dir / ".contextignore"
         contextignore_target = target_path / ".contextignore"
         if contextignore_source.exists():
-            if force or not contextignore_target.exists():
+            if not contextignore_target.exists():
                 if not quiet:
                     console.print("[dim]Creating .contextignore ...[/dim]")
                 shutil.copy2(str(contextignore_source), str(contextignore_target))
+            elif not quiet:
+                console.print("[dim]Preserving existing .contextignore[/dim]")
 
         if not quiet:
             console.print()
