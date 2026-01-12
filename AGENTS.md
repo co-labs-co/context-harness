@@ -9,7 +9,7 @@ ContextHarness provides tools for AI agents to maintain context continuity acros
 Key capabilities:
 - **Session Management**: `/ctx`, `/contexts`, `/compact` commands for context preservation
 - **GitHub Integration**: `/issue`, `/pr` commands for repository operations
-- **Baseline Analysis**: `/baseline` command with 3-phase subagent pipeline for PROJECT-CONTEXT.md generation
+- **Baseline Analysis**: `/baseline` command with 5-phase subagent pipeline for PROJECT-CONTEXT.md generation
 
 ## Project Structure
 
