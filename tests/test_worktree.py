@@ -5,7 +5,6 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 from typing import List, Optional
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -17,10 +16,7 @@ from context_harness.primitives import (
     WorktreeList,
     WorktreeSessionId,
 )
-from context_harness.services.worktree_service import (
-    GitRunner,
-    WorktreeService,
-)
+from context_harness.services.worktree_service import WorktreeService
 
 
 class TestWorktreeInfo:
@@ -211,6 +207,23 @@ class TestWorktreeSessionId:
         assert session_id.worktree_name == "project-feature"
         assert session_id.session_name == "my-session"
         assert session_id.full_id == "project-feature--my-session"
+
+    def test_from_full_id_empty_string_raises(self):
+        """Test that empty string raises ValueError."""
+        with pytest.raises(ValueError, match="Invalid session ID format"):
+            WorktreeSessionId.from_full_id("")
+
+    def test_from_full_id_whitespace_only_raises(self):
+        """Test that whitespace-only string raises ValueError."""
+        with pytest.raises(ValueError, match="Invalid session ID format"):
+            WorktreeSessionId.from_full_id("   ")
+
+    def test_from_full_id_empty_parts_raises(self):
+        """Test that empty parts after split raise ValueError."""
+        with pytest.raises(ValueError, match="Invalid session ID format"):
+            WorktreeSessionId.from_full_id("--session")
+        with pytest.raises(ValueError, match="Invalid session ID format"):
+            WorktreeSessionId.from_full_id("worktree--")
 
 
 class MockGitRunner:

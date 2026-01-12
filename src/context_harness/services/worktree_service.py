@@ -334,24 +334,12 @@ class WorktreeService:
         else:
             # For main worktree, common_dir is inside the worktree's .git
             # e.g., /project/.git vs /project/.git/worktrees/feature
-            worktree_git = path / ".git"
-            is_main = (
-                (
-                    worktree_git.exists()
-                    and worktree_git.is_dir()
-                    and common_dir.resolve() == worktree_git.resolve()
-                )
-                or (
-                    # Handle case where worktree_git is a file pointing elsewhere
-                    worktree_git.exists()
-                    and worktree_git.is_file()
-                    and False  # Linked worktrees have .git as file
-                )
-                or (
-                    # Main worktree when common_dir is the .git folder
-                    common_dir.parent == path
-                )
-            )
+            # For bare repositories, there is only a single (main) worktree.
+            # For non-bare repositories, the main worktree is the one whose
+            # path is the parent of the common git directory.
+            # Linked worktrees share the same common_dir but have different
+            # worktree paths, so this condition will be False for them.
+            is_main = common_dir.parent == path
 
         return WorktreeInfo(
             path=path,

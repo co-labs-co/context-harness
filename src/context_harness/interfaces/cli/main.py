@@ -29,6 +29,10 @@ def main() -> None:
 main.add_command(init_command, name="init")
 main.add_command(mcp_group, name="mcp")
 main.add_command(skill_group, name="skill")
+# NOTE: The `worktree` command group is also registered in `context_harness.cli`,
+# which is the primary entry point configured in pyproject.toml. We register it
+# here as well to keep this alternate entry point feature-complete for any
+# direct or legacy uses of this module.
 main.add_command(worktree_group, name="worktree")
 
 

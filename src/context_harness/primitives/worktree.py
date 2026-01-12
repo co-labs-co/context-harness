@@ -169,12 +169,16 @@ class WorktreeSessionId:
         Raises:
             ValueError: If the ID format is invalid
         """
+        # Reject empty or whitespace-only IDs
+        if not full_id or not full_id.strip():
+            raise ValueError(f"Invalid session ID format: {full_id!r}")
+
         if "--" not in full_id:
             # No worktree prefix, assume "main"
             return cls(worktree_name="main", session_name=full_id)
 
         parts = full_id.split("--", 1)
-        if len(parts) != 2 or not parts[0] or not parts[1]:
+        if not parts[0] or not parts[1]:
             raise ValueError(f"Invalid session ID format: {full_id}")
 
         return cls(worktree_name=parts[0], session_name=parts[1])

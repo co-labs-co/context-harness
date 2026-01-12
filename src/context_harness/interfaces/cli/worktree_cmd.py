@@ -10,10 +10,7 @@ from typing import Optional
 
 import click
 
-from context_harness.primitives import (
-    Failure,
-    Success,
-)
+from context_harness.primitives import Failure
 from context_harness.services import WorktreeService
 from context_harness.interfaces.cli.formatters import (
     console,
@@ -75,7 +72,9 @@ def worktree_list(target: str) -> None:
     for wt in wt_list.worktrees:
         # Format branch name
         if wt.is_detached:
-            branch_display = f"[yellow](detached at {wt.head[:7]})[/yellow]"
+            branch_display = (
+                f"[yellow](detached at {wt.head[: min(7, len(wt.head))]})[/yellow]"
+            )
         elif wt.branch_name:
             branch_display = f"[cyan]{wt.branch_name}[/cyan]"
         else:
@@ -137,14 +136,16 @@ def worktree_current(target: str) -> None:
 
     # Branch
     if wt.is_detached:
-        console.print(f"  Branch: [yellow](detached at {wt.head[:7]})[/yellow]")
+        console.print(
+            f"  Branch: [yellow](detached at {wt.head[: min(7, len(wt.head))]})[/yellow]"
+        )
     elif wt.branch_name:
         console.print(f"  Branch: [cyan]{wt.branch_name}[/cyan]")
     else:
         console.print("  Branch: [dim]unknown[/dim]")
 
     # HEAD
-    console.print(f"  HEAD:   [dim]{wt.head[:12]}[/dim]")
+    console.print(f"  HEAD:   [dim]{wt.head[: min(12, len(wt.head))]}[/dim]")
 
     console.print()
 
