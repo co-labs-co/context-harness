@@ -24,6 +24,7 @@ def get_templates_dir() -> Path:
 
 # Required template files for a valid installation
 REQUIRED_TEMPLATE_FILES = [
+    ".contextignore",
     ".context-harness/README.md",
     ".context-harness/templates/session-template.md",
     ".opencode/agent/context-harness.md",
@@ -131,6 +132,15 @@ def install_framework(
                     "[dim]Updating .opencode/agent/, .opencode/command/, and .opencode/skill/ ...[/dim]"
                 )
             _copy_preserving_user_skills(opencode_source, opencode_target, force)
+
+        # Copy .contextignore (only if doesn't exist or force)
+        contextignore_source = templates_dir / ".contextignore"
+        contextignore_target = target_path / ".contextignore"
+        if contextignore_source.exists():
+            if force or not contextignore_target.exists():
+                if not quiet:
+                    console.print("[dim]Creating .contextignore ...[/dim]")
+                shutil.copy2(str(contextignore_source), str(contextignore_target))
 
         if not quiet:
             console.print()
@@ -258,6 +268,11 @@ def _print_created_files(target_path: Path) -> None:
     """Print a tree of created files."""
     console.print("[bold]Created files:[/bold]")
 
+    # Show .contextignore at root
+    contextignore = target_path / ".contextignore"
+    if contextignore.exists():
+        console.print("  📄 .contextignore")
+
     # List .context-harness files
     context_harness_dir = target_path / ".context-harness"
     if context_harness_dir.exists():
@@ -289,6 +304,7 @@ def verify_installation(target: str) -> bool:
     target_path = Path(target).resolve()
 
     expected_files = [
+        ".contextignore",
         ".context-harness/README.md",
         ".context-harness/templates/session-template.md",
         ".opencode/agent/context-harness.md",

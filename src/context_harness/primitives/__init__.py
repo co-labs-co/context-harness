@@ -77,6 +77,12 @@ from context_harness.primitives.worktree import (
     WorktreeList,
     WorktreeSessionId,
 )
+from context_harness.primitives.ignore import (
+    IgnoreConfig,
+    IgnoreMatch,
+    IgnorePattern,
+    IgnoreSource,
+)
 
 __all__ = [
     # Result types
@@ -135,4 +141,9 @@ __all__ = [
     "WorktreeInfo",
     "WorktreeList",
     "WorktreeSessionId",
+    # Ignore types
+    "IgnoreConfig",
+    "IgnoreMatch",
+    "IgnorePattern",
+    "IgnoreSource",
 ]
