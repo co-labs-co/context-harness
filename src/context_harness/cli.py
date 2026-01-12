@@ -50,6 +50,7 @@ from context_harness.completion import (
     complete_mcp_servers,
     interactive_mcp_picker,
 )
+from context_harness.interfaces.cli.worktree_cmd import worktree_group
 
 # Check if web dependencies are available
 try:
@@ -1219,6 +1220,19 @@ def serve(host: str, port: int, reload: bool, working_dir: str):
         reload=reload,
         log_level="info",
     )
+
+
+# =============================================================================
+# Register external command groups
+# =============================================================================
+
+# NOTE: The `worktree` command group is also registered in
+# `context_harness.interfaces.cli.main`. Both registrations are intentional to
+# ensure all CLI entry points expose the same commands. This module
+# (context_harness.cli) is the primary entry point defined in pyproject.toml.
+# The interfaces/cli/main.py entry point is maintained for backward compatibility
+# and may be deprecated in a future release.
+main.add_command(worktree_group, name="worktree")
 
 
 if __name__ == "__main__":

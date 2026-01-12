@@ -51,6 +51,60 @@ target_directory: null             # Analyze from current working directory (def
 
 ---
 
+## Git Worktree Exclusion
+
+**CRITICAL**: Before scanning files, check for git worktrees that are inside the repository. These MUST be excluded to avoid duplicate file analysis.
+
+### Detection Method
+
+Run this command to find internal worktrees:
+```bash
+# Get worktree paths
+git worktree list --porcelain 2>/dev/null | grep "^worktree " | cut -d' ' -f2-
+```
+
+Or use Python:
+```python
+from context_harness.services import WorktreeService
+service = WorktreeService()
+result = service.get_exclusion_patterns()
+# Returns: ['76-worktree', 'feature-wt', etc.]
+```
+
+### Fallback Detection
+
+If a directory contains a `.git` **file** (not directory), it's a linked worktree root:
+```bash
+# Check if .git is a file (worktree) vs directory (main repo)
+for dir in */; do
+  if [ -f "$dir/.git" ]; then
+    echo "EXCLUDE: $dir (linked worktree)"
+  fi
+done
+```
+
+### Exclusion Rules
+
+When using glob or grep, exclude these patterns:
+1. **Detected worktrees**: Any path returned by `get_exclusion_patterns()`
+2. **Common skip directories**: `.git`, `node_modules`, `.venv`, `__pycache__`, `dist`, `build`
+
+Example glob with exclusions:
+```bash
+# Instead of: find . -name "*.py"
+# Use: find . -name "*.py" -not -path "./76-worktree/*" -not -path "./.venv/*"
+```
+
+### Why This Matters
+
+Without exclusion, a worktree inside the repo causes:
+- **Duplicate files**: Same source files counted twice
+- **Inflated metrics**: File counts, line counts all wrong
+- **Confused analysis**: Which copy is "canonical"?
+- **Slower scans**: Processing 50%+ more files unnecessarily
+
+---
+
 ## Core Responsibilities
 
 ### Discovery Analysis

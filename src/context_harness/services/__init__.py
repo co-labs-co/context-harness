@@ -21,6 +21,10 @@ from context_harness.services.skill_service import (
     DefaultGitHubClient,
     SkillService,
 )
+from context_harness.services.worktree_service import (
+    SubprocessGitRunner,
+    WorktreeService,
+)
 
 __all__ = [
     # Config
@@ -34,4 +38,7 @@ __all__ = [
     # Skill
     "DefaultGitHubClient",
     "SkillService",
+    # Worktree
+    "SubprocessGitRunner",
+    "WorktreeService",
 ]

@@ -52,6 +52,13 @@ class ErrorCode(Enum):
     MCP_SERVER_NOT_FOUND = "mcp_server_not_found"
     MCP_CONFIG_ERROR = "mcp_config_error"
 
+    # Worktree errors
+    NOT_A_GIT_REPO = "not_a_git_repo"
+    WORKTREE_NOT_FOUND = "worktree_not_found"
+    WORKTREE_BRANCH_IN_USE = "worktree_branch_in_use"
+    WORKTREE_DIRTY = "worktree_dirty"
+    GIT_COMMAND_FAILED = "git_command_failed"
+
 
 @dataclass(frozen=True)
 class Success(Generic[T]):
