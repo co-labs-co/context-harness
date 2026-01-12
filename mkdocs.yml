@@ -68,6 +68,7 @@ nav:
       - Commands: user-guide/commands.md
       - Sessions: user-guide/sessions.md
       - Skills: user-guide/skills.md
+      - Ignore Patterns: user-guide/ignore-patterns.md
   - Reference:
       - CLI: reference/cli.md
       - Architecture: reference/architecture.md
