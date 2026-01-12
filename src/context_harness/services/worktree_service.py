@@ -524,3 +524,153 @@ class WorktreeService:
                 code=ErrorCode.GIT_COMMAND_FAILED,
                 details={"error": e.stderr or e.stdout},
             )
+
+    def get_internal_worktrees(
+        self, from_path: Optional[Path] = None
+    ) -> Result[List[Path]]:
+        """Get linked worktrees that are inside the main worktree.
+
+        These worktrees should be excluded from scans to avoid duplicate content.
+        For example, if main repo is at /project and a worktree is at
+        /project/feature-branch, that worktree path should be excluded.
+
+        Args:
+            from_path: Path within existing repo. Uses CWD if None.
+
+        Returns:
+            Result containing list of relative paths to internal worktrees
+
+        Example:
+            >>> service = WorktreeService()
+            >>> result = service.get_internal_worktrees()
+            >>> if isinstance(result, Success):
+            ...     for path in result.value:
+            ...         print(f"Exclude: {path}")
+            Exclude: 76-worktree
+            Exclude: feature-branch-wt
+        """
+        result = self.list_all(from_path)
+        if isinstance(result, Failure):
+            return result
+
+        worktree_list = result.value
+        main_worktree = worktree_list.main_worktree
+
+        if main_worktree is None:
+            return Success(value=[])
+
+        main_path = main_worktree.path.resolve()
+        internal_worktrees: List[Path] = []
+
+        for wt in worktree_list.linked_worktrees:
+            wt_path = wt.path.resolve()
+
+            # Check if this worktree is inside the main worktree
+            try:
+                relative = wt_path.relative_to(main_path)
+                internal_worktrees.append(relative)
+            except ValueError:
+                # Worktree is outside main repo, no exclusion needed
+                pass
+
+        return Success(value=internal_worktrees)
+
+    def get_exclusion_patterns(
+        self, from_path: Optional[Path] = None
+    ) -> Result[List[str]]:
+        """Get glob exclusion patterns for internal worktrees.
+
+        Returns patterns suitable for excluding worktrees from file scans.
+        Can be used with glob, grep, or find commands.
+
+        Args:
+            from_path: Path within existing repo. Uses CWD if None.
+
+        Returns:
+            Result containing list of exclusion patterns
+
+        Example:
+            >>> service = WorktreeService()
+            >>> result = service.get_exclusion_patterns()
+            >>> if isinstance(result, Success):
+            ...     for pattern in result.value:
+            ...         print(f"--exclude={pattern}")
+            --exclude=76-worktree
+            --exclude=feature-branch-wt
+        """
+        result = self.get_internal_worktrees(from_path)
+        if isinstance(result, Failure):
+            return result
+
+        # Convert paths to string patterns
+        patterns = [str(p) for p in result.value]
+        return Success(value=patterns)
+
+    @staticmethod
+    def is_worktree_root(path: Path) -> bool:
+        """Check if a path is a git worktree root (not the main repo).
+
+        Linked worktrees have a `.git` FILE (not directory) that points
+        to the main repo's .git/worktrees/<name> directory.
+        The main repo has a `.git` DIRECTORY.
+
+        This is useful for detecting worktrees without running git commands,
+        e.g., during directory traversal.
+
+        Args:
+            path: Path to check
+
+        Returns:
+            True if path is a linked worktree root (has .git file)
+
+        Example:
+            >>> WorktreeService.is_worktree_root(Path("/project"))
+            False  # Main repo, .git is a directory
+            >>> WorktreeService.is_worktree_root(Path("/project/feature-wt"))
+            True   # Linked worktree, .git is a file
+        """
+        git_path = path / ".git"
+        return git_path.exists() and git_path.is_file()
+
+    @staticmethod
+    def should_skip_directory(path: Path) -> bool:
+        """Check if a directory should be skipped during traversal.
+
+        Combines worktree detection with common skip patterns.
+        Use this during directory walks to avoid scanning into
+        worktrees, which would cause duplicate file discovery.
+
+        Args:
+            path: Directory path to check
+
+        Returns:
+            True if directory should be skipped
+
+        Example:
+            >>> for item in root.iterdir():
+            ...     if item.is_dir() and WorktreeService.should_skip_directory(item):
+            ...         continue  # Skip this directory
+            ...     # Process item
+        """
+        # Skip if it's a linked worktree root
+        if WorktreeService.is_worktree_root(path):
+            return True
+
+        # Common directories that should always be skipped
+        skip_names = {
+            ".git",
+            "node_modules",
+            ".venv",
+            "venv",
+            "__pycache__",
+            ".pytest_cache",
+            ".mypy_cache",
+            ".ruff_cache",
+            "dist",
+            "build",
+            ".next",
+            ".nuxt",
+            "target",  # Rust/Java build output
+        }
+
+        return path.name in skip_names

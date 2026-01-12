@@ -88,6 +88,12 @@ You receive exactly this structure:
 
 ### Step 2: Search Thoroughly
 
+**IMPORTANT**: Before searching, check for git worktrees inside the repository. Exclude them to avoid duplicate results:
+```bash
+# Find internal worktrees to exclude
+for dir in */; do [ -f "$dir/.git" ] && echo "SKIP: $dir"; done
+```
+
 ```
 1. Start with expected evidence locations
 2. Expand search based on what you find:
@@ -97,6 +103,7 @@ You receive exactly this structure:
    - Search for relevant keywords
 3. Don't stop at first evidence - look for completeness
 4. Search for contradictory evidence too
+5. EXCLUDE: Directories with .git FILE (linked worktrees)
 ```
 
 ### Step 3: Analyze and Formulate Answer

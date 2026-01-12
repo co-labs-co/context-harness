@@ -551,3 +551,178 @@ detached
         result = service.prune()
 
         assert isinstance(result, Success)
+
+    def test_get_internal_worktrees_finds_nested(self, service, mock_runner):
+        """Test finding worktrees that are inside the main repo."""
+        mock_runner.set_response(("rev-parse", "--git-dir"), stdout=".git\n")
+        mock_runner.set_response(
+            ("rev-parse", "--git-common-dir"), stdout="/project/.git\n"
+        )
+        # Main worktree at /project, linked worktree inside at /project/feature-wt
+        mock_runner.set_response(
+            ("worktree", "list", "--porcelain"),
+            stdout="""worktree /project
+HEAD abc123
+branch refs/heads/main
+
+worktree /project/feature-wt
+HEAD def456
+branch refs/heads/feature
+
+worktree /other/external-wt
+HEAD ghi789
+branch refs/heads/other
+
+""",
+        )
+
+        result = service.get_internal_worktrees()
+
+        assert isinstance(result, Success)
+        # Only the nested worktree should be included
+        assert len(result.value) == 1
+        assert result.value[0] == Path("feature-wt")
+
+    def test_get_internal_worktrees_none_nested(self, service, mock_runner):
+        """Test when no worktrees are inside the main repo."""
+        mock_runner.set_response(("rev-parse", "--git-dir"), stdout=".git\n")
+        mock_runner.set_response(
+            ("rev-parse", "--git-common-dir"), stdout="/project/.git\n"
+        )
+        mock_runner.set_response(
+            ("worktree", "list", "--porcelain"),
+            stdout="""worktree /project
+HEAD abc123
+branch refs/heads/main
+
+worktree /other/feature-wt
+HEAD def456
+branch refs/heads/feature
+
+""",
+        )
+
+        result = service.get_internal_worktrees()
+
+        assert isinstance(result, Success)
+        assert len(result.value) == 0
+
+    def test_get_internal_worktrees_multiple_nested(self, service, mock_runner):
+        """Test finding multiple nested worktrees."""
+        mock_runner.set_response(("rev-parse", "--git-dir"), stdout=".git\n")
+        mock_runner.set_response(
+            ("rev-parse", "--git-common-dir"), stdout="/project/.git\n"
+        )
+        mock_runner.set_response(
+            ("worktree", "list", "--porcelain"),
+            stdout="""worktree /project
+HEAD abc123
+branch refs/heads/main
+
+worktree /project/wt-feature-a
+HEAD def456
+branch refs/heads/feature-a
+
+worktree /project/worktrees/feature-b
+HEAD ghi789
+branch refs/heads/feature-b
+
+worktree /external/other
+HEAD jkl012
+branch refs/heads/other
+
+""",
+        )
+
+        result = service.get_internal_worktrees()
+
+        assert isinstance(result, Success)
+        assert len(result.value) == 2
+        assert Path("wt-feature-a") in result.value
+        assert Path("worktrees/feature-b") in result.value
+
+    def test_get_exclusion_patterns(self, service, mock_runner):
+        """Test getting exclusion patterns for internal worktrees."""
+        mock_runner.set_response(("rev-parse", "--git-dir"), stdout=".git\n")
+        mock_runner.set_response(
+            ("rev-parse", "--git-common-dir"), stdout="/project/.git\n"
+        )
+        mock_runner.set_response(
+            ("worktree", "list", "--porcelain"),
+            stdout="""worktree /project
+HEAD abc123
+branch refs/heads/main
+
+worktree /project/76-worktree
+HEAD def456
+branch refs/heads/76-worktree
+
+""",
+        )
+
+        result = service.get_exclusion_patterns()
+
+        assert isinstance(result, Success)
+        assert "76-worktree" in result.value
+
+
+class TestWorktreeStaticMethods:
+    """Tests for WorktreeService static methods."""
+
+    def test_is_worktree_root_with_git_file(self, tmp_path):
+        """Test detecting worktree root by .git file."""
+        # Create a fake worktree with .git file
+        worktree_dir = tmp_path / "feature-wt"
+        worktree_dir.mkdir()
+        git_file = worktree_dir / ".git"
+        git_file.write_text("gitdir: /project/.git/worktrees/feature-wt")
+
+        assert WorktreeService.is_worktree_root(worktree_dir) is True
+
+    def test_is_worktree_root_with_git_directory(self, tmp_path):
+        """Test that main repo with .git directory is not detected as worktree."""
+        # Create a fake main repo with .git directory
+        main_repo = tmp_path / "project"
+        main_repo.mkdir()
+        git_dir = main_repo / ".git"
+        git_dir.mkdir()
+
+        assert WorktreeService.is_worktree_root(main_repo) is False
+
+    def test_is_worktree_root_no_git(self, tmp_path):
+        """Test directory without .git is not a worktree."""
+        plain_dir = tmp_path / "plain"
+        plain_dir.mkdir()
+
+        assert WorktreeService.is_worktree_root(plain_dir) is False
+
+    def test_should_skip_directory_worktree(self, tmp_path):
+        """Test that worktree directories are skipped."""
+        # Create a fake worktree
+        worktree_dir = tmp_path / "feature-wt"
+        worktree_dir.mkdir()
+        git_file = worktree_dir / ".git"
+        git_file.write_text("gitdir: /project/.git/worktrees/feature-wt")
+
+        assert WorktreeService.should_skip_directory(worktree_dir) is True
+
+    def test_should_skip_directory_node_modules(self, tmp_path):
+        """Test that node_modules is skipped."""
+        node_modules = tmp_path / "node_modules"
+        node_modules.mkdir()
+
+        assert WorktreeService.should_skip_directory(node_modules) is True
+
+    def test_should_skip_directory_venv(self, tmp_path):
+        """Test that .venv is skipped."""
+        venv = tmp_path / ".venv"
+        venv.mkdir()
+
+        assert WorktreeService.should_skip_directory(venv) is True
+
+    def test_should_skip_directory_normal(self, tmp_path):
+        """Test that normal directories are not skipped."""
+        src = tmp_path / "src"
+        src.mkdir()
+
+        assert WorktreeService.should_skip_directory(src) is False
