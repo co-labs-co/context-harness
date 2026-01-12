@@ -228,7 +228,8 @@ def worktree_add(
     console.print()
     print_info("Next steps:")
     console.print(f"  1. [cyan]cd {wt.path}[/cyan]")
-    console.print(f"  2. Start a session: [cyan]/ctx my-session[/cyan]")
+    console.print(f"  2. Open in your editor and start OpenCode")
+    console.print(f"  3. Start a session in OpenCode: [cyan]/ctx my-session[/cyan]")
     console.print()
 
 
