@@ -189,7 +189,7 @@ class TestSkillClient:
     def test_skills_dir_property(self) -> None:
         """Test skills_dir property."""
         with TemporaryDirectory() as tmpdir:
-            working_dir = Path(tmpdir)
+            working_dir = Path(tmpdir).resolve()
             client = Client(working_dir=working_dir)
             expected = working_dir / ".opencode" / "skill"
             assert client.skills.skills_dir == expected

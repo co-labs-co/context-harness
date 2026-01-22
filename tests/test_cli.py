@@ -652,10 +652,10 @@ class TestMCPCommand:
         assert config["mcp"]["context7"]["headers"]["CONTEXT7_API_KEY"] == "new-key"
 
     def test_mcp_list_empty(self, runner, tmp_path):
-        """Test that mcp list handles missing opencode.json."""
+        """Test that mcp list handles missing config files."""
         result = runner.invoke(main, ["mcp", "list", "--target", str(tmp_path)])
         assert result.exit_code == 0
-        assert "No opencode.json found" in result.output
+        assert "No MCP servers configured" in result.output
 
     def test_mcp_list_shows_configured_servers(self, runner, tmp_path):
         """Test that mcp list shows configured servers."""
