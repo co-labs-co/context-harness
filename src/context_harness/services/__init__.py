@@ -25,6 +25,11 @@ from context_harness.services.worktree_service import (
     SubprocessGitRunner,
     WorktreeService,
 )
+from context_harness.services.ignore_service import (
+    IgnoreService,
+    PathSpecMatcher,
+    FnmatchMatcher,
+)
 
 __all__ = [
     # Config
@@ -41,4 +46,8 @@ __all__ = [
     # Worktree
     "SubprocessGitRunner",
     "WorktreeService",
+    # Ignore
+    "IgnoreService",
+    "PathSpecMatcher",
+    "FnmatchMatcher",
 ]

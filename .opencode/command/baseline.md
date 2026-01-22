@@ -9,6 +9,22 @@ Run baseline project analysis: $ARGUMENTS
 
 Execute the 5-phase baseline analysis pipeline to generate `PROJECT-CONTEXT.md` and `AGENTS.md`.
 
+### .contextignore Support
+
+The baseline command respects `.contextignore` patterns. Files and directories matching these patterns are **excluded from analysis**:
+
+```gitignore
+# Example .contextignore - exclude from baseline analysis
+apps/legacy-app/          # Skip legacy code
+packages/deprecated/      # Skip deprecated packages
+.generated/               # Skip generated code
+tests/fixtures/large/     # Skip large test data
+```
+
+This helps focus the analysis on relevant code and speeds up the baseline process for large codebases.
+
+**Note**: Default patterns (like `node_modules/`, `.venv/`, `dist/`) are always excluded even without a `.contextignore` file.
+
 ### Monorepo Support
 
 The baseline command supports **directory-scoped analysis** for monorepos. Use the `--path` flag to target a specific project within a monorepo:

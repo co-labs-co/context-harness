@@ -28,6 +28,7 @@ ch init --target ./path    # Install in specific directory
 
 **What it creates:**
 
+- `.contextignore` — Ignore patterns for context scanning ([docs](../user-guide/ignore-patterns.md))
 - `.context-harness/` — Session storage and templates
 - `.opencode/agent/` — Agent definitions
 - `.opencode/command/` — Slash commands

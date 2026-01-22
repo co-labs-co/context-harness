@@ -1,0 +1,5 @@
+# ContextHarness Ignore File
+# Syntax follows .gitignore patterns
+# Default patterns (node_modules, __pycache__, etc.) are applied automatically
+
+# Add project-specific patterns below:

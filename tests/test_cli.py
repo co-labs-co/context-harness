@@ -225,6 +225,40 @@ class TestInitCommand:
         assert "Old skill content" not in content
         assert "skill-creator" in content.lower() or "Skill Creator" in content
 
+    def test_init_creates_contextignore(self, runner, tmp_path):
+        """Test that init creates .contextignore file."""
+        result = runner.invoke(main, ["init", "--target", str(tmp_path)])
+        assert result.exit_code == 0
+
+        contextignore = tmp_path / ".contextignore"
+        assert contextignore.is_file()
+
+    def test_init_force_preserves_contextignore(self, runner, tmp_path):
+        """Test that init --force preserves existing .contextignore file."""
+        # First init
+        result = runner.invoke(main, ["init", "--target", str(tmp_path)])
+        assert result.exit_code == 0
+
+        # Customize .contextignore with user patterns
+        contextignore = tmp_path / ".contextignore"
+        custom_content = """# My custom ignore patterns
+apps/legacy-app/
+packages/deprecated/
+*.generated.ts
+"""
+        contextignore.write_text(custom_content, encoding="utf-8")
+
+        # Run init --force (should preserve .contextignore)
+        result = runner.invoke(main, ["init", "--force", "--target", str(tmp_path)])
+        assert result.exit_code == 0
+
+        # Verify .contextignore was preserved
+        assert contextignore.is_file()
+        content = contextignore.read_text(encoding="utf-8")
+        assert "My custom ignore patterns" in content
+        assert "apps/legacy-app/" in content
+        assert "packages/deprecated/" in content
+
     def test_init_command_files_have_correct_frontmatter(self, runner, tmp_path):
         """Test that command files have correct frontmatter for OpenCode."""
         result = runner.invoke(main, ["init", "--target", str(tmp_path)])
