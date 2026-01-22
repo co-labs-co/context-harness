@@ -1,0 +1,41 @@
+# Project Memory
+
+This file is read by Claude Code to understand project context and conventions.
+
+## ContextHarness Framework
+
+This project uses the ContextHarness framework for AI-assisted development with context preservation.
+
+### Available Commands
+
+| Command | Description |
+|---------|-------------|
+| `/ctx <name>` | Switch to or create a session |
+| `/contexts` | List all available sessions |
+| `/compact` | Save context to SESSION.md |
+| `/baseline` | Generate PROJECT-CONTEXT.md |
+| `/issue` | GitHub issue management |
+| `/pr` | Create pull request |
+
+### Session Management
+
+Sessions are stored in `.context-harness/sessions/<name>/SESSION.md`.
+
+Context is automatically compacted every 2nd user interaction to preserve continuity.
+
+### Subagents
+
+The framework uses specialized subagents for research and guidance:
+- `@research-subagent` - API lookups, best practices
+- `@docs-subagent` - Documentation research
+- `@compaction-guide` - Context preservation advice
+- `@baseline-*` - Project analysis phases
+
+### Key Directories
+
+- `.context-harness/` - Session data and project context
+- `.claude/` - Claude Code configuration (agents, commands, skills)
+
+---
+
+_Add project-specific notes below this line_

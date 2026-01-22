@@ -42,6 +42,7 @@ class TestInitCommand:
         assert "Initialize ContextHarness" in result.output
         assert "--force" in result.output
         assert "--target" in result.output
+        assert "--tool" in result.output
 
     def test_init_creates_directories(self, runner, tmp_path):
         """Test that init creates the expected directories."""
@@ -51,6 +52,10 @@ class TestInitCommand:
         assert (tmp_path / ".opencode").is_dir()
         assert (tmp_path / ".opencode" / "agent").is_dir()
         assert (tmp_path / ".opencode" / "command").is_dir()
+        # Claude Code directories should also be created by default
+        assert (tmp_path / ".claude").is_dir()
+        assert (tmp_path / ".claude" / "agents").is_dir()
+        assert (tmp_path / ".claude" / "commands").is_dir()
 
     def test_init_creates_files(self, runner, tmp_path):
         """Test that init creates the expected files."""
@@ -299,6 +304,221 @@ packages/deprecated/
         )
         assert "description:" in pr_content
         assert "agent: context-harness" in pr_content
+
+
+class TestInitToolFlag:
+    """Tests for the --tool flag on init command."""
+
+    def test_init_tool_opencode_only(self, runner, tmp_path):
+        """Test that --tool opencode creates only OpenCode directories."""
+        result = runner.invoke(
+            main, ["init", "--target", str(tmp_path), "--tool", "opencode"]
+        )
+        assert result.exit_code == 0
+
+        # OpenCode directories should exist
+        assert (tmp_path / ".context-harness").is_dir()
+        assert (tmp_path / ".opencode").is_dir()
+        assert (tmp_path / ".opencode" / "agent").is_dir()
+        assert (tmp_path / ".opencode" / "command").is_dir()
+        assert (tmp_path / ".opencode" / "skill").is_dir()
+
+        # Claude Code directories should NOT exist
+        assert not (tmp_path / ".claude").exists()
+        assert not (tmp_path / ".mcp.json").exists()
+        assert not (tmp_path / "CLAUDE.md").exists()
+
+    def test_init_tool_claude_code_only(self, runner, tmp_path):
+        """Test that --tool claude-code creates only Claude Code directories."""
+        result = runner.invoke(
+            main, ["init", "--target", str(tmp_path), "--tool", "claude-code"]
+        )
+        assert result.exit_code == 0
+
+        # Claude Code directories should exist
+        assert (tmp_path / ".context-harness").is_dir()
+        assert (tmp_path / ".claude").is_dir()
+        assert (tmp_path / ".claude" / "agents").is_dir()
+        assert (tmp_path / ".claude" / "commands").is_dir()
+        assert (tmp_path / ".claude" / "skills").is_dir()
+        assert (tmp_path / ".mcp.json").is_file()
+        assert (tmp_path / "CLAUDE.md").is_file()
+
+        # OpenCode directories should NOT exist
+        assert not (tmp_path / ".opencode").exists()
+        assert not (tmp_path / "AGENTS.md").exists()
+        assert not (tmp_path / "opencode.json").exists()
+
+    def test_init_tool_both(self, runner, tmp_path):
+        """Test that --tool both creates both OpenCode and Claude Code directories."""
+        result = runner.invoke(
+            main, ["init", "--target", str(tmp_path), "--tool", "both"]
+        )
+        assert result.exit_code == 0
+
+        # OpenCode directories should exist
+        assert (tmp_path / ".opencode").is_dir()
+        assert (tmp_path / ".opencode" / "agent").is_dir()
+
+        # Claude Code directories should exist
+        assert (tmp_path / ".claude").is_dir()
+        assert (tmp_path / ".claude" / "agents").is_dir()
+        assert (tmp_path / ".mcp.json").is_file()
+        assert (tmp_path / "CLAUDE.md").is_file()
+
+        # Shared directory should exist
+        assert (tmp_path / ".context-harness").is_dir()
+
+    def test_init_default_is_both(self, runner, tmp_path):
+        """Test that init without --tool defaults to both."""
+        result = runner.invoke(main, ["init", "--target", str(tmp_path)])
+        assert result.exit_code == 0
+
+        # Both tools should be installed
+        assert (tmp_path / ".opencode").is_dir()
+        assert (tmp_path / ".claude").is_dir()
+        assert (tmp_path / "CLAUDE.md").is_file()
+        assert (tmp_path / ".mcp.json").is_file()
+
+    def test_init_force_upgrades_opencode_to_both(self, runner, tmp_path):
+        """Test that --force on OpenCode-only install adds Claude Code."""
+        # First install OpenCode only
+        result = runner.invoke(
+            main, ["init", "--target", str(tmp_path), "--tool", "opencode"]
+        )
+        assert result.exit_code == 0
+        assert (tmp_path / ".opencode").is_dir()
+        assert not (tmp_path / ".claude").exists()
+
+        # Force reinstall without --tool (should upgrade to both)
+        result = runner.invoke(main, ["init", "--force", "--target", str(tmp_path)])
+        assert result.exit_code == 0
+
+        # Now both should exist
+        assert (tmp_path / ".opencode").is_dir()
+        assert (tmp_path / ".claude").is_dir()
+
+    def test_init_force_upgrades_claude_to_both(self, runner, tmp_path):
+        """Test that --force on Claude-only install adds OpenCode."""
+        # First install Claude Code only
+        result = runner.invoke(
+            main, ["init", "--target", str(tmp_path), "--tool", "claude-code"]
+        )
+        assert result.exit_code == 0
+        assert (tmp_path / ".claude").is_dir()
+        assert not (tmp_path / ".opencode").exists()
+
+        # Force reinstall without --tool (should upgrade to both)
+        result = runner.invoke(main, ["init", "--force", "--target", str(tmp_path)])
+        assert result.exit_code == 0
+
+        # Now both should exist
+        assert (tmp_path / ".opencode").is_dir()
+        assert (tmp_path / ".claude").is_dir()
+
+    def test_init_force_with_specific_tool(self, runner, tmp_path):
+        """Test that --force with --tool only updates that tool."""
+        # First install both
+        result = runner.invoke(main, ["init", "--target", str(tmp_path)])
+        assert result.exit_code == 0
+
+        # Modify an OpenCode agent file
+        agent_file = tmp_path / ".opencode" / "agent" / "context-harness.md"
+        agent_file.write_text("# Modified OpenCode", encoding="utf-8")
+
+        # Modify a Claude Code agent file
+        claude_agent = tmp_path / ".claude" / "agents" / "context-harness.md"
+        claude_agent.write_text("# Modified Claude", encoding="utf-8")
+
+        # Force reinstall Claude Code only
+        result = runner.invoke(
+            main,
+            ["init", "--force", "--target", str(tmp_path), "--tool", "claude-code"],
+        )
+        assert result.exit_code == 0
+
+        # OpenCode file should still be modified
+        assert agent_file.read_text(encoding="utf-8") == "# Modified OpenCode"
+
+        # Claude Code file should be updated
+        claude_content = claude_agent.read_text(encoding="utf-8")
+        assert "Modified Claude" not in claude_content
+
+    def test_init_force_preserves_claude_user_skills(self, runner, tmp_path):
+        """Test that --force preserves user-created skills in .claude/skills/."""
+        # First install both
+        result = runner.invoke(main, ["init", "--target", str(tmp_path)])
+        assert result.exit_code == 0
+
+        # Create a user skill in Claude Code
+        user_skill_dir = tmp_path / ".claude" / "skills" / "my-claude-skill"
+        user_skill_dir.mkdir(parents=True)
+        skill_file = user_skill_dir / "SKILL.md"
+        skill_file.write_text(
+            "---\nname: my-claude-skill\ndescription: My custom skill\n---\n# My Claude Skill\n",
+            encoding="utf-8",
+        )
+
+        # Run init --force
+        result = runner.invoke(main, ["init", "--force", "--target", str(tmp_path)])
+        assert result.exit_code == 0
+
+        # Verify user skill was preserved
+        assert user_skill_dir.is_dir()
+        assert skill_file.is_file()
+        content = skill_file.read_text(encoding="utf-8")
+        assert "my-claude-skill" in content
+
+    def test_init_claude_command_files_have_correct_frontmatter(self, runner, tmp_path):
+        """Test that Claude Code command files have correct frontmatter."""
+        result = runner.invoke(
+            main, ["init", "--target", str(tmp_path), "--tool", "claude-code"]
+        )
+        assert result.exit_code == 0
+
+        # Check ctx.md
+        ctx_content = (tmp_path / ".claude" / "commands" / "ctx.md").read_text(
+            encoding="utf-8"
+        )
+        assert "description:" in ctx_content
+        assert "allowed-tools:" in ctx_content
+
+        # Check compact.md
+        compact_content = (tmp_path / ".claude" / "commands" / "compact.md").read_text(
+            encoding="utf-8"
+        )
+        assert "description:" in compact_content
+
+        # Check contexts.md
+        contexts_content = (
+            tmp_path / ".claude" / "commands" / "contexts.md"
+        ).read_text(encoding="utf-8")
+        assert "description:" in contexts_content
+
+    def test_init_claude_mcp_json_structure(self, runner, tmp_path):
+        """Test that .mcp.json has correct structure for Claude Code."""
+        result = runner.invoke(
+            main, ["init", "--target", str(tmp_path), "--tool", "claude-code"]
+        )
+        assert result.exit_code == 0
+
+        mcp_path = tmp_path / ".mcp.json"
+        assert mcp_path.is_file()
+
+        config = json.loads(mcp_path.read_text(encoding="utf-8"))
+        assert "mcpServers" in config
+        assert "context7" in config["mcpServers"]
+        assert config["mcpServers"]["context7"]["type"] == "http"
+        assert "context7.com" in config["mcpServers"]["context7"]["url"]
+
+    def test_init_invalid_tool_rejected(self, runner, tmp_path):
+        """Test that invalid --tool values are rejected."""
+        result = runner.invoke(
+            main, ["init", "--target", str(tmp_path), "--tool", "invalid"]
+        )
+        assert result.exit_code != 0
+        # Click should reject the invalid choice
+        assert "Invalid value" in result.output or "invalid" in result.output.lower()
 
 
 class TestMCPCommand:
