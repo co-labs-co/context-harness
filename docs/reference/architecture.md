@@ -1,6 +1,6 @@
 # Architecture
 
-ContextHarness uses a single-executor model with advisory subagents.
+ContextHarness uses a single-executor model with advisory subagents. It supports both OpenCode and Claude Code with tool-specific configurations.
 
 ## System Overview
 
@@ -36,34 +36,122 @@ ContextHarness uses a single-executor model with advisory subagents.
 2. **Advisory Subagents**: Subagents provide guidance but never execute
 3. **Persistent Context**: SESSION.md maintains state across conversations
 4. **Incremental Compaction**: Context is saved every 2nd user interaction
+5. **Dual-Tool Support**: Works with both OpenCode and Claude Code simultaneously
 
 ## Directory Structure
 
-After installation:
+After installation, your project will have tool-specific directories:
 
-```
-your-project/
-├── .context-harness/
-│   ├── sessions/                  # Named session directories
-│   │   └── {session-name}/
-│   │       └── SESSION.md
-│   ├── templates/
-│   │   └── session-template.md    # Template for new sessions
-│   └── README.md                  # Framework documentation
-└── .opencode/
-    ├── agent/
-    │   ├── context-harness.md     # Primary executor agent
-    │   ├── compaction-guide.md    # Compaction advisory subagent
-    │   ├── contexts-subagent.md   # Session listing subagent
-    │   ├── docs-subagent.md       # Documentation advisory subagent
-    │   └── research-subagent.md   # Research advisory subagent
-    └── command/
-        ├── ctx.md                 # /ctx command
-        ├── compact.md             # /compact command
-        ├── contexts.md            # /contexts command
-        ├── issue.md               # /issue command
-        └── pr.md                  # /pr command
-```
+=== "Both Tools"
+
+    ```
+    your-project/
+    ├── .context-harness/              # Shared session storage
+    │   ├── sessions/
+    │   │   └── {session-name}/
+    │   │       └── SESSION.md
+    │   ├── templates/
+    │   │   └── session-template.md
+    │   └── README.md
+    ├── .opencode/                     # OpenCode configuration
+    │   ├── agent/
+    │   │   ├── context-harness.md
+    │   │   ├── compaction-guide.md
+    │   │   ├── contexts-subagent.md
+    │   │   ├── docs-subagent.md
+    │   │   └── research-subagent.md
+    │   ├── command/
+    │   │   ├── ctx.md
+    │   │   ├── compact.md
+    │   │   ├── contexts.md
+    │   │   ├── issue.md
+    │   │   └── pr.md
+    │   └── skill/
+    ├── .claude/                       # Claude Code configuration
+    │   ├── agents/
+    │   │   ├── context-harness.md
+    │   │   ├── compaction-guide.md
+    │   │   ├── contexts-subagent.md
+    │   │   ├── docs-subagent.md
+    │   │   └── research-subagent.md
+    │   ├── commands/
+    │   │   ├── ctx.md
+    │   │   ├── compact.md
+    │   │   ├── contexts.md
+    │   │   ├── issue.md
+    │   │   └── pr.md
+    │   └── skills/
+    ├── opencode.json                  # OpenCode config + MCP
+    ├── .mcp.json                      # Claude Code MCP config
+    ├── AGENTS.md                      # OpenCode memory file
+    └── CLAUDE.md                      # Claude Code memory file
+    ```
+
+=== "OpenCode Only"
+
+    ```
+    your-project/
+    ├── .context-harness/
+    │   ├── sessions/
+    │   │   └── {session-name}/
+    │   │       └── SESSION.md
+    │   ├── templates/
+    │   │   └── session-template.md
+    │   └── README.md
+    ├── .opencode/
+    │   ├── agent/
+    │   │   ├── context-harness.md
+    │   │   ├── compaction-guide.md
+    │   │   ├── contexts-subagent.md
+    │   │   ├── docs-subagent.md
+    │   │   └── research-subagent.md
+    │   ├── command/
+    │   │   ├── ctx.md
+    │   │   ├── compact.md
+    │   │   ├── contexts.md
+    │   │   ├── issue.md
+    │   │   └── pr.md
+    │   └── skill/
+    ├── opencode.json
+    └── AGENTS.md
+    ```
+
+=== "Claude Code Only"
+
+    ```
+    your-project/
+    ├── .context-harness/
+    │   ├── sessions/
+    │   │   └── {session-name}/
+    │   │       └── SESSION.md
+    │   ├── templates/
+    │   │   └── session-template.md
+    │   └── README.md
+    ├── .claude/
+    │   ├── agents/
+    │   │   ├── context-harness.md
+    │   │   ├── compaction-guide.md
+    │   │   ├── contexts-subagent.md
+    │   │   ├── docs-subagent.md
+    │   │   └── research-subagent.md
+    │   ├── commands/
+    │   │   ├── ctx.md
+    │   │   ├── compact.md
+    │   │   ├── contexts.md
+    │   │   ├── issue.md
+    │   │   └── pr.md
+    │   └── skills/
+    ├── .mcp.json
+    └── CLAUDE.md
+    ```
+
+!!! note "Key Differences"
+    | Aspect | OpenCode | Claude Code |
+    |--------|----------|-------------|
+    | Config folder | `.opencode/` | `.claude/` |
+    | Folder naming | singular (`agent/`, `command/`, `skill/`) | plural (`agents/`, `commands/`, `skills/`) |
+    | Memory file | `AGENTS.md` | `CLAUDE.md` |
+    | MCP config | `opencode.json` | `.mcp.json` |
 
 ## Subagents
 
@@ -90,39 +178,51 @@ Analyzes current work and recommends what to preserve during compaction. **Advis
 
 ## Model Configuration
 
-ContextHarness agents are **model-agnostic**. They do not specify a model, allowing you to use any provider and model supported by OpenCode.
+ContextHarness agents are **model-agnostic**. They do not specify a model, allowing you to use any provider and model supported by your tool.
 
 ### Default Model
 
-Set your default model in `opencode.json`:
+=== "OpenCode"
 
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "model": "anthropic/claude-sonnet-4-20250514"
-}
-```
+    Set your default model in `opencode.json`:
+    
+    ```json
+    {
+      "$schema": "https://opencode.ai/config.json",
+      "model": "anthropic/claude-sonnet-4-20250514"
+    }
+    ```
+
+=== "Claude Code"
+
+    Claude Code uses your Anthropic API configuration or Claude Pro subscription. Model selection is handled through Claude Code's settings.
 
 ### Per-Agent Configuration
 
-For different models per agent:
+=== "OpenCode"
 
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "model": "anthropic/claude-sonnet-4-20250514",
-  "agent": {
-    "context-harness": {
-      "model": "anthropic/claude-opus-4-20250514"
-    },
-    "compaction-guide": {
-      "model": "anthropic/claude-haiku-4-20250514"
+    For different models per agent in `opencode.json`:
+    
+    ```json
+    {
+      "$schema": "https://opencode.ai/config.json",
+      "model": "anthropic/claude-sonnet-4-20250514",
+      "agent": {
+        "context-harness": {
+          "model": "anthropic/claude-opus-4-20250514"
+        },
+        "compaction-guide": {
+          "model": "anthropic/claude-haiku-4-20250514"
+        }
+      }
     }
-  }
-}
-```
+    ```
 
-### Model Loading Priority
+=== "Claude Code"
+
+    Claude Code does not support per-agent model configuration. All agents use the same model.
+
+### Model Loading Priority (OpenCode)
 
 1. **Command-line flag** (`--model` or `-m`) - Highest priority
 2. **Agent-specific config** (`agent.{name}.model` in JSON)
@@ -136,36 +236,73 @@ The research and documentation subagents require [Context7 MCP](https://github.c
 
 ### Basic Setup
 
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "mcp": {
-    "context7": {
-      "type": "remote",
-      "url": "https://mcp.context7.com/mcp"
+=== "OpenCode"
+
+    Add to `opencode.json`:
+    
+    ```json
+    {
+      "$schema": "https://opencode.ai/config.json",
+      "mcp": {
+        "context7": {
+          "type": "remote",
+          "url": "https://mcp.context7.com/mcp"
+        }
+      }
     }
-  }
-}
-```
+    ```
+
+=== "Claude Code"
+
+    Add to `.mcp.json`:
+    
+    ```json
+    {
+      "mcpServers": {
+        "context7": {
+          "command": "npx",
+          "args": ["-y", "@anthropic-ai/mcp-server-context7"]
+        }
+      }
+    }
+    ```
 
 ### With API Key
 
 For higher rate limits:
 
-```json
-{
-  "mcp": {
-    "context7": {
-      "type": "remote",
-      "url": "https://mcp.context7.com/mcp",
-      "headers": {
-        "CONTEXT7_API_KEY": "YOUR_API_KEY"
-      },
-      "enabled": true
+=== "OpenCode"
+
+    ```json
+    {
+      "mcp": {
+        "context7": {
+          "type": "remote",
+          "url": "https://mcp.context7.com/mcp",
+          "headers": {
+            "CONTEXT7_API_KEY": "YOUR_API_KEY"
+          },
+          "enabled": true
+        }
+      }
     }
-  }
-}
-```
+    ```
+
+=== "Claude Code"
+
+    ```json
+    {
+      "mcpServers": {
+        "context7": {
+          "command": "npx",
+          "args": ["-y", "@anthropic-ai/mcp-server-context7"],
+          "env": {
+            "CONTEXT7_API_KEY": "YOUR_API_KEY"
+          }
+        }
+      }
+    }
+    ```
 
 Sign up for a free API key at [context7.com](https://context7.com).
 
@@ -173,18 +310,58 @@ Sign up for a free API key at [context7.com](https://context7.com).
 
 All agent behaviors are defined in markdown files:
 
-| Agent | Source File | Purpose |
-|-------|-------------|---------|
-| Primary Agent | `context-harness.md` | Main executor, session management |
-| Contexts Subagent | `contexts-subagent.md` | Session discovery and listing |
-| Research Subagent | `research-subagent.md` | API lookups, best practices |
-| Docs Subagent | `docs-subagent.md` | Documentation summaries |
-| Compaction Guide | `compaction-guide.md` | Context preservation |
+| Agent | Purpose |
+|-------|---------|
+| Primary Agent (`context-harness.md`) | Main executor, session management |
+| Contexts Subagent (`contexts-subagent.md`) | Session discovery and listing |
+| Research Subagent (`research-subagent.md`) | API lookups, best practices |
+| Docs Subagent (`docs-subagent.md`) | Documentation summaries |
+| Compaction Guide (`compaction-guide.md`) | Context preservation |
 
-**Command files** (`.opencode/command/`):
+**Agent file locations:**
 
-- `ctx.md` — Session switching with branch creation
-- `compact.md` — Manual compaction
-- `contexts.md` — List sessions
-- `issue.md` — GitHub issue management
-- `pr.md` — Pull request creation
+=== "OpenCode"
+
+    ```
+    .opencode/agent/
+    ├── context-harness.md
+    ├── compaction-guide.md
+    ├── contexts-subagent.md
+    ├── docs-subagent.md
+    └── research-subagent.md
+    ```
+
+=== "Claude Code"
+
+    ```
+    .claude/agents/
+    ├── context-harness.md
+    ├── compaction-guide.md
+    ├── contexts-subagent.md
+    ├── docs-subagent.md
+    └── research-subagent.md
+    ```
+
+**Command file locations:**
+
+=== "OpenCode"
+
+    ```
+    .opencode/command/
+    ├── ctx.md          # Session switching with branch creation
+    ├── compact.md      # Manual compaction
+    ├── contexts.md     # List sessions
+    ├── issue.md        # GitHub issue management
+    └── pr.md           # Pull request creation
+    ```
+
+=== "Claude Code"
+
+    ```
+    .claude/commands/
+    ├── ctx.md          # Session switching with branch creation
+    ├── compact.md      # Manual compaction
+    ├── contexts.md     # List sessions
+    ├── issue.md        # GitHub issue management
+    └── pr.md           # Pull request creation
+    ```
