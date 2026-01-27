@@ -21,35 +21,124 @@ uvx --from "git+https://github.com/co-labs-co/context-harness.git" ch init
 Initialize ContextHarness in a project.
 
 ```bash
-ch init                    # Initialize in current project
-ch init --force            # Overwrite existing files
-ch init --target ./path    # Install in specific directory
+ch init                       # Initialize for both tools (default)
+ch init --force               # Overwrite existing files (preserves sessions/skills)
+ch init --target ./path       # Install in specific directory
+ch init --tool opencode       # Install for OpenCode only
+ch init --tool claude-code    # Install for Claude Code only
+ch init --tool both           # Install for both tools (explicit)
 ```
 
 **What it creates:**
 
-- `.contextignore` — Ignore patterns for context scanning ([docs](../user-guide/ignore-patterns.md))
-- `.context-harness/` — Session storage and templates
-- `.opencode/agent/` — Agent definitions
-- `.opencode/command/` — Slash commands
+=== "Both Tools (Default)"
+
+    ```
+    your-project/
+    ├── .contextignore            # Ignore patterns for context scanning
+    ├── .context-harness/         # Session storage (shared)
+    ├── .opencode/                # OpenCode configuration
+    │   ├── agent/
+    │   ├── command/
+    │   └── skill/
+    ├── .claude/                  # Claude Code configuration
+    │   ├── agents/
+    │   ├── commands/
+    │   └── skills/
+    ├── opencode.json             # OpenCode config + MCP
+    ├── .mcp.json                 # Claude Code MCP config
+    ├── AGENTS.md                 # OpenCode memory file
+    └── CLAUDE.md                 # Claude Code memory file
+    ```
+
+=== "OpenCode Only"
+
+    ```
+    your-project/
+    ├── .contextignore            # Ignore patterns for context scanning
+    ├── .context-harness/         # Session storage
+    ├── .opencode/
+    │   ├── agent/
+    │   ├── command/
+    │   └── skill/
+    ├── opencode.json
+    └── AGENTS.md
+    ```
+
+=== "Claude Code Only"
+
+    ```
+    your-project/
+    ├── .contextignore            # Ignore patterns for context scanning
+    ├── .context-harness/         # Session storage
+    ├── .claude/
+    │   ├── agents/
+    │   ├── commands/
+    │   └── skills/
+    ├── .mcp.json
+    └── CLAUDE.md
+    ```
+
+For more on ignore patterns, see the [Ignore Patterns Guide](../user-guide/ignore-patterns.md).
 
 ## MCP Configuration
 
 ### mcp add
 
-Add an MCP server to `opencode.json`.
+Add an MCP server. Writes to both `opencode.json` and `.mcp.json` when both tools are installed.
 
 ```bash
 ch mcp add context7        # Add Context7 for docs lookup
 ch mcp add context7 -k KEY # With API key for higher limits
 ```
 
+**Configuration format by tool:**
+
+=== "OpenCode (opencode.json)"
+
+    ```json
+    {
+      "$schema": "https://opencode.ai/config.json",
+      "mcp": {
+        "context7": {
+          "type": "remote",
+          "url": "https://mcp.context7.com/mcp"
+        }
+      }
+    }
+    ```
+
+=== "Claude Code (.mcp.json)"
+
+    ```json
+    {
+      "mcpServers": {
+        "context7": {
+          "command": "npx",
+          "args": ["-y", "@anthropic-ai/mcp-server-context7"]
+        }
+      }
+    }
+    ```
+
 ### mcp list
 
-List configured MCP servers.
+List configured MCP servers from all detected configuration files.
 
 ```bash
 ch mcp list
+```
+
+**Example output:**
+
+```
+📦 MCP Servers
+
+From opencode.json:
+  • context7 (remote)
+
+From .mcp.json:
+  • context7 (command: npx)
 ```
 
 ## Skill Management
@@ -65,7 +154,7 @@ ch skill list --tags react # Filter by tag
 
 ### skill list-local
 
-List skills installed in the current project.
+List skills installed in the current project. Searches both `.opencode/skill/` and `.claude/skills/` directories.
 
 ```bash
 ch skill list-local
@@ -81,16 +170,33 @@ ch skill info <name>
 
 ### skill install
 
-Install a skill from the registry.
+Install a skill from the registry. Installs to all detected tool directories.
 
 ```bash
 ch skill install           # Interactive picker
 ch skill install <name>    # Install specific skill
 ```
 
+**Installation paths:**
+
+=== "Both Tools"
+
+    Skills are installed to both directories:
+    
+    - `.opencode/skill/<name>/SKILL.md`
+    - `.claude/skills/<name>/SKILL.md`
+
+=== "OpenCode Only"
+
+    - `.opencode/skill/<name>/SKILL.md`
+
+=== "Claude Code Only"
+
+    - `.claude/skills/<name>/SKILL.md`
+
 ### skill extract
 
-Export a local skill for sharing.
+Export a local skill for sharing. Searches both tool directories.
 
 ```bash
 ch skill extract           # Interactive picker
@@ -119,13 +225,25 @@ ch config get skills-repo
 
 Set a configuration value.
 
-```bash
-# Project-level (in opencode.json)
-ch config set skills-repo <repo>
+=== "OpenCode"
 
-# User-level (in ~/.context-harness/config.json)
-ch config set skills-repo <repo> --user
-```
+    ```bash
+    # Project-level (in opencode.json)
+    ch config set skills-repo <repo>
+    
+    # User-level (in ~/.context-harness/config.json)
+    ch config set skills-repo <repo> --user
+    ```
+
+=== "Claude Code"
+
+    ```bash
+    # Project-level (in .claude/settings.json)
+    ch config set skills-repo <repo>
+    
+    # User-level (in ~/.context-harness/config.json)
+    ch config set skills-repo <repo> --user
+    ```
 
 ### config unset
 

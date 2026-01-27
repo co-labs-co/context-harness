@@ -281,29 +281,39 @@ class ProjectConfig:
     """ContextHarness project configuration paths.
 
     Provides standardized paths for all ContextHarness directories
-    and files within a project.
+    and files within a project. Supports both OpenCode and Claude Code tools.
 
     Attributes:
         project_root: Root directory of the project
         context_harness_dir: Path to .context-harness directory
         opencode_dir: Path to .opencode directory
+        claude_dir: Path to .claude directory (Claude Code)
         sessions_dir: Path to sessions directory
         templates_dir: Path to templates directory
-        skills_dir: Path to skills directory
+        skills_dir: Path to OpenCode skills directory (.opencode/skill)
+        claude_skills_dir: Path to Claude Code skills directory (.claude/skills)
         baseline_dir: Path to baseline analysis directory
         project_context_path: Path to PROJECT-CONTEXT.md
         opencode_json_path: Path to opencode.json
+        mcp_json_path: Path to .mcp.json (Claude Code)
+        agents_md_path: Path to AGENTS.md (OpenCode)
+        claude_md_path: Path to CLAUDE.md (Claude Code)
     """
 
     project_root: Path
     context_harness_dir: Path
     opencode_dir: Path
+    claude_dir: Path
     sessions_dir: Path
     templates_dir: Path
     skills_dir: Path
+    claude_skills_dir: Path
     baseline_dir: Path
     project_context_path: Path
     opencode_json_path: Path
+    mcp_json_path: Path
+    agents_md_path: Path
+    claude_md_path: Path
 
     @classmethod
     def from_project_root(cls, project_root: Path) -> ProjectConfig:
@@ -317,17 +327,23 @@ class ProjectConfig:
         """
         context_harness_dir = project_root / ".context-harness"
         opencode_dir = project_root / ".opencode"
+        claude_dir = project_root / ".claude"
 
         return cls(
             project_root=project_root,
             context_harness_dir=context_harness_dir,
             opencode_dir=opencode_dir,
+            claude_dir=claude_dir,
             sessions_dir=context_harness_dir / "sessions",
             templates_dir=context_harness_dir / "templates",
-            skills_dir=opencode_dir / "skills",
+            skills_dir=opencode_dir / "skill",  # singular for OpenCode
+            claude_skills_dir=claude_dir / "skills",  # plural for Claude Code
             baseline_dir=context_harness_dir / "baseline",
             project_context_path=context_harness_dir / "PROJECT-CONTEXT.md",
             opencode_json_path=project_root / "opencode.json",
+            mcp_json_path=project_root / ".mcp.json",
+            agents_md_path=project_root / "AGENTS.md",
+            claude_md_path=project_root / "CLAUDE.md",
         )
 
     @classmethod
@@ -340,7 +356,7 @@ class ProjectConfig:
         return cls.from_project_root(Path.cwd())
 
     def ensure_directories(self) -> List[Path]:
-        """Get list of directories that should exist.
+        """Get list of directories that should exist for OpenCode.
 
         Returns:
             List of directory paths that should be created
@@ -351,6 +367,38 @@ class ProjectConfig:
             self.templates_dir,
             self.opencode_dir,
             self.skills_dir,
+            self.baseline_dir,
+        ]
+
+    def ensure_directories_claude(self) -> List[Path]:
+        """Get list of directories that should exist for Claude Code.
+
+        Returns:
+            List of directory paths that should be created
+        """
+        return [
+            self.context_harness_dir,
+            self.sessions_dir,
+            self.templates_dir,
+            self.claude_dir,
+            self.claude_skills_dir,
+            self.baseline_dir,
+        ]
+
+    def ensure_all_directories(self) -> List[Path]:
+        """Get list of all directories for both tools.
+
+        Returns:
+            List of directory paths that should be created
+        """
+        return [
+            self.context_harness_dir,
+            self.sessions_dir,
+            self.templates_dir,
+            self.opencode_dir,
+            self.skills_dir,
+            self.claude_dir,
+            self.claude_skills_dir,
             self.baseline_dir,
         ]
 

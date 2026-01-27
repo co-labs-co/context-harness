@@ -20,6 +20,7 @@ from context_harness.primitives import (
     SkillMetadata,
     Success,
 )
+from context_harness.primitives.tool_detector import ToolDetector, ToolTarget
 from context_harness.services import (
     ConfigService,
     MCPService,
@@ -295,6 +296,7 @@ class SkillClient:
     """Client for skill operations.
 
     Provides skill listing, installation, and extraction.
+    Supports both OpenCode and Claude Code tool configurations.
 
     Example:
         client = Client()
@@ -307,19 +309,43 @@ class SkillClient:
     def __init__(self, service: SkillService, working_dir: Path):
         self._service = service
         self._working_dir = working_dir
+        self._detector = ToolDetector(working_dir)
 
     @property
     def skills_dir(self) -> Path:
-        """Get the skills directory path."""
-        return self._working_dir / ".opencode" / "skill"
+        """Get the primary skills directory path.
 
-    def list_local(self) -> Result[List[Skill]]:
+        Returns the skills directory for the primary detected tool,
+        or defaults to OpenCode path if no tool is detected.
+        """
+        detected = self._detector.detect()
+        if detected.primary:
+            paths = detected.get_paths(detected.primary)
+            if paths:
+                return paths.skills_dir
+        # Default to OpenCode
+        return self._detector._opencode_paths.skills_dir
+
+    @property
+    def all_skills_dirs(self) -> List[Path]:
+        """Get all skills directories for installed tools.
+
+        Returns a list of skills directories for all detected tools.
+        """
+        return self._detector.get_skills_dirs()
+
+    def list_local(
+        self, tool_target: Optional[ToolTarget] = None
+    ) -> Result[List[Skill]]:
         """List locally installed skills.
+
+        Args:
+            tool_target: Which tool(s) to list from (default: auto-detect)
 
         Returns:
             Result containing list of Skill
         """
-        return self._service.list_local(self._working_dir)
+        return self._service.list_local(self._working_dir, tool_target)
 
     def list_remote(self) -> Result[List[Skill]]:
         """List available skills from the remote registry.
@@ -340,17 +366,25 @@ class SkillClient:
         """
         return self._service.get_info(name)
 
-    def install(self, skill_name: str, force: bool = False) -> Result[Skill]:
+    def install(
+        self,
+        skill_name: str,
+        force: bool = False,
+        tool_target: Optional[ToolTarget] = None,
+    ) -> Result[Skill]:
         """Install a skill from the remote registry.
 
         Args:
             skill_name: Name of the skill to install
             force: If True, overwrite existing skill
+            tool_target: Which tool(s) to install for (default: auto-detect)
 
         Returns:
             Result containing installed Skill
         """
-        return self._service.install(skill_name, self._working_dir, force=force)
+        return self._service.install(
+            skill_name, self._working_dir, force=force, tool_target=tool_target
+        )
 
     def validate(self, skill_path: Path) -> Result[SkillMetadata]:
         """Validate a skill directory.

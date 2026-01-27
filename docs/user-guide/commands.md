@@ -1,6 +1,9 @@
 # Commands Reference
 
-ContextHarness provides slash commands for use within OpenCode.
+ContextHarness provides slash commands for use within OpenCode and Claude Code.
+
+!!! info "Same Commands, Both Tools"
+    All ContextHarness commands work identically in both OpenCode and Claude Code. The commands are defined in tool-specific directories but provide the same functionality.
 
 ## Session Commands
 
@@ -134,11 +137,19 @@ Analyzes your project structure:
 2. **Question Generation**: Creates 30-50 questions about the project
 3. **Answer Generation**: Answers questions using codebase analysis
 4. **Skill Extraction**: Identifies patterns for reusable skills
-5. **AGENTS.md Generation**: Creates AI agent instructions
+5. **Memory File Generation**: Creates AI agent instructions
 
-**Output:** 
-- `PROJECT-CONTEXT.md` — Comprehensive project context
-- `AGENTS.md` — AI agent instructions (OpenCode rules file)
+**Output:**
+
+=== "OpenCode"
+
+    - `PROJECT-CONTEXT.md` — Comprehensive project context
+    - `AGENTS.md` — AI agent instructions (OpenCode rules file)
+
+=== "Claude Code"
+
+    - `PROJECT-CONTEXT.md` — Comprehensive project context
+    - `CLAUDE.md` — AI agent instructions (Claude Code memory file)
 
 ### `/baseline --path`
 
@@ -174,8 +185,8 @@ Analyzes a specific directory within a monorepo:
 /baseline --path packages/ui --agents-only
 ```
 
-!!! note "AGENTS.md Precedence"
-    Per the [AGENTS.md standard](https://agents.md/), AI agents read the **nearest** AGENTS.md in the directory tree. Nested files completely override root files (no merging). This is why `/baseline --path` generates self-contained AGENTS.md files.
+!!! note "AGENTS.md vs CLAUDE.md Precedence"
+    Both OpenCode and Claude Code read the **nearest** memory file in the directory tree. Per the [AGENTS.md standard](https://agents.md/), nested files completely override root files (no merging). This is why `/baseline --path` generates self-contained memory files.
 
 !!! info "Git Repository Recommended"
     The `--path` flag uses git to find the repository root for shared skill placement. Skills are written to `{repo_root}/.opencode/skill/` so they can be shared across all projects in a monorepo.

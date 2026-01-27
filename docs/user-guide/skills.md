@@ -38,6 +38,9 @@ ch skill install react-forms
    fastapi-crud - FastAPI CRUD patterns
 ```
 
+!!! info "Dual-Tool Installation"
+    When both OpenCode and Claude Code are configured, skills are automatically installed to both tool directories.
+
 ### View Skill Details
 
 ```bash
@@ -50,19 +53,44 @@ ch skill info react-forms
 ch skill list-local
 ```
 
+This command searches both `.opencode/skill/` and `.claude/skills/` directories.
+
 ## Skill Structure
 
-Skills are stored in `.opencode/skill/`:
+Skills are stored in tool-specific directories:
 
-```
-.opencode/skill/
-├── react-forms/
-│   └── SKILL.md
-├── fastapi-crud/
-│   └── SKILL.md
-└── my-custom-skill/
-    └── SKILL.md
-```
+=== "OpenCode"
+
+    ```
+    .opencode/skill/
+    ├── react-forms/
+    │   └── SKILL.md
+    ├── fastapi-crud/
+    │   └── SKILL.md
+    └── my-custom-skill/
+        └── SKILL.md
+    ```
+
+=== "Claude Code"
+
+    ```
+    .claude/skills/
+    ├── react-forms/
+    │   └── SKILL.md
+    ├── fastapi-crud/
+    │   └── SKILL.md
+    └── my-custom-skill/
+        └── SKILL.md
+    ```
+
+=== "Both Tools"
+
+    When both tools are installed, skills exist in both locations:
+    
+    ```
+    .opencode/skill/react-forms/SKILL.md
+    .claude/skills/react-forms/SKILL.md
+    ```
 
 Each skill has YAML frontmatter:
 
@@ -86,35 +114,72 @@ Instructions for the agent...
 
 ### 1. Create the Skill File
 
-Create `.opencode/skill/my-skill/SKILL.md`:
+=== "OpenCode"
 
-```markdown
----
-name: my-skill
-description: What this skill does
-version: 0.1.0
-tags:
-  - category
----
+    Create `.opencode/skill/my-skill/SKILL.md`:
+    
+    ```markdown
+    ---
+    name: my-skill
+    description: What this skill does
+    version: 0.1.0
+    tags:
+      - category
+    ---
+    
+    # My Skill
+    
+    ## When to Use
+    
+    Use this skill when...
+    
+    ## Instructions
+    
+    1. Step one
+    2. Step two
+    3. Step three
+    
+    ## Examples
+    
+    ```python
+    # Example code
+    ```
+    ```
 
-# My Skill
+=== "Claude Code"
 
-## When to Use
+    Create `.claude/skills/my-skill/SKILL.md`:
+    
+    ```markdown
+    ---
+    name: my-skill
+    description: What this skill does
+    version: 0.1.0
+    tags:
+      - category
+    ---
+    
+    # My Skill
+    
+    ## When to Use
+    
+    Use this skill when...
+    
+    ## Instructions
+    
+    1. Step one
+    2. Step two
+    3. Step three
+    
+    ## Examples
+    
+    ```python
+    # Example code
+    ```
+    ```
 
-Use this skill when...
-
-## Instructions
-
-1. Step one
-2. Step two
-3. Step three
-
-## Examples
-
-```python
-# Example code
-```
-```
+!!! tip "Skill Content is Identical"
+    The skill file content is the same for both tools—only the directory path differs.
 
 ### 2. Extract to Share
 
@@ -134,16 +199,31 @@ You can configure a custom skills repository for your organization.
 
 ### Configuration
 
-```bash
-# Project-level (in opencode.json)
-ch config set skills-repo my-org/my-skills-repo
+=== "OpenCode"
 
-# User-level (in ~/.context-harness/config.json)
-ch config set skills-repo my-org/my-skills-repo --user
+    ```bash
+    # Project-level (in opencode.json)
+    ch config set skills-repo my-org/my-skills-repo
+    
+    # User-level (in ~/.context-harness/config.json)
+    ch config set skills-repo my-org/my-skills-repo --user
+    
+    # Environment variable
+    export CONTEXT_HARNESS_SKILLS_REPO=my-org/private-skills
+    ```
 
-# Environment variable
-export CONTEXT_HARNESS_SKILLS_REPO=my-org/private-skills
-```
+=== "Claude Code"
+
+    ```bash
+    # Project-level (in .claude/settings.json)
+    ch config set skills-repo my-org/my-skills-repo
+    
+    # User-level (in ~/.context-harness/config.json)
+    ch config set skills-repo my-org/my-skills-repo --user
+    
+    # Environment variable
+    export CONTEXT_HARNESS_SKILLS_REPO=my-org/private-skills
+    ```
 
 ### Repository Structure
 

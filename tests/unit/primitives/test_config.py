@@ -198,15 +198,24 @@ class TestProjectConfig:
         assert config.project_root == root
         assert config.context_harness_dir == root / ".context-harness"
         assert config.opencode_dir == root / ".opencode"
+        assert config.claude_dir == root / ".claude"
         assert config.sessions_dir == root / ".context-harness" / "sessions"
         assert config.templates_dir == root / ".context-harness" / "templates"
-        assert config.skills_dir == root / ".opencode" / "skills"
+        assert (
+            config.skills_dir == root / ".opencode" / "skill"
+        )  # singular for OpenCode
+        assert (
+            config.claude_skills_dir == root / ".claude" / "skills"
+        )  # plural for Claude
         assert config.baseline_dir == root / ".context-harness" / "baseline"
         assert (
             config.project_context_path
             == root / ".context-harness" / "PROJECT-CONTEXT.md"
         )
         assert config.opencode_json_path == root / "opencode.json"
+        assert config.mcp_json_path == root / ".mcp.json"
+        assert config.agents_md_path == root / "AGENTS.md"
+        assert config.claude_md_path == root / "CLAUDE.md"
 
     def test_session_path(self):
         """Test getting session directory path."""

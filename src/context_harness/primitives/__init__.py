@@ -83,6 +83,16 @@ from context_harness.primitives.ignore import (
     IgnorePattern,
     IgnoreSource,
 )
+from context_harness.primitives.tool_detector import (
+    DetectedTools,
+    ToolDetector,
+    ToolPaths,
+    ToolTarget,
+    ToolType,
+    detect_tools,
+    get_all_skills_dirs,
+    get_skills_dir,
+)
 
 __all__ = [
     # Result types
@@ -146,4 +156,13 @@ __all__ = [
     "IgnoreMatch",
     "IgnorePattern",
     "IgnoreSource",
+    # Tool detection types
+    "DetectedTools",
+    "ToolDetector",
+    "ToolPaths",
+    "ToolTarget",
+    "ToolType",
+    "detect_tools",
+    "get_all_skills_dirs",
+    "get_skills_dir",
 ]

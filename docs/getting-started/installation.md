@@ -4,8 +4,12 @@
 
 **Required:**
 
-- [OpenCode.ai](https://opencode.ai) — AI coding assistant (ContextHarness is a framework for this)
 - [uv](https://docs.astral.sh/uv/) — Python package installer
+
+**At least one of:**
+
+- [OpenCode](https://opencode.ai) — Open-source AI coding assistant
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — Anthropic's VS Code extension or CLI
 
 **Recommended:**
 
@@ -39,17 +43,80 @@ Navigate to your project directory and run:
 ch init
 ```
 
-This creates:
+### Tool Selection
 
-- `.context-harness/` — Session storage and templates
-- `.opencode/agent/` — Agent definitions
-- `.opencode/command/` — Slash commands
+By default, ContextHarness installs support for **both** OpenCode and Claude Code. You can choose a specific tool:
+
+=== "Both Tools (Default)"
+
+    ```bash
+    ch init
+    # or explicitly:
+    ch init --tool both
+    ```
+    
+    Creates configurations for both tools:
+    
+    - `.opencode/` — OpenCode agents and commands
+    - `.claude/` — Claude Code agents and commands
+    - `opencode.json` — OpenCode configuration
+    - `.mcp.json` — Claude Code MCP configuration
+    - `AGENTS.md` — OpenCode memory file
+    - `CLAUDE.md` — Claude Code memory file
+
+=== "OpenCode Only"
+
+    ```bash
+    ch init --tool opencode
+    ```
+    
+    Creates:
+    
+    - `.opencode/agent/` — Agent definitions
+    - `.opencode/command/` — Slash commands
+    - `.opencode/skill/` — Installed skills
+    - `opencode.json` — Configuration file
+    - `AGENTS.md` — Memory file
+
+=== "Claude Code Only"
+
+    ```bash
+    ch init --tool claude-code
+    ```
+    
+    Creates:
+    
+    - `.claude/agents/` — Agent definitions
+    - `.claude/commands/` — Slash commands
+    - `.claude/skills/` — Installed skills
+    - `.mcp.json` — MCP configuration
+    - `CLAUDE.md` — Memory file
+
+!!! note "Folder Naming Differences"
+    OpenCode uses **singular** folder names (`agent/`, `command/`, `skill/`), while Claude Code uses **plural** names (`agents/`, `commands/`, `skills/`).
+
+### Shared Session Storage
+
+Regardless of which tool you use, sessions are stored in a shared location:
+
+```
+.context-harness/
+├── sessions/                  # Named session directories
+│   └── {session-name}/
+│       └── SESSION.md
+├── templates/
+│   └── session-template.md
+└── README.md
+```
 
 ### Options
 
 ```bash
-ch init --force          # Overwrite existing files
+ch init --force          # Overwrite existing files (preserves sessions and skills)
 ch init --target ./path  # Install in specific directory
+ch init --tool opencode  # Install for OpenCode only
+ch init --tool claude-code  # Install for Claude Code only
+ch init --tool both      # Install for both tools (default)
 ```
 
 ## Verify Installation
