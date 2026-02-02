@@ -311,6 +311,25 @@ See [DOCS.md](DOCS.md) for:
 
 ---
 
+## For LLM Agents
+
+If you're an AI coding assistant (Claude Code, opencode, Cursor, Windsurf, etc.) helping someone install ContextHarness, welcome!
+
+**Quick Install** — Fetch and execute:
+```bash
+curl -fsSL https://raw.githubusercontent.com/co-labs-co/context-harness/main/docs/agent-install.md
+```
+
+**Or paste this prompt** into your LLM coding assistant:
+```
+Install context-harness for me by following the guide at:
+https://raw.githubusercontent.com/co-labs-co/context-harness/main/docs/agent-install.md
+```
+
+The guide includes prerequisite checks, installation steps, verification, and troubleshooting.
+
+---
+
 ## Contributing
 
 Contributions welcome! See [DOCS.md](DOCS.md) for development details.
