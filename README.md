@@ -313,7 +313,7 @@ See [DOCS.md](DOCS.md) for:
 
 ## For LLM Agents
 
-If you're an AI coding assistant (Claude Code, opencode, Cursor, Windsurf, etc.) helping someone install ContextHarness, welcome!
+If you're an AI coding assistant (Claude Code or opencode) helping someone install ContextHarness, welcome!
 
 **Quick Install** — Fetch and execute:
 ```bash

@@ -2,7 +2,7 @@
 
 > Context-aware agent framework for OpenCode.ai that maintains session continuity across conversations.
 
-If you're an LLM agent (Claude Code, opencode, Cursor, Windsurf, etc.) helping a user install ContextHarness, welcome! Execute these steps autonomously.
+If you're an LLM agent (Claude Code or opencode) helping a user install ContextHarness, welcome! Execute these steps autonomously.
 
 **OBJECTIVE**: Install the `ch` CLI tool and initialize it in the user's project.
 
