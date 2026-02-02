@@ -168,6 +168,25 @@ When you run `/compact`, your current work context is saved. When you switch ses
 /pr                         # Create pull request
 ```
 
+### Session Tracker Plugin
+
+ContextHarness includes an OpenCode plugin that automatically tracks conversation turns and updates SESSION.md before compaction. This prevents detail loss when context windows fill.
+
+**Features:**
+- **Turn-based tracking**: Updates SESSION.md every 2 assistant turns (configurable)
+- **Token-based tracking**: Preemptive update when approaching 75% context usage
+- **Pre-compaction injection**: Injects SESSION.md into compaction context
+
+**Configuration** (environment variables):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CH_TURN_THRESHOLD` | `2` | Update every N turns |
+| `CH_TOKEN_THRESHOLD` | `0.75` | Update at this context ratio |
+| `CH_DEBUG` | `false` | Enable verbose logging |
+
+The plugin is automatically installed at `.opencode/plugins/session-tracker.ts` when you run `ch init`. See `.opencode/plugins/README.md` in your project for full documentation.
+
 ### GitHub Integration
 
 When `gh` CLI is available and authenticated:

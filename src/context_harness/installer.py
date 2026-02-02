@@ -42,6 +42,9 @@ REQUIRED_TEMPLATE_FILES = [
     ".opencode/command/pr.md",
     ".opencode/command/baseline.md",
     ".opencode/command/extract-skills.md",
+    # Plugin: session-tracker (auto-updates SESSION.md before compaction)
+    ".opencode/plugins/session-tracker.ts",
+    ".opencode/plugins/README.md",
     # Skill: skill-creator (for deriving project-specific skills)
     ".opencode/skill/skill-creator/SKILL.md",
     ".opencode/skill/skill-creator/references/workflows.md",
@@ -324,6 +327,9 @@ def verify_installation(target: str) -> bool:
         ".opencode/command/pr.md",
         ".opencode/command/baseline.md",
         ".opencode/command/extract-skills.md",
+        # Plugin: session-tracker
+        ".opencode/plugins/session-tracker.ts",
+        ".opencode/plugins/README.md",
         # Skill: skill-creator
         ".opencode/skill/skill-creator/SKILL.md",
         ".opencode/skill/skill-creator/references/workflows.md",
