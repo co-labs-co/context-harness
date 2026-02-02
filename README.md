@@ -185,7 +185,7 @@ ContextHarness includes an OpenCode plugin that automatically tracks conversatio
 | `CH_TOKEN_THRESHOLD` | `0.75` | Update at this context ratio |
 | `CH_DEBUG` | `false` | Enable verbose logging |
 
-The plugin is automatically installed at `.opencode/plugins/session-tracker.ts`. See the [plugin README](.opencode/plugins/README.md) for details.
+The plugin is automatically installed at `.opencode/plugins/session-tracker.ts` when you run `ch init`. See `.opencode/plugins/README.md` in your project for full documentation.
 
 ### GitHub Integration
 

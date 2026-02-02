@@ -85,15 +85,24 @@ const MODEL_CONTEXT_LIMITS: Record<string, number> = {
 export const SessionTrackerPlugin: Plugin = async (ctx) => {
   const { directory, client } = ctx;
 
-  // Load configuration from environment or defaults
+  // Load configuration from environment with validation
+  const parsedTurnThreshold = parseInt(process.env.CH_TURN_THRESHOLD || "");
+  const parsedTokenThreshold = parseFloat(process.env.CH_TOKEN_THRESHOLD || "");
+
   const config: PluginConfig = {
     ...DEFAULT_CONFIG,
-    turnThreshold: parseInt(
-      process.env.CH_TURN_THRESHOLD || String(DEFAULT_CONFIG.turnThreshold)
-    ),
-    tokenThreshold: parseFloat(
-      process.env.CH_TOKEN_THRESHOLD || String(DEFAULT_CONFIG.tokenThreshold)
-    ),
+    // Validate turnThreshold: must be positive integer, fallback to default
+    turnThreshold:
+      !isNaN(parsedTurnThreshold) && parsedTurnThreshold > 0
+        ? parsedTurnThreshold
+        : DEFAULT_CONFIG.turnThreshold,
+    // Validate tokenThreshold: must be between 0 and 1, fallback to default
+    tokenThreshold:
+      !isNaN(parsedTokenThreshold) &&
+      parsedTokenThreshold > 0 &&
+      parsedTokenThreshold <= 1
+        ? parsedTokenThreshold
+        : DEFAULT_CONFIG.tokenThreshold,
     debug: process.env.CH_DEBUG === "true",
   };
 
@@ -177,10 +186,10 @@ export const SessionTrackerPlugin: Plugin = async (ctx) => {
     try {
       let content = await fs.readFile(sessionMdPath, "utf8");
 
-      // Update Last Updated timestamp
+      // Update Last Updated timestamp (flexible whitespace matching)
       const now = new Date().toISOString();
       content = content.replace(
-        /\*\*Last Updated\*\*: .*/,
+        /\*\*Last Updated\*\*\s*:\s*.*/,
         `**Last Updated**: ${now}`
       );
 
@@ -198,28 +207,28 @@ export const SessionTrackerPlugin: Plugin = async (ctx) => {
 
 _Auto-tracked by session-tracker plugin_
 `;
-        // Insert before Notes section if it exists, otherwise at end
+        // Insert before Notes section if it exists (use regex to match only first occurrence)
         if (content.includes("## Notes")) {
-          content = content.replace("## Notes", `${metricsSection}\n## Notes`);
+          content = content.replace(/^## Notes/m, `${metricsSection}\n## Notes`);
         } else {
           content += metricsSection;
         }
       } else {
-        // Update existing metrics
+        // Update existing metrics (flexible whitespace matching)
         content = content.replace(
-          /\*\*User Turns\*\*: \d+/,
+          /\*\*User Turns\*\*\s*:\s*\d+/,
           `**User Turns**: ${state.userTurns}`
         );
         content = content.replace(
-          /\*\*Assistant Turns\*\*: \d+/,
+          /\*\*Assistant Turns\*\*\s*:\s*\d+/,
           `**Assistant Turns**: ${state.assistantTurns}`
         );
         content = content.replace(
-          /\*\*Last Auto-Update\*\*: Turn \d+/,
+          /\*\*Last Auto-Update\*\*\s*:\s*Turn\s+\d+/,
           `**Last Auto-Update**: Turn ${state.assistantTurns}`
         );
         content = content.replace(
-          /\*\*Token Usage\*\*: ~[\d,]+/,
+          /\*\*Token Usage\*\*\s*:\s*~[\d\s.,]+/,
           `**Token Usage**: ~${Math.round(state.tokenUsage).toLocaleString()}`
         );
       }
@@ -227,7 +236,10 @@ _Auto-tracked by session-tracker plugin_
       await fs.writeFile(sessionMdPath, content, "utf8");
       log(`Updated SESSION.md at turn ${state.assistantTurns}`);
     } catch (error) {
+      // Log error for debugging - silent failure prevents plugin crashes
+      // but we emit a warning so issues are discoverable
       log("Failed to update SESSION.md", error);
+      console.warn("[session-tracker] Failed to update SESSION.md:", error);
     }
   }
 
