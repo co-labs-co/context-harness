@@ -26,14 +26,7 @@ from context_harness.oauth import (
     OAuthCancelledError,
     AuthStatus,
 )
-from context_harness.skills import (
-    list_skills,
-    list_local_skills,
-    get_skill_info,
-    install_skill,
-    extract_skill,
-    SkillResult,
-)
+from context_harness.interfaces.cli.skill_cmd import skill_group
 from context_harness.primitives import (
     Failure,
     SKILLS_REPO_ENV_VAR,
@@ -44,9 +37,6 @@ from context_harness.services.skills_registry import get_skills_repo_info
 from context_harness.services.user_config_service import UserConfigService
 from context_harness.services.config_service import ConfigService
 from context_harness.completion import (
-    complete_skill_names,
-    interactive_skill_picker,
-    interactive_local_skill_picker,
     complete_mcp_servers,
     interactive_mcp_picker,
 )
@@ -505,257 +495,6 @@ def _print_mcp_usage_tips(server: str) -> None:
             "[dim]On first use, you'll be prompted to authenticate via browser.[/dim]"
         )
         console.print()
-
-
-# =============================================================================
-# Skill Management Commands
-# =============================================================================
-
-
-@main.group()
-def skill():
-    """Manage ContextHarness skills.
-
-    List, install, and extract skills from the central skills repository.
-    Skills extend agent capabilities with specialized knowledge and workflows.
-    """
-    pass
-
-
-@skill.command("list")
-@click.option(
-    "--tags",
-    "-t",
-    multiple=True,
-    help="Filter skills by tag (can be specified multiple times).",
-)
-def skill_list(tags: tuple):
-    """List available skills from the central repository.
-
-    Shows all skills available for installation, with optional tag filtering.
-
-    Examples:
-
-        context-harness skill list
-
-        context-harness skill list --tags react
-
-        context-harness skill list --tags frontend --tags forms
-    """
-    console.print()
-    console.print(
-        Panel.fit(
-            "[bold blue]ContextHarness[/bold blue] Skills",
-            subtitle=f"v{__version__}",
-        )
-    )
-    console.print()
-
-    tags_list = list(tags) if tags else None
-    skills = list_skills(tags=tags_list)
-
-    if not skills:
-        console.print("[dim]No skills found.[/dim]")
-        console.print()
-        console.print("[dim]The skills repository may be empty or inaccessible.[/dim]")
-
-
-@skill.command("list-local")
-@click.option(
-    "--source",
-    "-s",
-    default=".",
-    type=click.Path(exists=True),
-    help="Source directory containing .opencode/skill/ (default: current directory).",
-)
-def skill_list_local(source: str):
-    """List skills installed in your local project.
-
-    Discovers all skills in the .opencode/skill/ directory and displays
-    their name, description, and version. Useful for finding skills to extract.
-
-    Examples:
-
-        context-harness skill list-local
-
-        context-harness skill list-local --source ./my-project
-    """
-    console.print()
-    console.print(
-        Panel.fit(
-            "[bold blue]ContextHarness[/bold blue] Local Skills",
-            subtitle=f"v{__version__}",
-        )
-    )
-    console.print()
-
-    list_local_skills(source_path=source)
-
-
-@skill.command("info")
-@click.argument("skill_name")
-def skill_info_cmd(skill_name: str):
-    """Show detailed information about a skill.
-
-    Displays the skill's description, version, author, and requirements.
-
-    Examples:
-
-        context-harness skill info react-forms
-
-        context-harness skill info django-auth
-    """
-    console.print()
-    skill_data = get_skill_info(skill_name)
-    if skill_data is None:
-        raise SystemExit(1)
-    console.print()
-
-
-@skill.command("install")
-@click.argument(
-    "skill_name", required=False, default=None, shell_complete=complete_skill_names
-)
-@click.option(
-    "--target",
-    "-t",
-    default=".",
-    type=click.Path(),
-    help="Target directory for installation (default: current directory).",
-)
-@click.option(
-    "--force",
-    "-f",
-    is_flag=True,
-    help="Overwrite existing skill if already installed.",
-)
-def skill_install_cmd(skill_name: str | None, target: str, force: bool):
-    """Install a skill from the central repository.
-
-    Downloads and installs the specified skill to .opencode/skill/ in the
-    target directory.
-
-    If no skill name is provided, an interactive picker will be shown
-    with fuzzy search to help you find and select a skill.
-
-    Examples:
-
-        context-harness skill install
-
-        context-harness skill install react-forms
-
-        context-harness skill install django-auth --target ./my-project
-
-        context-harness skill install react-forms --force
-    """
-    console.print()
-    console.print(
-        Panel.fit(
-            "[bold blue]ContextHarness[/bold blue] Skill Installer",
-            subtitle=f"v{__version__}",
-        )
-    )
-    console.print()
-
-    # If no skill name provided, show interactive picker
-    if skill_name is None:
-        skill_name = interactive_skill_picker(console)
-        if skill_name is None:
-            # User cancelled or no skills available
-            raise SystemExit(0)
-        console.print()
-
-    result = install_skill(skill_name, target=target, force=force)
-
-    if result == SkillResult.SUCCESS:
-        console.print()
-        console.print("[bold]Skill installed![/bold]")
-        console.print()
-        console.print("[dim]The skill is now available in your project.[/dim]")
-        console.print("[dim]It will be automatically loaded when relevant.[/dim]")
-    elif result == SkillResult.ALREADY_EXISTS:
-        raise SystemExit(0)  # Not an error, just informational
-    elif result == SkillResult.NOT_FOUND:
-        console.print()
-        console.print(f"[red]❌ Skill '{skill_name}' not found.[/red]")
-        console.print(
-            "[dim]Use 'context-harness skill list' to see available skills.[/dim]"
-        )
-        raise SystemExit(1)
-    elif result in (SkillResult.AUTH_ERROR, SkillResult.ERROR):
-        console.print()
-        console.print("[red]❌ Failed to install skill.[/red]")
-        raise SystemExit(1)
-
-
-@skill.command("extract")
-@click.argument("skill_name", required=False, default=None)
-@click.option(
-    "--source",
-    "-s",
-    default=".",
-    type=click.Path(exists=True),
-    help="Source directory containing .opencode/skill/ (default: current directory).",
-)
-def skill_extract_cmd(skill_name: str | None, source: str):
-    """Extract a local skill and create a PR to the central repository.
-
-    Takes a skill from your local .opencode/skill/ directory and creates
-    a pull request to add it to the central skills repository for review.
-
-    If no skill name is provided, an interactive picker will be shown
-    with fuzzy search to help you find and select a skill.
-
-    Examples:
-
-        context-harness skill extract
-
-        context-harness skill extract my-custom-skill
-
-        context-harness skill extract react-auth --source ./my-project
-    """
-    console.print()
-    console.print(
-        Panel.fit(
-            "[bold blue]ContextHarness[/bold blue] Skill Extractor",
-            subtitle=f"v{__version__}",
-        )
-    )
-    console.print()
-
-    # If no skill name provided, show interactive picker
-    if skill_name is None:
-        skill_name = interactive_local_skill_picker(console, source_path=source)
-        if skill_name is None:
-            # User cancelled or no skills available
-            raise SystemExit(0)
-        console.print()
-
-    result, pr_url = extract_skill(skill_name, source_path=source)
-
-    if result == SkillResult.SUCCESS:
-        console.print()
-        console.print("[bold]Pull request created![/bold]")
-        console.print()
-        console.print(
-            "[dim]Once merged, the skill will be available to all users.[/dim]"
-        )
-    elif result == SkillResult.NOT_FOUND:
-        console.print()
-        console.print(f"[red]❌ Skill '{skill_name}' not found locally.[/red]")
-        console.print(
-            f"[dim]Expected location: {source}/.opencode/skill/{skill_name}/[/dim]"
-        )
-        raise SystemExit(1)
-    elif result == SkillResult.AUTH_ERROR:
-        console.print()
-        console.print("[red]❌ Authentication failed.[/red]")
-        console.print("[dim]Make sure you're logged in with 'gh auth login'.[/dim]")
-        raise SystemExit(1)
-    elif result == SkillResult.ERROR:
-        console.print()
-        console.print("[red]❌ Failed to extract skill.[/red]")
-        raise SystemExit(1)
 
 
 # =============================================================================
@@ -1270,6 +1009,7 @@ def serve(host: str, port: int, reload: bool, working_dir: str):
 # (context_harness.cli) is the primary entry point defined in pyproject.toml.
 # The interfaces/cli/main.py entry point is maintained for backward compatibility
 # and may be deprecated in a future release.
+main.add_command(skill_group, name="skill")
 main.add_command(worktree_group, name="worktree")
 
 

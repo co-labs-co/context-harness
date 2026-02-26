@@ -380,7 +380,7 @@ class TestShellCompletionIntegration:
 
     def test_skill_install_has_completion(self):
         """Test that skill install command accepts shell_complete."""
-        from context_harness.cli import skill_install_cmd
+        from context_harness.interfaces.cli.skill_cmd import skill_install_cmd
 
         # Check that the command has the skill_name parameter with completion
         params = skill_install_cmd.params
@@ -390,7 +390,7 @@ class TestShellCompletionIntegration:
 
     def test_skill_install_argument_is_optional(self):
         """Test that skill_name argument is optional for interactive mode."""
-        from context_harness.cli import skill_install_cmd
+        from context_harness.interfaces.cli.skill_cmd import skill_install_cmd
 
         params = skill_install_cmd.params
         skill_name_param = next(p for p in params if p.name == "skill_name")
@@ -620,7 +620,7 @@ class TestSkillExtractHasOptionalArgument:
 
     def test_skill_extract_argument_is_optional(self):
         """Test that skill_name argument is optional for interactive mode."""
-        from context_harness.cli import skill_extract_cmd
+        from context_harness.interfaces.cli.skill_cmd import skill_extract_cmd
 
         params = skill_extract_cmd.params
         skill_name_param = next(p for p in params if p.name == "skill_name")
