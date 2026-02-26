@@ -290,6 +290,7 @@ source = { editable = "." }
 dependencies = [
     { name = "click", version = "8.1.8", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "click", version = "8.3.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
+    { name = "packaging" },
     { name = "pathspec" },
     { name = "pyyaml" },
     { name = "questionary" },
@@ -323,6 +324,7 @@ requires-dist = [
     { name = "click", specifier = ">=8.0" },
     { name = "fastapi", marker = "extra == 'web'", specifier = ">=0.109.0" },
     { name = "keyring", marker = "extra == 'keyring'", specifier = ">=24.0" },
+    { name = "packaging", specifier = ">=23.0" },
     { name = "pathspec", specifier = ">=0.11.0" },
     { name = "pydantic", marker = "extra == 'web'", specifier = ">=2.0" },
     { name = "pyyaml", specifier = ">=6.0" },

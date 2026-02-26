@@ -574,3 +574,415 @@ class TestSkillServiceExtract:
 
         assert isinstance(result, Failure)
         assert result.code == ErrorCode.SKILL_INVALID
+
+
+# ---------------------------------------------------------------------------
+# Version comparison tests
+# ---------------------------------------------------------------------------
+
+from context_harness.primitives import VersionComparison, VersionStatus  # noqa: E402
+
+
+class TestSkillServiceCompareVersions:
+    """Tests for SkillService._compare_versions()."""
+
+    def test_upgrade_available(self) -> None:
+        """Remote is newer than local → UPGRADE_AVAILABLE."""
+        service = SkillService(github_client=MockGitHubClient())
+        result = service._compare_versions(
+            skill_name="my-skill",
+            local_version="1.0.0",
+            remote_version="1.1.0",
+            min_ch_version=None,
+            current_ch_version="3.0.0",
+        )
+        assert result.status == VersionStatus.UPGRADE_AVAILABLE
+        assert result.skill_name == "my-skill"
+        assert result.local_version == "1.0.0"
+        assert result.remote_version == "1.1.0"
+
+    def test_up_to_date(self) -> None:
+        """Remote equals local → UP_TO_DATE."""
+        service = SkillService(github_client=MockGitHubClient())
+        result = service._compare_versions(
+            skill_name="my-skill",
+            local_version="2.0.0",
+            remote_version="2.0.0",
+            min_ch_version=None,
+            current_ch_version="3.0.0",
+        )
+        assert result.status == VersionStatus.UP_TO_DATE
+
+    def test_local_newer_than_remote(self) -> None:
+        """Local is newer than remote → UP_TO_DATE (no downgrade)."""
+        service = SkillService(github_client=MockGitHubClient())
+        result = service._compare_versions(
+            skill_name="my-skill",
+            local_version="2.0.0",
+            remote_version="1.9.0",
+            min_ch_version=None,
+            current_ch_version="3.0.0",
+        )
+        assert result.status == VersionStatus.UP_TO_DATE
+
+    def test_incompatible_ch_version(self) -> None:
+        """Current CH is below min required → INCOMPATIBLE."""
+        service = SkillService(github_client=MockGitHubClient())
+        result = service._compare_versions(
+            skill_name="my-skill",
+            local_version="1.0.0",
+            remote_version="1.1.0",
+            min_ch_version="4.0.0",
+            current_ch_version="3.0.0",
+        )
+        assert result.status == VersionStatus.INCOMPATIBLE
+        assert result.context_harness_min == "4.0.0"
+
+    def test_compatible_ch_version(self) -> None:
+        """Current CH meets min required → not INCOMPATIBLE."""
+        service = SkillService(github_client=MockGitHubClient())
+        result = service._compare_versions(
+            skill_name="my-skill",
+            local_version="1.0.0",
+            remote_version="1.1.0",
+            min_ch_version="3.0.0",
+            current_ch_version="3.0.0",
+        )
+        assert result.status != VersionStatus.INCOMPATIBLE
+
+    def test_invalid_version_string(self) -> None:
+        """Unparseable version strings → UNKNOWN."""
+        service = SkillService(github_client=MockGitHubClient())
+        result = service._compare_versions(
+            skill_name="my-skill",
+            local_version="not-a-version",
+            remote_version="also-bad",
+            min_ch_version=None,
+            current_ch_version="3.0.0",
+        )
+        assert result.status == VersionStatus.UNKNOWN
+
+    def test_no_min_ch_version(self) -> None:
+        """When min_ch_version is None, skip compatibility check."""
+        service = SkillService(github_client=MockGitHubClient())
+        result = service._compare_versions(
+            skill_name="my-skill",
+            local_version="1.0.0",
+            remote_version="1.1.0",
+            min_ch_version=None,
+            current_ch_version="1.0.0",  # Would be incompatible if enforced
+        )
+        # Should still see UPGRADE_AVAILABLE, not INCOMPATIBLE
+        assert result.status == VersionStatus.UPGRADE_AVAILABLE
+
+    def test_result_has_correct_fields(self) -> None:
+        """VersionComparison has all expected fields populated."""
+        service = SkillService(github_client=MockGitHubClient())
+        result = service._compare_versions(
+            skill_name="test-skill",
+            local_version="0.1.0",
+            remote_version="0.2.0",
+            min_ch_version="3.0.0",
+            current_ch_version="4.0.0",
+        )
+        assert result.skill_name == "test-skill"
+        assert result.local_version == "0.1.0"
+        assert result.remote_version == "0.2.0"
+        assert result.context_harness_min == "3.0.0"
+        assert result.current_context_harness == "4.0.0"
+
+
+class TestSkillServiceCheckSkillUpdates:
+    """Tests for SkillService.check_skill_updates()."""
+
+    def test_check_updates_not_installed(self, tmp_path: Path) -> None:
+        """Skill not installed locally → UPGRADE_AVAILABLE (available to install)."""
+        registry = create_test_registry(
+            [
+                {
+                    "name": "new-skill",
+                    "description": "A new skill",
+                    "version": "1.0.0",
+                    "author": "author",
+                    "tags": [],
+                    "path": "skill/new-skill",
+                }
+            ]
+        )
+        client = MockGitHubClient(registry_content=registry)
+        service = SkillService(github_client=client)
+
+        result = service.check_skill_updates("new-skill", tmp_path)
+
+        assert isinstance(result, Success)
+        assert result.value.status == VersionStatus.UPGRADE_AVAILABLE
+        assert result.value.local_version is None
+
+    def test_check_updates_skill_not_in_registry(self, tmp_path: Path) -> None:
+        """Skill not in remote registry → Failure(NOT_FOUND)."""
+        registry = create_test_registry([])
+        client = MockGitHubClient(registry_content=registry)
+        service = SkillService(github_client=client)
+
+        result = service.check_skill_updates("ghost-skill", tmp_path)
+
+        assert isinstance(result, Failure)
+        assert result.code == ErrorCode.SKILL_NOT_FOUND
+
+    def test_check_updates_up_to_date(self, tmp_path: Path) -> None:
+        """Locally installed skill matches remote version → UP_TO_DATE."""
+        # Create local skill
+        skill_dir = tmp_path / ".opencode" / "skill" / "my-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("""---
+name: my-skill
+description: My skill
+version: 1.0.0
+---
+""")
+        registry = create_test_registry(
+            [
+                {
+                    "name": "my-skill",
+                    "description": "My skill",
+                    "version": "1.0.0",
+                    "author": "author",
+                    "tags": [],
+                    "path": "skill/my-skill",
+                }
+            ]
+        )
+        client = MockGitHubClient(registry_content=registry)
+        service = SkillService(github_client=client)
+
+        result = service.check_skill_updates("my-skill", tmp_path)
+
+        assert isinstance(result, Success)
+        assert result.value.status == VersionStatus.UP_TO_DATE
+
+
+class TestSkillServiceListOutdated:
+    """Tests for SkillService.list_outdated_skills()."""
+
+    def test_no_outdated_skills(self, tmp_path: Path) -> None:
+        """All skills up to date → empty list."""
+        skill_dir = tmp_path / ".opencode" / "skill" / "my-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("""---
+name: my-skill
+description: My skill
+version: 2.0.0
+---
+""")
+        registry = create_test_registry(
+            [
+                {
+                    "name": "my-skill",
+                    "description": "My skill",
+                    "version": "2.0.0",
+                    "author": "author",
+                    "tags": [],
+                    "path": "skill/my-skill",
+                }
+            ]
+        )
+        client = MockGitHubClient(registry_content=registry)
+        service = SkillService(github_client=client)
+
+        result = service.list_outdated_skills(tmp_path)
+
+        assert isinstance(result, Success)
+        assert result.value == []
+
+    def test_outdated_skill_included(self, tmp_path: Path) -> None:
+        """Skill with newer remote version → included in results."""
+        skill_dir = tmp_path / ".opencode" / "skill" / "old-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("""---
+name: old-skill
+description: Old skill
+version: 1.0.0
+---
+""")
+        registry = create_test_registry(
+            [
+                {
+                    "name": "old-skill",
+                    "description": "Old skill",
+                    "version": "2.0.0",
+                    "author": "author",
+                    "tags": [],
+                    "path": "skill/old-skill",
+                }
+            ]
+        )
+        client = MockGitHubClient(registry_content=registry)
+        service = SkillService(github_client=client)
+
+        result = service.list_outdated_skills(tmp_path)
+
+        assert isinstance(result, Success)
+        assert len(result.value) == 1
+        assert result.value[0].skill_name == "old-skill"
+        assert result.value[0].status == VersionStatus.UPGRADE_AVAILABLE
+
+    def test_local_only_skills_excluded(self, tmp_path: Path) -> None:
+        """Skills only installed locally (not in registry) are excluded."""
+        skill_dir = tmp_path / ".opencode" / "skill" / "local-only"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("""---
+name: local-only
+description: Local only skill
+version: 1.0.0
+---
+""")
+        registry = create_test_registry([])  # Empty registry
+        client = MockGitHubClient(registry_content=registry)
+        service = SkillService(github_client=client)
+
+        result = service.list_outdated_skills(tmp_path)
+
+        assert isinstance(result, Success)
+        assert result.value == []
+
+    def test_incompatible_skill_included(self, tmp_path: Path) -> None:
+        """Skills with CH version incompatibility → included as INCOMPATIBLE."""
+        skill_dir = tmp_path / ".opencode" / "skill" / "needs-upgrade"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("""---
+name: needs-upgrade
+description: Needs upgrade skill
+version: 1.0.0
+---
+""")
+        registry = create_test_registry(
+            [
+                {
+                    "name": "needs-upgrade",
+                    "description": "Needs upgrade skill",
+                    "version": "2.0.0",
+                    "author": "author",
+                    "tags": [],
+                    "path": "skill/needs-upgrade",
+                    "min_context_harness_version": "99.0.0",  # Very high requirement
+                }
+            ]
+        )
+        client = MockGitHubClient(registry_content=registry)
+        service = SkillService(github_client=client)
+
+        result = service.list_outdated_skills(tmp_path)
+
+        assert isinstance(result, Success)
+        assert len(result.value) == 1
+        assert result.value[0].status == VersionStatus.INCOMPATIBLE
+
+
+class TestSkillServiceUpgrade:
+    """Tests for SkillService.upgrade_skill()."""
+
+    def test_upgrade_already_up_to_date(self, tmp_path: Path) -> None:
+        """Upgrading a skill that's already up to date → SKILL_NO_UPGRADE_AVAILABLE."""
+        skill_dir = tmp_path / ".opencode" / "skill" / "current-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("""---
+name: current-skill
+description: Current skill
+version: 1.0.0
+---
+""")
+        registry = create_test_registry(
+            [
+                {
+                    "name": "current-skill",
+                    "description": "Current skill",
+                    "version": "1.0.0",
+                    "author": "author",
+                    "tags": [],
+                    "path": "skill/current-skill",
+                }
+            ]
+        )
+        client = MockGitHubClient(registry_content=registry)
+        service = SkillService(github_client=client)
+
+        result = service.upgrade_skill("current-skill", tmp_path)
+
+        assert isinstance(result, Failure)
+        assert result.code == ErrorCode.SKILL_NO_UPGRADE_AVAILABLE
+
+    def test_upgrade_incompatible_without_force(self, tmp_path: Path) -> None:
+        """Upgrade blocked when incompatible and force_compatibility=False."""
+        skill_dir = tmp_path / ".opencode" / "skill" / "blocked-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("""---
+name: blocked-skill
+description: Blocked skill
+version: 1.0.0
+---
+""")
+        registry = create_test_registry(
+            [
+                {
+                    "name": "blocked-skill",
+                    "description": "Blocked skill",
+                    "version": "2.0.0",
+                    "author": "author",
+                    "tags": [],
+                    "path": "skill/blocked-skill",
+                    "min_context_harness_version": "99.0.0",
+                }
+            ]
+        )
+        client = MockGitHubClient(registry_content=registry)
+        service = SkillService(github_client=client)
+
+        result = service.upgrade_skill(
+            "blocked-skill", tmp_path, force_compatibility=False
+        )
+
+        assert isinstance(result, Failure)
+        assert result.code == ErrorCode.SKILL_INCOMPATIBLE_VERSION
+
+    def test_upgrade_incompatible_with_force(self, tmp_path: Path) -> None:
+        """Upgrade proceeds when incompatible but force_compatibility=True."""
+        skill_dir = tmp_path / ".opencode" / "skill" / "forced-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("""---
+name: forced-skill
+description: Forced skill
+version: 1.0.0
+---
+""")
+        registry = create_test_registry(
+            [
+                {
+                    "name": "forced-skill",
+                    "description": "Forced skill",
+                    "version": "2.0.0",
+                    "author": "author",
+                    "tags": [],
+                    "path": "skill/forced-skill",
+                    "min_context_harness_version": "99.0.0",
+                }
+            ]
+        )
+        client = MockGitHubClient(registry_content=registry)
+        service = SkillService(github_client=client)
+
+        result = service.upgrade_skill(
+            "forced-skill", tmp_path, force_compatibility=True
+        )
+
+        assert isinstance(result, Success)
+
+    def test_upgrade_not_in_registry(self, tmp_path: Path) -> None:
+        """Upgrading a skill not in the remote registry → Failure."""
+        registry = create_test_registry([])
+        client = MockGitHubClient(registry_content=registry)
+        service = SkillService(github_client=client)
+
+        result = service.upgrade_skill("ghost-skill", tmp_path)
+
+        assert isinstance(result, Failure)
+        assert result.code == ErrorCode.SKILL_NOT_FOUND

@@ -32,6 +32,8 @@ from context_harness.primitives.skill import (
     Skill,
     SkillMetadata,
     SkillSource,
+    VersionComparison,
+    VersionStatus,
 )
 from context_harness.primitives.oauth import (
     AuthStatus,
@@ -113,6 +115,8 @@ __all__ = [
     "Skill",
     "SkillMetadata",
     "SkillSource",
+    "VersionComparison",
+    "VersionStatus",
     # OAuth types
     "AuthStatus",
     "OAuthConfig",

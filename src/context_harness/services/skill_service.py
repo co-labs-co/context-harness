@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import List, Optional, Protocol
 
 import yaml
+from packaging.version import InvalidVersion, Version
 
 from context_harness.primitives import (
     DEFAULT_SKILLS_REPO,
@@ -30,6 +31,8 @@ from context_harness.primitives import (
     ToolDetector,
     ToolTarget,
     ToolType,
+    VersionComparison,
+    VersionStatus,
 )
 
 
@@ -57,6 +60,10 @@ class GitHubClient(Protocol):
 
     def fetch_directory(self, repo: str, path: str, dest: Path) -> bool:
         """Fetch a directory recursively from a repository."""
+        ...
+
+    def get_username(self) -> str:
+        """Get the current authenticated GitHub username."""
         ...
 
 
@@ -484,6 +491,258 @@ class SkillService:
             value=installed_skill,
             message=f"Skill '{skill_name}' installed successfully",
         )
+
+    def check_skill_updates(
+        self,
+        skill_name: str,
+        project_path: Path,
+        tool_target: Optional[ToolTarget] = None,
+    ) -> Result[VersionComparison]:
+        """Check if updates are available for a specific skill.
+
+        Args:
+            skill_name: Name of the skill to check
+            project_path: Project directory containing local skills
+            tool_target: Which tool directory to search
+
+        Returns:
+            Result containing VersionComparison
+        """
+        # Get current context-harness version
+        from context_harness import __version__
+
+        # Get local skill info
+        local_result = self.list_local(project_path, tool_target)
+        if isinstance(local_result, Failure):
+            return local_result
+
+        local_skill = None
+        for skill in local_result.value:
+            if skill.name == skill_name:
+                local_skill = skill
+                break
+
+        # Get remote skill info
+        remote_result = self.get_info(skill_name)
+        if isinstance(remote_result, Failure):
+            return remote_result
+
+        remote_skill = remote_result.value
+
+        # If not installed locally, it's an available install (not an upgrade)
+        if local_skill is None:
+            return Success(
+                value=VersionComparison(
+                    skill_name=skill_name,
+                    local_version=None,
+                    remote_version=remote_skill.version,
+                    status=VersionStatus.UPGRADE_AVAILABLE,
+                    context_harness_min=remote_skill.min_context_harness_version,
+                    current_context_harness=__version__,
+                )
+            )
+
+        # Compare versions
+        comparison = self._compare_versions(
+            skill_name=skill_name,
+            local_version=local_skill.version,
+            remote_version=remote_skill.version,
+            min_ch_version=remote_skill.min_context_harness_version,
+            current_ch_version=__version__,
+        )
+
+        return Success(value=comparison)
+
+    def list_outdated_skills(
+        self,
+        project_path: Path,
+        tool_target: Optional[ToolTarget] = None,
+    ) -> Result[List[VersionComparison]]:
+        """List all locally installed skills with available updates.
+
+        Args:
+            project_path: Project directory containing local skills
+            tool_target: Which tool directory to search
+
+        Returns:
+            Result containing list of VersionComparison for outdated skills
+        """
+        # Get all local skills
+        local_result = self.list_local(project_path, tool_target)
+        if isinstance(local_result, Failure):
+            return local_result
+
+        # Get all remote skills
+        remote_result = self.list_remote()
+        if isinstance(remote_result, Failure):
+            return remote_result
+
+        # Build remote skills index
+        remote_skills = {s.name: s for s in remote_result.value}
+
+        # Get current context-harness version
+        from context_harness import __version__
+
+        outdated: List[VersionComparison] = []
+
+        for local_skill in local_result.value:
+            remote_skill = remote_skills.get(local_skill.name)
+            if remote_skill is None:
+                continue  # Skip local-only skills
+
+            comparison = self._compare_versions(
+                skill_name=local_skill.name,
+                local_version=local_skill.version,
+                remote_version=remote_skill.version,
+                min_ch_version=remote_skill.min_context_harness_version,
+                current_ch_version=__version__,
+            )
+
+            # Only include upgradable or incompatible
+            if comparison.status in (
+                VersionStatus.UPGRADE_AVAILABLE,
+                VersionStatus.INCOMPATIBLE,
+            ):
+                outdated.append(comparison)
+
+        return Success(value=outdated)
+
+    def upgrade_skill(
+        self,
+        skill_name: str,
+        project_path: Path,
+        force_compatibility: bool = False,
+        tool_target: Optional[ToolTarget] = None,
+    ) -> Result[Skill]:
+        """Upgrade a skill to the latest version.
+
+        Args:
+            skill_name: Name of the skill to upgrade
+            project_path: Project directory containing local skills
+            force_compatibility: If True, bypass compatibility checks
+            tool_target: Which tool directory to upgrade
+
+        Returns:
+            Result containing upgraded Skill
+        """
+        # Check for updates
+        update_result = self.check_skill_updates(skill_name, project_path, tool_target)
+        if isinstance(update_result, Failure):
+            return update_result
+
+        comparison = update_result.value
+
+        # Check if upgrade is needed
+        if comparison.status == VersionStatus.UP_TO_DATE:
+            return Failure(
+                error=f"Skill '{skill_name}' is already up to date (v{comparison.local_version})",
+                code=ErrorCode.SKILL_NO_UPGRADE_AVAILABLE,
+            )
+
+        # Check compatibility
+        if comparison.status == VersionStatus.INCOMPATIBLE and not force_compatibility:
+            return Failure(
+                error=f"Skill '{skill_name}' requires ContextHarness >= {comparison.context_harness_min}, but you have {comparison.current_context_harness}. Upgrade ContextHarness first or use --force to bypass.",
+                code=ErrorCode.SKILL_INCOMPATIBLE_VERSION,
+                details={
+                    "skill_name": skill_name,
+                    "required_version": comparison.context_harness_min,
+                    "current_version": comparison.current_context_harness,
+                },
+            )
+
+        # Perform upgrade (reinstall with force=True)
+        install_result = self.install(
+            skill_name=skill_name,
+            project_path=project_path,
+            force=True,
+            tool_target=tool_target,
+        )
+
+        if isinstance(install_result, Success):
+            return Success(
+                value=install_result.value,
+                message=f"Skill '{skill_name}' upgraded from {comparison.local_version} to {comparison.remote_version}",
+            )
+
+        # Map install failure to upgrade failure
+        if isinstance(install_result, Failure):
+            return Failure(
+                error=f"Failed to upgrade skill '{skill_name}': {install_result.error}",
+                code=ErrorCode.SKILL_UPGRADE_FAILED,
+                details=install_result.details,
+            )
+
+        return install_result
+
+    def _compare_versions(
+        self,
+        skill_name: str,
+        local_version: str,
+        remote_version: str,
+        min_ch_version: Optional[str],
+        current_ch_version: str,
+    ) -> VersionComparison:
+        """Compare skill versions and check compatibility.
+
+        Args:
+            skill_name: Name of the skill
+            local_version: Currently installed version
+            remote_version: Latest available version
+            min_ch_version: Minimum required ContextHarness version
+            current_ch_version: Current ContextHarness version
+
+        Returns:
+            VersionComparison with appropriate status
+        """
+        try:
+            local = Version(local_version)
+            remote = Version(remote_version)
+
+            # Check ContextHarness compatibility first
+            if min_ch_version:
+                try:
+                    current_ch = Version(current_ch_version)
+                    min_required = Version(min_ch_version)
+
+                    if current_ch < min_required:
+                        return VersionComparison(
+                            skill_name=skill_name,
+                            local_version=local_version,
+                            remote_version=remote_version,
+                            status=VersionStatus.INCOMPATIBLE,
+                            context_harness_min=min_ch_version,
+                            current_context_harness=current_ch_version,
+                        )
+                except InvalidVersion:
+                    # Invalid CH version, proceed with version comparison
+                    pass
+
+            # Compare skill versions
+            if remote > local:
+                status = VersionStatus.UPGRADE_AVAILABLE
+            else:
+                status = VersionStatus.UP_TO_DATE
+
+            return VersionComparison(
+                skill_name=skill_name,
+                local_version=local_version,
+                remote_version=remote_version,
+                status=status,
+                context_harness_min=min_ch_version,
+                current_context_harness=current_ch_version,
+            )
+
+        except InvalidVersion:
+            # If version parsing fails, status is unknown
+            return VersionComparison(
+                skill_name=skill_name,
+                local_version=local_version,
+                remote_version=remote_version,
+                status=VersionStatus.UNKNOWN,
+                context_harness_min=min_ch_version,
+                current_context_harness=current_ch_version,
+            )
 
     def validate(self, skill_path: Path) -> Result[SkillMetadata]:
         """Validate a skill directory structure.

@@ -15,6 +15,8 @@ from context_harness.skills import (
     get_skill_info,
     install_skill,
     extract_skill,
+    check_updates,
+    upgrade_skill,
     SkillResult,
 )
 from context_harness.completion import (
@@ -240,3 +242,149 @@ def skill_extract_cmd(skill_name: Optional[str], source: str) -> None:
         console.print()
         print_error("Failed to extract skill.")
         raise SystemExit(1)
+
+
+@skill_group.command("outdated")
+@click.option(
+    "--source",
+    "-s",
+    default=".",
+    type=click.Path(exists=True),
+    help="Source directory containing local skills (default: current directory).",
+)
+def skill_outdated_cmd(source: str) -> None:
+    """Show skills with available updates.
+
+    Compares locally installed skills against the remote registry and
+    lists any skills that have a newer version available.
+
+    Examples:
+
+        context-harness skill outdated
+
+        context-harness skill outdated --source ./my-project
+    """
+    print_header("Skill Updates")
+
+    result, comparisons = check_updates(source_path=source)
+
+    if result != SkillResult.SUCCESS:
+        console.print()
+        print_error("Failed to check for updates.")
+        raise SystemExit(1)
+
+    if comparisons:
+        console.print()
+        print_info(
+            f"Found {len(comparisons)} skill(s) with updates available. "
+            "Run 'context-harness skill upgrade <name>' to upgrade."
+        )
+    else:
+        console.print()
+        console.print("[green]✅ All skills are up to date.[/green]")
+
+
+@skill_group.command("upgrade")
+@click.argument("skill_name", required=False, default=None)
+@click.option(
+    "--source",
+    "-s",
+    default=".",
+    type=click.Path(exists=True),
+    help="Source directory containing local skills (default: current directory).",
+)
+@click.option(
+    "--all",
+    "upgrade_all",
+    is_flag=True,
+    help="Upgrade all outdated skills.",
+)
+@click.option(
+    "--force",
+    "-f",
+    is_flag=True,
+    help="Bypass compatibility checks.",
+)
+def skill_upgrade_cmd(
+    skill_name: Optional[str], source: str, upgrade_all: bool, force: bool
+) -> None:
+    """Upgrade a skill to the latest version.
+
+    Downloads and installs the latest version of the specified skill.
+    Use --all to upgrade all outdated skills at once.
+
+    If the skill requires a newer version of ContextHarness, you will
+    be warned. Use --force to bypass the compatibility check.
+
+    Examples:
+
+        context-harness skill upgrade react-forms
+
+        context-harness skill upgrade --all
+
+        context-harness skill upgrade react-forms --force
+    """
+    print_header("Skill Upgrade")
+
+    if not skill_name and not upgrade_all:
+        console.print()
+        print_error("Specify a skill name or use --all to upgrade all outdated skills.")
+        print_info("Use 'context-harness skill outdated' to see what's available.")
+        raise SystemExit(1)
+
+    if upgrade_all:
+        # Check for all outdated skills and upgrade them
+        check_result, comparisons = check_updates(source_path=source, quiet=True)
+        if check_result != SkillResult.SUCCESS or comparisons is None:
+            console.print()
+            print_error("Failed to check for updates.")
+            raise SystemExit(1)
+
+        if not comparisons:
+            console.print()
+            console.print("[green]✅ All skills are already up to date.[/green]")
+            return
+
+        console.print()
+        print_info(f"Upgrading {len(comparisons)} skill(s)...")
+        console.print()
+
+        had_error = False
+        for comp in comparisons:
+            result = upgrade_skill(
+                comp.skill_name,
+                source_path=source,
+                force_compatibility=force,
+            )
+            if result not in (SkillResult.SUCCESS,):
+                had_error = True
+
+        if had_error:
+            raise SystemExit(1)
+    else:
+        assert skill_name is not None  # guaranteed by the guard above
+        result = upgrade_skill(
+            skill_name,
+            source_path=source,
+            force_compatibility=force,
+        )
+
+        if result == SkillResult.SUCCESS:
+            console.print()
+            print_bold("Skill upgraded!")
+        elif result == SkillResult.NOT_FOUND:
+            console.print()
+            print_error(f"Skill '{skill_name}' not found locally.")
+            print_info(
+                "Use 'context-harness skill list-local' to see installed skills."
+            )
+            raise SystemExit(1)
+        elif result == SkillResult.AUTH_ERROR:
+            console.print()
+            print_error("Authentication failed.")
+            print_info("Make sure you're logged in with 'gh auth login'.")
+            raise SystemExit(1)
+        elif result == SkillResult.ERROR:
+            console.print()
+            print_error("Failed to upgrade skill.")
+            raise SystemExit(1)
