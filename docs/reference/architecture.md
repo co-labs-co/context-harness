@@ -261,7 +261,7 @@ The research and documentation subagents require [Context7 MCP](https://github.c
       "mcpServers": {
         "context7": {
           "command": "npx",
-          "args": ["-y", "@anthropic-ai/mcp-server-context7"]
+          "args": ["-y", "@upstash/context7-mcp"]
         }
       }
     }
@@ -295,7 +295,7 @@ For higher rate limits:
       "mcpServers": {
         "context7": {
           "command": "npx",
-          "args": ["-y", "@anthropic-ai/mcp-server-context7"],
+          "args": ["-y", "@upstash/context7-mcp"],
           "env": {
             "CONTEXT7_API_KEY": "YOUR_API_KEY"
           }

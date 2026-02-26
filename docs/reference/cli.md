@@ -115,7 +115,7 @@ ch mcp add context7 -k KEY # With API key for higher limits
       "mcpServers": {
         "context7": {
           "command": "npx",
-          "args": ["-y", "@anthropic-ai/mcp-server-context7"]
+          "args": ["-y", "@upstash/context7-mcp"]
         }
       }
     }
