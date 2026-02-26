@@ -356,7 +356,7 @@ def skill_upgrade_cmd(
                 source_path=source,
                 force_compatibility=force,
             )
-            if result not in (SkillResult.SUCCESS,):
+            if result != SkillResult.SUCCESS:
                 had_error = True
 
         if had_error:

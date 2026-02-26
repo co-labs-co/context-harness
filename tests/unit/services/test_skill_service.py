@@ -986,3 +986,92 @@ version: 1.0.0
 
         assert isinstance(result, Failure)
         assert result.code == ErrorCode.SKILL_NOT_FOUND
+
+    def test_upgrade_not_installed_locally(self, tmp_path: Path) -> None:
+        """Upgrading a skill that is in the registry but not installed locally → SKILL_NOT_FOUND."""
+        registry = create_test_registry(
+            [
+                {
+                    "name": "remote-only-skill",
+                    "description": "Remote skill",
+                    "version": "1.0.0",
+                    "author": "author",
+                    "tags": [],
+                    "path": "skill/remote-only-skill",
+                }
+            ]
+        )
+        client = MockGitHubClient(registry_content=registry)
+        service = SkillService(github_client=client)
+
+        result = service.upgrade_skill("remote-only-skill", tmp_path)
+
+        assert isinstance(result, Failure)
+        assert result.code == ErrorCode.SKILL_NOT_FOUND
+        assert "not installed" in result.error.lower()
+
+    def test_upgrade_unknown_version_returns_failure(self, tmp_path: Path) -> None:
+        """Upgrading a skill with an unparseable version → SKILL_UPGRADE_FAILED."""
+        skill_dir = tmp_path / ".opencode" / "skill" / "bad-version-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("""---
+name: bad-version-skill
+description: Skill with bad version
+version: not-a-valid-semver!!
+---
+""")
+        registry = create_test_registry(
+            [
+                {
+                    "name": "bad-version-skill",
+                    "description": "Skill with bad version",
+                    "version": "also-not-valid!!",
+                    "author": "author",
+                    "tags": [],
+                    "path": "skill/bad-version-skill",
+                }
+            ]
+        )
+        client = MockGitHubClient(registry_content=registry)
+        service = SkillService(github_client=client)
+
+        result = service.upgrade_skill("bad-version-skill", tmp_path)
+
+        assert isinstance(result, Failure)
+        assert result.code == ErrorCode.SKILL_UPGRADE_FAILED
+
+
+class TestSkillServiceCompareVersionsEdgeCases:
+    """Edge-case tests for SkillService._compare_versions()."""
+
+    def test_unknown_ch_version_string(self) -> None:
+        """'0.0.0+unknown' (dev install) is valid PEP 440 and parses as 0.0.0.
+
+        packaging.version.Version treats the '+unknown' part as a local version
+        identifier, so '0.0.0+unknown' normalises to 0.0.0. When a skill's
+        min_context_harness_version is newer (e.g. 1.0.0), the result is
+        INCOMPATIBLE — which is the safest outcome for a dev install.
+        """
+        service = SkillService(github_client=MockGitHubClient())
+        result = service._compare_versions(
+            skill_name="my-skill",
+            local_version="1.0.0",
+            remote_version="1.1.0",
+            min_ch_version="1.0.0",
+            current_ch_version="0.0.0+unknown",
+        )
+        # 0.0.0+unknown < 1.0.0  →  INCOMPATIBLE (safe default for dev installs)
+        assert result.status == VersionStatus.INCOMPATIBLE
+
+    def test_truly_invalid_ch_version_string(self) -> None:
+        """A completely invalid CH version string propagates to UNKNOWN status."""
+        service = SkillService(github_client=MockGitHubClient())
+        result = service._compare_versions(
+            skill_name="my-skill",
+            local_version="1.0.0",
+            remote_version="1.1.0",
+            min_ch_version="1.0.0",
+            current_ch_version="not-a-version!!",
+        )
+        # Invalid CH version → inner InvalidVersion re-raises → outer handler → UNKNOWN
+        assert result.status == VersionStatus.UNKNOWN

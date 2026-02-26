@@ -632,6 +632,20 @@ class SkillService:
 
         comparison = update_result.value
 
+        # Skill exists in registry but is not installed locally
+        if comparison.local_version is None:
+            return Failure(
+                error=f"Skill '{skill_name}' is not installed locally. Use 'ch skill install {skill_name}' to install it.",
+                code=ErrorCode.SKILL_NOT_FOUND,
+            )
+
+        # Version comparison failed — cannot determine safe upgrade path
+        if comparison.status == VersionStatus.UNKNOWN:
+            return Failure(
+                error=f"Skill '{skill_name}' has an unrecognisable version (local={comparison.local_version}, remote={comparison.remote_version}). Cannot determine upgrade path.",
+                code=ErrorCode.SKILL_UPGRADE_FAILED,
+            )
+
         # Check if upgrade is needed
         if comparison.status == VersionStatus.UP_TO_DATE:
             return Failure(
@@ -715,8 +729,9 @@ class SkillService:
                             current_context_harness=current_ch_version,
                         )
                 except InvalidVersion:
-                    # Invalid CH version, proceed with version comparison
-                    pass
+                    # Propagate invalid version errors to the outer handler so
+                    # that the overall status is reported as UNKNOWN.
+                    raise
 
             # Compare skill versions
             if remote > local:
