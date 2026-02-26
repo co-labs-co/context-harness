@@ -82,6 +82,15 @@ We use [Conventional Commits](https://www.conventionalcommits.org/):
 3. Run tests: `uv run pytest`
 4. Create a PR with a clear description
 
+## Branch Management
+
+We automatically clean up stale and merged branches to keep the repository organized. See [Branch Management](contributing/branch-management.md) for details on:
+
+- Automatic branch deletion on PR merge
+- Weekly cleanup of merged branches
+- Manual cleanup commands
+- Branch naming conventions
+
 ## License
 
 By contributing, you agree that your contributions will be licensed under the [GNU AGPLv3](https://github.com/co-labs-co/context-harness/blob/main/LICENSE).
