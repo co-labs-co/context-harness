@@ -2,28 +2,14 @@
 
 ## Automatic Branch Cleanup
 
-This repository is configured to automatically clean up stale and merged branches to keep the repository organized.
+This repository is configured to automatically delete branches when pull requests are merged.
 
-### Repository Settings
+### Repository Setting
 
 - **Auto-delete on PR merge**: ✅ Enabled
-  - When a pull request is merged, the source branch is automatically deleted
-  - This only applies to branches merged through GitHub PRs
-
-### Automated Workflows
-
-#### 1. Immediate Cleanup (`.github/workflows/cleanup-branches.yml`)
-- **Trigger**: When a PR is closed (merged)
-- **Action**: Deletes the merged branch immediately after PR merge
-- **Permissions**: Requires `contents: write` permission
-
-#### 2. Weekly Stale Branch Cleanup
-- **Schedule**: Every Sunday at midnight UTC
-- **Action**: 
-  - Scans all remote branches (except `main`, `gh-pages`)
-  - Identifies branches fully merged into `main`
-  - Deletes merged branches automatically
-- **Manual trigger**: Can be run manually via GitHub Actions UI
+  - When a pull request is merged through GitHub, the source branch is automatically deleted
+  - This is a built-in GitHub repository setting
+  - No additional automation or workflows required
 
 ### Protected Branches
 
@@ -33,22 +19,33 @@ The following branches are protected and will never be auto-deleted:
 
 ### Manual Cleanup
 
-To manually clean up stale branches:
+#### Clean up local branches
+
+After branches are deleted remotely, clean up your local references:
 
 ```bash
-# Clean up local branches tracking deleted remotes
+# Fetch and prune deleted remote branches
 git fetch --prune
 
 # Delete local branches that no longer have remotes
 git branch -vv | grep ': gone]' | awk '{print $1}' | xargs git branch -D
+```
 
-# Run the cleanup workflow manually
-gh workflow run cleanup-branches.yml
+#### Manually delete a remote branch
+
+If you need to manually delete a branch:
+
+```bash
+# Delete remote branch
+git push origin --delete branch-name
+
+# Or use GitHub CLI
+gh api repos/co-labs-co/context-harness/git/refs/heads/branch-name -X DELETE
 ```
 
 ### Finding Merged Branches
 
-To see which branches are fully merged into main:
+To identify which branches have been fully merged into main:
 
 ```bash
 for branch in $(git branch -r | grep -v "main\|HEAD\|gh-pages" | sed 's/origin\///'); do
@@ -75,28 +72,19 @@ To help with organization, we use these prefixes:
 1. **Create PRs promptly** - Don't let branches sit without PRs for long
 2. **Merge regularly** - Keep branches short-lived and merge frequently
 3. **Delete local branches** - Run `git fetch --prune` regularly to clean up local references
-4. **Check before creating** - Use descriptive branch names that indicate their purpose
+4. **Use descriptive names** - Branch names should clearly indicate their purpose
 5. **Review stale PRs** - Close or update PRs that have been open for more than 2 weeks
 
-### Cleanup Summary (Last Run)
+### Recent Cleanup
 
 **Date**: February 26, 2026
 
-**Deleted Branches**:
-- `opencode/issue19-20251205204553` (merged)
-- `opencode/issue3-20251204210459` (merged)
-- `docs/baseline-session-update` (merged, 3 months old)
-- `docs/project-context-baseline` (merged, 3 months old)
-- `feat/agents-md-generation` (merged, 7 weeks old)
-- `feat/mcp-config` (merged, 3 months old)
-- `feature/baseline-skill-extraction` (merged, 9 weeks old)
-- `feature/configurable-skills-registry` (merged, 7 weeks old)
-- `feature/license` (merged, 3 months old)
-- `feature/skills` (merged, 9 weeks old)
-- `fix/baseline-skill-creator-standard` (merged, 7 weeks old)
-- `fix/context7-mcp-tool-config` (merged, 3 months old)
-- `fix/dynamic-version` (merged, 3 months old)
-- `fix/preserve-user-skills-on-init` (merged, 9 weeks old)
-- `fix/semantic-release-github-api` (merged, 3 months old)
-
-**Total**: 15 stale branches cleaned up
+Cleaned up **15 stale merged branches** to improve repository organization:
+- `opencode/issue19-20251205204553`, `opencode/issue3-20251204210459`
+- `docs/baseline-session-update`, `docs/project-context-baseline`
+- `feat/agents-md-generation`, `feat/mcp-config`
+- `feature/baseline-skill-extraction`, `feature/configurable-skills-registry`
+- `feature/license`, `feature/skills`
+- `fix/baseline-skill-creator-standard`, `fix/context7-mcp-tool-config`
+- `fix/dynamic-version`, `fix/preserve-user-skills-on-init`
+- `fix/semantic-release-github-api`
