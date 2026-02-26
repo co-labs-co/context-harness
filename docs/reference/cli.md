@@ -203,6 +203,55 @@ ch skill extract           # Interactive picker
 ch skill extract <name>    # Extract specific skill
 ```
 
+### skill outdated
+
+Check which installed skills have newer versions available in the registry.
+
+```bash
+ch skill outdated
+```
+
+**Example output:**
+
+```
+┏━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┓
+┃ Skill           ┃ Installed     ┃ Latest        ┃ Status              ┃
+┡━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━┩
+│ react-forms     │ 0.1.0         │ 0.2.0         │ upgrade available   │
+│ fastapi-crud    │ 1.0.0         │ 1.0.0         │ up to date          │
+│ django-auth     │ 0.3.0         │ 0.3.1         │ upgrade available   │
+└─────────────────┴───────────────┴───────────────┴─────────────────────┘
+```
+
+If a skill requires a newer version of ContextHarness than is currently installed, it is shown with status `incompatible`.
+
+### skill upgrade
+
+Upgrade one or all installed skills to the latest registry version.
+
+```bash
+ch skill upgrade <name>        # Upgrade a specific skill
+ch skill upgrade --all         # Upgrade all outdated skills
+ch skill upgrade <name> --force  # Upgrade even if version is incompatible
+```
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `--all` | Upgrade every installed skill that has a newer version |
+| `--force` | Skip the `min_context_harness_version` compatibility check |
+
+**Exit codes:**
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success (or already up to date) |
+| 1 | Error (skill not found, network failure, incompatible version) |
+
+!!! tip "Incompatible Skills"
+    If a skill requires a newer version of ContextHarness, the upgrade is blocked and a message is shown. Run `pipx upgrade context-harness` (or `uv tool upgrade context-harness`) first, or use `--force` to override.
+
 ## Configuration Management
 
 ### config list
@@ -286,4 +335,4 @@ _CH_COMPLETE=fish_source ch | source
 |------|---------|
 | 0 | Success |
 | 1 | General error |
-| 2 | Invalid arguments |
+| 2 | Invalid arguments or incompatible version |

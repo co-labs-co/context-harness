@@ -255,6 +255,53 @@ my-skills-repo/
 }
 ```
 
+## Keeping Skills Up to Date
+
+### Check for Updates
+
+See which of your installed skills have newer versions available:
+
+```bash
+ch skill outdated
+```
+
+**Example output:**
+
+```
+┏━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┓
+┃ Skill           ┃ Installed     ┃ Latest        ┃ Status              ┃
+┡━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━┩
+│ react-forms     │ 0.1.0         │ 0.2.0         │ upgrade available   │
+│ fastapi-crud    │ 1.0.0         │ 1.0.0         │ up to date          │
+└─────────────────┴───────────────┴───────────────┴─────────────────────┘
+```
+
+### Upgrade Skills
+
+```bash
+# Upgrade a single skill
+ch skill upgrade react-forms
+
+# Upgrade all outdated skills at once
+ch skill upgrade --all
+```
+
+### Compatibility
+
+Skills can declare a minimum ContextHarness version they require via `min_context_harness_version` in their metadata. If your installed version is too old, the upgrade is blocked:
+
+```
+❌ react-forms requires context-harness >= 4.0.0 (you have 3.9.0)
+   Run: pipx upgrade context-harness
+   Or use --force to skip this check
+```
+
+Use `--force` to bypass the check if needed:
+
+```bash
+ch skill upgrade react-forms --force
+```
+
 ## Configuration Precedence
 
 Skills repository is resolved in this order:
