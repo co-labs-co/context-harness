@@ -2,6 +2,8 @@
 
 Handles skill listing, installation, extraction, and validation.
 Business logic extracted from skills.py module.
+
+Supports both OpenCode (.opencode/skill/) and Claude Code (.claude/skills/) tools.
 """
 
 from __future__ import annotations
@@ -25,6 +27,9 @@ from context_harness.primitives import (
     SkillMetadata,
     SkillSource,
     Success,
+    ToolDetector,
+    ToolTarget,
+    ToolType,
 )
 
 
@@ -260,74 +265,98 @@ class SkillService:
 
         return Success(value=skills)
 
-    def list_local(self, project_path: Path) -> Result[List[Skill]]:
-        """List skills installed in the local .opencode/skill/ directory.
+    def list_local(
+        self,
+        project_path: Path,
+        tool_target: Optional[ToolTarget] = None,
+    ) -> Result[List[Skill]]:
+        """List skills installed in the local project.
+
+        Scans both .opencode/skill/ and .claude/skills/ directories based on
+        tool_target parameter or auto-detection.
 
         Args:
-            project_path: Project directory containing .opencode/skill/
+            project_path: Project directory to scan for skills
+            tool_target: Which tool(s) to scan:
+                - "opencode": Only .opencode/skill/
+                - "claude-code": Only .claude/skills/
+                - "both": Scan both directories
+                - None: Auto-detect installed tools
 
         Returns:
-            Result containing list of Skill primitives
+            Result containing list of Skill primitives from all scanned directories
         """
-        skills_dir = project_path / ".opencode" / "skill"
+        detector = ToolDetector(project_path)
+        skills_dirs = detector.get_skills_dirs(tool_target)
 
-        if not skills_dir.exists():
-            return Success(value=[])  # Empty list, not an error
+        if not skills_dirs:
+            return Success(value=[])  # No tools installed
 
-        skills: List[Skill] = []
+        all_skills: List[Skill] = []
+        seen_names: set[str] = set()  # Track duplicates across directories
 
-        for skill_dir in sorted(skills_dir.iterdir()):
-            if not skill_dir.is_dir():
+        for skills_dir in skills_dirs:
+            if not skills_dir.exists():
                 continue
 
-            skill_name = skill_dir.name
-            skill_md = skill_dir / "SKILL.md"
+            for skill_dir in sorted(skills_dir.iterdir()):
+                if not skill_dir.is_dir():
+                    continue
 
-            if not skill_md.exists():
-                skills.append(
-                    Skill(
-                        name=skill_name,
-                        description="(missing SKILL.md)",
-                        version="0.0.0",
-                        author="unknown",
-                        tags=[],
-                        location=str(skill_dir),
-                        source=SkillSource.LOCAL,
-                        is_valid=False,
-                    )
-                )
-                continue
+                skill_name = skill_dir.name
 
-            # Parse frontmatter
-            try:
-                metadata = self._parse_skill_frontmatter(skill_dir)
-                skills.append(
-                    Skill(
-                        name=skill_name,
-                        description=metadata.description,
-                        version=metadata.version,
-                        author=metadata.author or "unknown",
-                        tags=metadata.tags,
-                        location=str(skill_md),
-                        source=SkillSource.LOCAL,
-                        is_valid=True,
-                    )
-                )
-            except Exception:
-                skills.append(
-                    Skill(
-                        name=skill_name,
-                        description="(error reading SKILL.md)",
-                        version="0.0.0",
-                        author="unknown",
-                        tags=[],
-                        location=str(skill_dir),
-                        source=SkillSource.LOCAL,
-                        is_valid=False,
-                    )
-                )
+                # Skip duplicates (same skill in both directories)
+                if skill_name in seen_names:
+                    continue
+                seen_names.add(skill_name)
 
-        return Success(value=skills)
+                skill_md = skill_dir / "SKILL.md"
+
+                if not skill_md.exists():
+                    all_skills.append(
+                        Skill(
+                            name=skill_name,
+                            description="(missing SKILL.md)",
+                            version="0.0.0",
+                            author="unknown",
+                            tags=[],
+                            location=str(skill_dir),
+                            source=SkillSource.LOCAL,
+                            is_valid=False,
+                        )
+                    )
+                    continue
+
+                # Parse frontmatter
+                try:
+                    metadata = self._parse_skill_frontmatter(skill_dir)
+                    all_skills.append(
+                        Skill(
+                            name=skill_name,
+                            description=metadata.description,
+                            version=metadata.version,
+                            author=metadata.author or "unknown",
+                            tags=metadata.tags,
+                            location=str(skill_md),
+                            source=SkillSource.LOCAL,
+                            is_valid=True,
+                        )
+                    )
+                except Exception:
+                    all_skills.append(
+                        Skill(
+                            name=skill_name,
+                            description="(error reading SKILL.md)",
+                            version="0.0.0",
+                            author="unknown",
+                            tags=[],
+                            location=str(skill_dir),
+                            source=SkillSource.LOCAL,
+                            is_valid=False,
+                        )
+                    )
+
+        return Success(value=all_skills)
 
     def get_info(self, skill_name: str) -> Result[Skill]:
         """Get detailed information about a specific remote skill.
@@ -357,13 +386,21 @@ class SkillService:
         skill_name: str,
         project_path: Path,
         force: bool = False,
+        tool_target: Optional[ToolTarget] = None,
     ) -> Result[Skill]:
         """Install a skill from the remote registry.
+
+        Installs to the appropriate skill directory based on tool_target.
 
         Args:
             skill_name: Name of the skill to install
             project_path: Target project directory
             force: If True, overwrite existing skill
+            tool_target: Which tool(s) to install for:
+                - "opencode": Install to .opencode/skill/
+                - "claude-code": Install to .claude/skills/
+                - "both": Install to both directories
+                - None: Auto-detect installed tools
 
         Returns:
             Result containing installed Skill primitive
@@ -374,36 +411,69 @@ class SkillService:
             return info_result
 
         skill = info_result.value
-        skill_dest = project_path / ".opencode" / "skill" / skill_name
 
-        # Check if already exists
-        if skill_dest.exists() and not force:
-            return Failure(
-                error=f"Skill '{skill_name}' already installed at {skill_dest}",
-                code=ErrorCode.ALREADY_EXISTS,
-                details={"path": str(skill_dest)},
-            )
+        # Determine installation directories
+        detector = ToolDetector(project_path)
 
-        # Remove existing if force
-        if skill_dest.exists() and force:
-            shutil.rmtree(skill_dest)
+        if tool_target == "both":
+            # Install to both directories
+            install_dirs = [
+                detector._opencode_paths.skills_dir,
+                detector._claude_code_paths.skills_dir,
+            ]
+        elif tool_target == "opencode":
+            install_dirs = [detector._opencode_paths.skills_dir]
+        elif tool_target == "claude-code":
+            install_dirs = [detector._claude_code_paths.skills_dir]
+        else:
+            # Auto-detect: get dirs from installed tools, or default to OpenCode
+            install_dirs = detector.get_skills_dirs(tool_target)
+            if not install_dirs:
+                # No tools installed, default to OpenCode for backward compatibility
+                install_dirs = [detector._opencode_paths.skills_dir]
 
-        # Fetch skill files
-        if not self.github.fetch_directory(self.skills_repo, skill.path, skill_dest):
-            return Failure(
-                error=f"Failed to install skill '{skill_name}'",
-                code=ErrorCode.SKILL_INSTALL_FAILED,
-            )
+        # Install to each directory
+        installed_path: Optional[Path] = None
+        for skills_dir in install_dirs:
+            skill_dest = skills_dir / skill_name
+
+            # Check if already exists
+            if skill_dest.exists() and not force:
+                return Failure(
+                    error=f"Skill '{skill_name}' already installed at {skill_dest}",
+                    code=ErrorCode.ALREADY_EXISTS,
+                    details={"path": str(skill_dest)},
+                )
+
+            # Remove existing if force
+            if skill_dest.exists() and force:
+                shutil.rmtree(skill_dest)
+
+            # Ensure parent directory exists
+            skills_dir.mkdir(parents=True, exist_ok=True)
+
+            # Fetch skill files
+            if skill.path and not self.github.fetch_directory(
+                self.skills_repo, skill.path, skill_dest
+            ):
+                return Failure(
+                    error=f"Failed to install skill '{skill_name}'",
+                    code=ErrorCode.SKILL_INSTALL_FAILED,
+                )
+
+            # Track the first successful install path for return value
+            if installed_path is None:
+                installed_path = skill_dest
 
         # Return updated skill with local path
-        skill_md_path = skill_dest / "SKILL.md"
+        skill_md_path = (installed_path / "SKILL.md") if installed_path else None
         installed_skill = Skill(
             name=skill.name,
             description=skill.description,
             version=skill.version,
             author=skill.author,
             tags=skill.tags,
-            location=str(skill_md_path),
+            location=str(skill_md_path) if skill_md_path else "",
             path=skill.path,  # Keep registry path for reference
             source=SkillSource.LOCAL,
             is_valid=True,
@@ -474,12 +544,20 @@ class SkillService:
         self,
         skill_name: str,
         source_path: Path,
+        tool_target: Optional[ToolTarget] = None,
     ) -> Result[str]:
         """Extract a local skill and create a PR to the central repository.
 
+        Searches for the skill in both .opencode/skill/ and .claude/skills/
+        directories based on tool_target or auto-detection.
+
         Args:
             skill_name: Name of the skill to extract
-            source_path: Source directory containing .opencode/skill/
+            source_path: Source directory containing skill directories
+            tool_target: Which tool directory to search:
+                - "opencode": Only .opencode/skill/
+                - "claude-code": Only .claude/skills/
+                - "both" or None: Search both directories
 
         Returns:
             Result containing PR URL
@@ -505,10 +583,26 @@ class SkillService:
                 code=ErrorCode.PERMISSION_DENIED,
             )
 
-        skill_source = source_path / ".opencode" / "skill" / skill_name
-        if not skill_source.exists():
+        # Find the skill in available directories
+        detector = ToolDetector(source_path)
+        skills_dirs = detector.get_skills_dirs(tool_target if tool_target else "both")
+
+        skill_source: Optional[Path] = None
+        for skills_dir in skills_dirs:
+            candidate = skills_dir / skill_name
+            if candidate.exists():
+                skill_source = candidate
+                break
+
+        if skill_source is None:
+            # Build helpful error message with searched locations
+            searched = (
+                ", ".join(str(d) for d in skills_dirs)
+                if skills_dirs
+                else "no skill directories found"
+            )
             return Failure(
-                error=f"Skill '{skill_name}' not found at {skill_source}",
+                error=f"Skill '{skill_name}' not found. Searched: {searched}",
                 code=ErrorCode.SKILL_NOT_FOUND,
             )
 

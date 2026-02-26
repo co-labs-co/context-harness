@@ -1,12 +1,23 @@
 # ContextHarness
 
-Context-aware agent framework for [OpenCode.ai](https://opencode.ai) that maintains session continuity.
+Context-aware agent framework for [OpenCode](https://opencode.ai) and [Claude Code](https://docs.anthropic.com/en/docs/claude-code) that maintains session continuity.
 
 ## What is ContextHarness?
 
 ContextHarness solves a fundamental problem with AI coding assistants: **context loss**. When you're working on a feature across multiple sessions, you lose all the context from previous conversations—the decisions made, files modified, documentation referenced, and progress achieved.
 
 ContextHarness maintains a `SESSION.md` file for each feature/task you work on. When you run `/compact`, your current work context is saved. When you switch sessions with `/ctx`, the previous context is preserved and the new session's context is loaded.
+
+## Supported Tools
+
+ContextHarness works with both major AI coding assistants:
+
+| Tool | Description |
+|------|-------------|
+| **[OpenCode](https://opencode.ai)** | Open-source AI coding assistant |
+| **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** | Anthropic's VS Code extension and CLI |
+
+By default, ContextHarness installs support for **both tools** simultaneously, allowing you to use whichever fits your workflow.
 
 ## Quick Start
 
@@ -16,14 +27,29 @@ uv tool install "git+https://github.com/co-labs-co/context-harness.git"
 
 # Initialize in your project
 ch init                    # or: context-harness init
-
-# Open OpenCode and start working
-/baseline              # Analyze project (first time)
-/ctx my-feature        # Create session + branch
-# ... do your work ...
-/compact               # Save context
-/pr                    # Create pull request
 ```
+
+=== "OpenCode"
+
+    ```bash
+    # Open OpenCode and start working
+    /baseline              # Analyze project (first time)
+    /ctx my-feature        # Create session + branch
+    # ... do your work ...
+    /compact               # Save context
+    /pr                    # Create pull request
+    ```
+
+=== "Claude Code"
+
+    ```bash
+    # Open Claude Code and start working
+    /baseline              # Analyze project (first time)
+    /ctx my-feature        # Create session + branch
+    # ... do your work ...
+    /compact               # Save context
+    /pr                    # Create pull request
+    ```
 
 That's it. Your context persists across sessions.
 

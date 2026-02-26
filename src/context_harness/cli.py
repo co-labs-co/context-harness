@@ -86,11 +86,22 @@ def main():
     type=click.Path(),
     help="Target directory for installation (default: current directory).",
 )
-def init(force: bool, target: str):
+@click.option(
+    "--tool",
+    type=click.Choice(["opencode", "claude-code", "both"]),
+    default="both",
+    help="Which tool(s) to install for: opencode, claude-code, or both (default: both).",
+)
+def init(force: bool, target: str, tool: str):
     """Initialize ContextHarness in your project.
 
-    Creates the .context-harness/ and .opencode/agent/ directories with all
-    necessary framework files.
+    Creates configuration directories for AI coding assistants:
+    - .context-harness/ - Session data and project context (shared)
+    - .opencode/ - OpenCode configuration (agents, commands, skills)
+    - .claude/ - Claude Code configuration (agents, commands, skills)
+
+    By default, installs support for both OpenCode and Claude Code.
+    Use --tool to install for a specific tool only.
 
     Examples:
 
@@ -99,6 +110,12 @@ def init(force: bool, target: str):
         context-harness init --target ./my-project
 
         context-harness init --force
+
+        context-harness init --tool opencode
+
+        context-harness init --tool claude-code
+
+        context-harness init --force --tool both
     """
     console.print()
     console.print(
@@ -109,24 +126,45 @@ def init(force: bool, target: str):
     )
     console.print()
 
-    result = install_framework(target, force=force)
+    # Show what will be installed
+    if tool == "both":
+        console.print("[dim]Installing support for: OpenCode + Claude Code[/dim]")
+    elif tool == "opencode":
+        console.print("[dim]Installing support for: OpenCode only[/dim]")
+    else:
+        console.print("[dim]Installing support for: Claude Code only[/dim]")
+    console.print()
+
+    result = install_framework(target, force=force, tool_target=tool)  # type: ignore[arg-type]
 
     if result == InstallResult.SUCCESS:
         console.print("[green]✅ ContextHarness initialized successfully![/green]")
         console.print()
         console.print("[bold]Next steps:[/bold]")
-        console.print(
-            "  1. (Optional) Add Context7 MCP: [cyan]context-harness mcp add context7[/cyan]"
-        )
-        console.print(
-            "  2. Start a session: [cyan]@context-harness /ctx my-feature[/cyan]"
-        )
+        if tool in ("opencode", "both"):
+            console.print(
+                "  1. (Optional) Add Context7 MCP: [cyan]context-harness mcp add context7[/cyan]"
+            )
+            console.print(
+                "  2. Start a session: [cyan]@context-harness /ctx my-feature[/cyan]"
+            )
+        if tool in ("claude-code", "both"):
+            if tool == "claude-code":
+                console.print("  1. MCP servers configured in .mcp.json")
+                console.print("  2. Start a session: [cyan]/ctx my-feature[/cyan]")
+            else:
+                console.print(
+                    "  • Claude Code: MCP configured in .mcp.json, use [cyan]/ctx my-feature[/cyan]"
+                )
         console.print("  3. Work normally - the agent handles execution")
         console.print("  4. Compact when ready: [cyan]/compact[/cyan]")
         console.print()
     elif result == InstallResult.ALREADY_EXISTS:
         console.print("[yellow]⚠️  ContextHarness files already exist.[/yellow]")
         console.print("Use [cyan]--force[/cyan] to overwrite existing files.")
+        console.print(
+            "[dim]Use --force to upgrade to dual-tool support (OpenCode + Claude Code).[/dim]"
+        )
         raise SystemExit(1)
     elif result == InstallResult.ERROR:
         console.print("[red]❌ Failed to initialize ContextHarness.[/red]")

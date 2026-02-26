@@ -4,21 +4,40 @@ This guide walks you through your first ContextHarness session.
 
 ## 1. Analyze Your Project (First Time Only)
 
-```
-/baseline
-```
+=== "OpenCode"
+
+    Open OpenCode in your project directory and run:
+    
+    ```
+    /baseline
+    ```
+
+=== "Claude Code"
+
+    Open Claude Code in your project directory and run:
+    
+    ```
+    /baseline
+    ```
 
 This analyzes your codebase and generates:
 
-- `PROJECT-CONTEXT.md` — Information about your project's structure, patterns, and conventions
-- `AGENTS.md` — AI agent instructions for working with your codebase
+=== "OpenCode"
+
+    - `PROJECT-CONTEXT.md` — Information about your project's structure, patterns, and conventions
+    - `AGENTS.md` — AI agent instructions for working with your codebase
+
+=== "Claude Code"
+
+    - `PROJECT-CONTEXT.md` — Information about your project's structure, patterns, and conventions
+    - `CLAUDE.md` — AI agent instructions for working with your codebase
 
 !!! tip "Working in a Monorepo?"
     Use `--path` to analyze specific projects:
     ```
     /baseline --path apps/frontend
     ```
-    This generates `apps/frontend/PROJECT-CONTEXT.md` and `apps/frontend/AGENTS.md` for that specific project.
+    This generates `apps/frontend/PROJECT-CONTEXT.md` and the appropriate memory file for that specific project.
 
 ## 2. Start a Session
 
@@ -67,15 +86,32 @@ This creates a GitHub PR with:
 
 ## Typical Workflow
 
-```
-/ctx login-feature          # Start session + branch
-# ... work on login ...
-/compact                    # Save progress (optional)
-# ... more work ...
-/issue                      # Create GitHub issue from context
-# ... finish feature ...
-/pr                         # Create pull request
-```
+=== "OpenCode"
+
+    ```
+    /ctx login-feature          # Start session + branch
+    # ... work on login ...
+    /compact                    # Save progress (optional)
+    # ... more work ...
+    /issue                      # Create GitHub issue from context
+    # ... finish feature ...
+    /pr                         # Create pull request
+    ```
+
+=== "Claude Code"
+
+    ```
+    /ctx login-feature          # Start session + branch
+    # ... work on login ...
+    /compact                    # Save progress (optional)
+    # ... more work ...
+    /issue                      # Create GitHub issue from context
+    # ... finish feature ...
+    /pr                         # Create pull request
+    ```
+
+!!! info "Same Commands, Same Workflow"
+    ContextHarness commands work identically in both OpenCode and Claude Code. The only differences are the folder structure and configuration files.
 
 ## Switching Sessions
 
