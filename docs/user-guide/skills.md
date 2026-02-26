@@ -234,10 +234,13 @@ Once created, you can start adding skills to the repository with `ch skill extra
 
 | Flag | Effect |
 |------|--------|
-| `--configure-user` | Sets the new repo as your default `skills-repo` in `~/.context-harness/config.json` |
-| `--configure-project` | Sets the new repo as the project's `skills-repo` in `opencode.json` |
+| `--configure-user` | Sets the new repo as your default `skills-repo` in `~/.context-harness/config.json` — applies to **all projects** on your machine |
+| `--configure-project` | Sets the new repo as the project's `skills-repo` in `opencode.json` — applies to **this project only** |
 
-If you don't use either flag, the command prints manual configuration instructions.
+If you don't use either flag, the command prints manual `config set` instructions for both scopes.
+
+!!! tip "Which one should I use?"
+    Use `--configure-user` if you want every project on your machine to pull skills from this registry by default. Use `--configure-project` if only the current project should use it. Project-level config takes precedence over user-level config (see [Configuration Precedence](#configuration-precedence) below).
 
 ### Configuration
 

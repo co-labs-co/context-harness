@@ -485,10 +485,10 @@ def skill_init_repo_cmd(
             console.print()
             console.print("[dim]To use this as your default skills-repo:[/dim]")
             console.print(
-                f"[dim]  context-harness config set skills-repo {config_name}[/dim]"
+                f"[dim]  context-harness config set skills-repo {config_name}        # this project[/dim]"
             )
             console.print(
-                f"[dim]  context-harness config set skills-repo {config_name} --user[/dim]"
+                f"[dim]  context-harness config set skills-repo {config_name} --user  # all projects[/dim]"
             )
 
     elif result == SkillResult.ALREADY_EXISTS:

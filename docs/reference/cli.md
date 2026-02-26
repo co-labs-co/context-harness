@@ -214,8 +214,11 @@ ch skill init-repo my-org/skills -d "Team AI skills"  # With custom description
 |------|-------------|
 | `--private` / `--public` | Repository visibility (default: `--private`) |
 | `-d`, `--description` | Repository description |
-| `--configure-user` | Set as default `skills-repo` in user config (`~/.context-harness/config.json`) |
-| `--configure-project` | Set as default `skills-repo` in project config (`opencode.json`) |
+| `--configure-user` | Set as default `skills-repo` in user config — applies to all projects (`~/.context-harness/config.json`) |
+| `--configure-project` | Set as default `skills-repo` in project config — applies to this project only (`opencode.json`) |
+
+!!! tip "User vs Project Configuration"
+    `--configure-user` writes to `~/.context-harness/config.json`, so every project on your machine uses this registry by default. `--configure-project` writes to `opencode.json` in the current directory, so only this project is affected. If neither flag is passed, the command prints `config set` instructions for both options.
 
 **Name format:**
 
