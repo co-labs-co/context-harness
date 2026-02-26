@@ -413,7 +413,7 @@ class TestSkillInitRepoCommand:
             )
 
         assert result.exit_code == 0
-        mock_configure.assert_called_once_with("my-skills")
+        mock_configure.assert_called_once_with("test-user/my-skills")
 
     def test_init_repo_configure_project_flag(self) -> None:
         """--configure-project flag triggers project config update."""
@@ -436,7 +436,7 @@ class TestSkillInitRepoCommand:
             )
 
         assert result.exit_code == 0
-        mock_configure.assert_called_once_with("my-skills")
+        mock_configure.assert_called_once_with("test-user/my-skills")
 
     def test_init_repo_no_configure_shows_instructions(self) -> None:
         """Without --configure flags, shows manual configuration instructions."""

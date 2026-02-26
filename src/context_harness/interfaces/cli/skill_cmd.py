@@ -457,26 +457,38 @@ def skill_init_repo_cmd(
         print_bold("Skills registry created!")
         console.print()
 
+        # Derive owner/repo from URL for config commands (the URL always
+        # contains the real owner, which may differ from `name` when the
+        # user omits the org prefix).
+        config_name = name
+        if repo_url:
+            # e.g. "https://github.com/cmtzco/my-test-skills" → "cmtzco/my-test-skills"
+            parts = repo_url.rstrip("/").split("/")
+            if len(parts) >= 2:
+                config_name = f"{parts[-2]}/{parts[-1]}"
+
         visibility_str = "private" if private else "public"
-        print_info(f"Repository: {name} ({visibility_str})")
+        print_info(f"Repository: {config_name} ({visibility_str})")
         if repo_url:
             print_info(f"URL: {repo_url}")
 
         # Auto-configure if requested
         configured = False
         if configure_user:
-            _configure_skills_repo_user(name)
+            _configure_skills_repo_user(config_name)
             configured = True
         if configure_project:
-            _configure_skills_repo_project(name)
+            _configure_skills_repo_project(config_name)
             configured = True
 
         if not configured:
             console.print()
             console.print("[dim]To use this as your default skills-repo:[/dim]")
-            console.print(f"[dim]  context-harness config set skills-repo {name}[/dim]")
             console.print(
-                f"[dim]  context-harness config set skills-repo {name} --global[/dim]"
+                f"[dim]  context-harness config set skills-repo {config_name}[/dim]"
+            )
+            console.print(
+                f"[dim]  context-harness config set skills-repo {config_name} --user[/dim]"
             )
 
     elif result == SkillResult.ALREADY_EXISTS:
