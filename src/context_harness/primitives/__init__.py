@@ -29,6 +29,8 @@ from context_harness.primitives.session import (
     SessionStatus,
 )
 from context_harness.primitives.skill import (
+    RegistryRepo,
+    RepoVisibility,
     Skill,
     SkillMetadata,
     SkillSource,
@@ -112,6 +114,8 @@ __all__ = [
     "Session",
     "SessionStatus",
     # Skill types
+    "RegistryRepo",
+    "RepoVisibility",
     "Skill",
     "SkillMetadata",
     "SkillSource",

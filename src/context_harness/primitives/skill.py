@@ -28,6 +28,13 @@ class VersionStatus(Enum):
     UNKNOWN = "unknown"  # Unable to determine version status
 
 
+class RepoVisibility(Enum):
+    """Visibility of a GitHub repository."""
+
+    PRIVATE = "private"
+    PUBLIC = "public"
+
+
 @dataclass
 class SkillMetadata:
     """Frontmatter metadata from SKILL.md.
@@ -221,3 +228,21 @@ class VersionComparison:
             "context_harness_min": self.context_harness_min,
             "current_context_harness": self.current_context_harness,
         }
+
+
+@dataclass
+class RegistryRepo:
+    """Information about a skills registry repository.
+
+    Represents a GitHub repository that serves as a private or organizational
+    skills registry, created via `context-harness skill init-repo`.
+
+    Attributes:
+        name: Full repository name (owner/repo or just repo for personal)
+        url: HTTPS URL to the repository
+        visibility: Whether the repo is private or public
+    """
+
+    name: str
+    url: str
+    visibility: RepoVisibility

@@ -446,7 +446,6 @@ def install_skill(
                         f"[red]Failed to copy skill '{skill_name}' to all target "
                         f"directories: {e}[/red]"
                     )
-                return SkillResult.ERROR
             break  # Don't fetch again, we've copied
 
     if not quiet:
@@ -457,6 +456,66 @@ def install_skill(
             console.print(f"[dim]Location: {skill_dest}[/dim]")
 
     return SkillResult.SUCCESS
+
+
+def init_repo(
+    name: str,
+    *,
+    private: bool = True,
+    description: Optional[str] = None,
+    quiet: bool = False,
+) -> tuple[SkillResult, Optional[str]]:
+    """Initialize a new skills registry repository on GitHub.
+
+    Creates a GitHub repository scaffolded with the standard skills registry
+    structure (skills.json, skill/.gitkeep, README.md).
+
+    Args:
+        name: Repository name (e.g., "my-skills" or "my-org/my-skills")
+        private: Whether the repository should be private
+        description: Repository description
+        quiet: If True, suppress output messages
+
+    Returns:
+        Tuple of (SkillResult, repo URL or None)
+    """
+    from context_harness.services.skill_service import SkillService
+    from context_harness.primitives import Success, Failure, ErrorCode
+
+    service = SkillService()
+
+    if not quiet:
+        console.print(f"[cyan]Creating skills registry: {name}...[/cyan]")
+
+    result = service.init_registry_repo(
+        name=name,
+        private=private,
+        description=description,
+    )
+
+    if isinstance(result, Success):
+        repo = result.value
+        if not quiet:
+            console.print(f"\n[green]✅ {result.message}[/green]")
+            console.print(f"[dim]URL: {repo.url}[/dim]")
+        return SkillResult.SUCCESS, repo.url
+
+    if isinstance(result, Failure):
+        if result.code == ErrorCode.REPO_ALREADY_EXISTS:
+            if not quiet:
+                console.print(f"[yellow]⚠️  {result.error}[/yellow]")
+            return SkillResult.ALREADY_EXISTS, None
+        elif result.code == ErrorCode.AUTH_REQUIRED:
+            if not quiet:
+                console.print(f"[red]Authentication error: {result.error}[/red]")
+                console.print("[dim]Run 'gh auth login' to authenticate.[/dim]")
+            return SkillResult.AUTH_ERROR, None
+        else:
+            if not quiet:
+                console.print(f"[red]❌ {result.error}[/red]")
+            return SkillResult.ERROR, None
+
+    return SkillResult.ERROR, None
 
 
 def _validate_skill(skill_path: Path, quiet: bool = False) -> bool:

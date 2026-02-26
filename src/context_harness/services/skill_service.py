@@ -23,6 +23,8 @@ from context_harness.primitives import (
     DEFAULT_SKILLS_REPO,
     ErrorCode,
     Failure,
+    RegistryRepo,
+    RepoVisibility,
     Result,
     Skill,
     SkillMetadata,
@@ -64,6 +66,25 @@ class GitHubClient(Protocol):
 
     def get_username(self) -> str:
         """Get the current authenticated GitHub username."""
+        ...
+
+    def create_repo(
+        self,
+        name: str,
+        *,
+        private: bool = True,
+        description: str = "",
+    ) -> Optional[str]:
+        """Create a new GitHub repository.
+
+        Args:
+            name: Repository name (e.g., "my-skills" or "my-org/my-skills")
+            private: Whether the repository should be private
+            description: Repository description
+
+        Returns:
+            HTTPS URL of the created repository, or None on failure
+        """
         ...
 
 
@@ -164,6 +185,40 @@ class DefaultGitHubClient:
             return result.stdout.strip()
         except (subprocess.CalledProcessError, FileNotFoundError):
             return "github-user-unknown"
+
+    def create_repo(
+        self,
+        name: str,
+        *,
+        private: bool = True,
+        description: str = "",
+    ) -> Optional[str]:
+        """Create a new GitHub repository using gh CLI.
+
+        Args:
+            name: Repository name (e.g., "my-skills" or "my-org/my-skills")
+            private: Whether the repository should be private
+            description: Repository description
+
+        Returns:
+            HTTPS URL of the created repository, or None on failure
+        """
+        cmd = ["gh", "repo", "create", name]
+        cmd.append("--private" if private else "--public")
+        if description:
+            cmd.extend(["--description", description])
+
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            # gh repo create returns the URL on stdout
+            return result.stdout.strip()
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            return None
 
 
 class SkillService:
@@ -688,6 +743,217 @@ class SkillService:
             )
 
         return install_result
+
+    def init_registry_repo(
+        self,
+        name: str,
+        *,
+        private: bool = True,
+        description: Optional[str] = None,
+    ) -> Result[RegistryRepo]:
+        """Initialize a new skills registry repository on GitHub.
+
+        Creates a new GitHub repository scaffolded with the standard skills
+        registry structure (skills.json, skill/.gitkeep, README.md). The
+        repository is ready to use as a custom skills-repo immediately.
+
+        Workflow: Create repo → Clone to tmpdir → Write scaffold → Commit → Push
+
+        Args:
+            name: Repository name (e.g., "my-skills" or "my-org/my-skills").
+                  If no org prefix, creates under authenticated user.
+            private: Whether the repository should be private (default: True)
+            description: Repository description (auto-generated if not provided)
+
+        Returns:
+            Result containing RegistryRepo on success, or Failure with details
+        """
+        # 1. Validate gh auth
+        if not self.github.check_auth():
+            return Failure(
+                error="GitHub CLI is not authenticated. Run 'gh auth login'.",
+                code=ErrorCode.AUTH_REQUIRED,
+            )
+
+        # 2. Check if repo already exists (by trying to access it)
+        if self.github.check_repo_access(name):
+            return Failure(
+                error=f"Repository '{name}' already exists.",
+                code=ErrorCode.REPO_ALREADY_EXISTS,
+                details={"repo": name},
+            )
+
+        # 3. Create the repository
+        if description is None:
+            description = "ContextHarness skills registry"
+
+        repo_url = self.github.create_repo(
+            name,
+            private=private,
+            description=description,
+        )
+        if repo_url is None:
+            return Failure(
+                error=f"Failed to create repository '{name}'. Check your GitHub permissions and that the name is valid.",
+                code=ErrorCode.REPO_CREATE_FAILED,
+                details={"repo": name},
+            )
+
+        # 4. Clone → Scaffold → Commit → Push (all in a temp directory)
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                # Clone the newly created (empty) repo
+                subprocess.run(
+                    ["gh", "repo", "clone", name, tmpdir],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+
+                tmppath = Path(tmpdir)
+
+                # Write scaffold files
+                self._write_registry_scaffold(tmppath, name)
+
+                # Stage, commit, and push
+                subprocess.run(
+                    ["git", "-C", tmpdir, "add", "."],
+                    capture_output=True,
+                    check=True,
+                )
+                subprocess.run(
+                    [
+                        "git",
+                        "-C",
+                        tmpdir,
+                        "commit",
+                        "-m",
+                        "feat: initialize skills registry",
+                    ],
+                    capture_output=True,
+                    check=True,
+                )
+                subprocess.run(
+                    ["git", "-C", tmpdir, "push"],
+                    capture_output=True,
+                    check=True,
+                )
+
+        except subprocess.CalledProcessError as e:
+            error_msg = (
+                getattr(e, "stderr", None)
+                or getattr(e, "output", None)
+                or "Unknown error"
+            )
+            if isinstance(error_msg, bytes):
+                error_msg = error_msg.decode("utf-8", errors="replace")
+            return Failure(
+                error=f"Repository created but scaffold push failed: {error_msg}",
+                code=ErrorCode.REPO_CREATE_FAILED,
+                details={"repo": name, "url": repo_url},
+            )
+
+        visibility = RepoVisibility.PRIVATE if private else RepoVisibility.PUBLIC
+
+        return Success(
+            value=RegistryRepo(
+                name=name,
+                url=repo_url,
+                visibility=visibility,
+            ),
+            message=f"Skills registry '{name}' created successfully",
+        )
+
+    def _write_registry_scaffold(self, repo_path: Path, repo_name: str) -> None:
+        """Write the standard skills registry scaffold files.
+
+        Creates:
+        - skills.json: Empty registry manifest
+        - skill/.gitkeep: Placeholder for skill directories
+        - README.md: Repository documentation
+
+        Args:
+            repo_path: Path to the cloned repository
+            repo_name: Repository name for use in README
+        """
+        # skills.json — empty registry
+        registry = {"schema_version": "1.0", "skills": []}
+        (repo_path / "skills.json").write_text(
+            json.dumps(registry, indent=2) + "\n", encoding="utf-8"
+        )
+
+        # skill/.gitkeep — placeholder directory
+        (repo_path / "skill").mkdir(parents=True, exist_ok=True)
+        (repo_path / "skill" / ".gitkeep").write_text("")
+
+        # README.md
+        readme_content = f"""# {repo_name}
+
+Private skills registry for [ContextHarness](https://github.com/co-labs-co/context-harness).
+
+## Getting Started
+
+This repository was initialized by `context-harness skill init-repo`.
+It serves as a custom skills registry that can be used instead of (or in
+addition to) the default `co-labs-co/context-harness-skills` registry.
+
+### Configure as your default registry
+
+```bash
+# Set for current project
+context-harness config set skills-repo {repo_name}
+
+# Set for all projects (user-level)
+context-harness config set skills-repo {repo_name} --global
+```
+
+### Add a skill
+
+1. Create a new skill directory under `skill/`:
+   ```
+   skill/my-skill/
+   └── SKILL.md
+   ```
+2. Register it in `skills.json`
+3. Commit and push
+
+### Extract a skill from a project
+
+```bash
+context-harness skill extract my-skill
+```
+
+## Structure
+
+```
+{repo_name}/
+├── skills.json      # Registry manifest
+├── skill/           # Skill directories
+│   └── .gitkeep
+└── README.md
+```
+
+## Registry Format
+
+`skills.json` follows this schema:
+
+```json
+{{
+  "schema_version": "1.0",
+  "skills": [
+    {{
+      "name": "example-skill",
+      "description": "What this skill does",
+      "version": "1.0.0",
+      "author": "your-name",
+      "tags": ["example"],
+      "path": "skill/example-skill"
+    }}
+  ]
+}}
+```
+"""
+        (repo_path / "README.md").write_text(readme_content, encoding="utf-8")
 
     def _compare_versions(
         self,

@@ -195,7 +195,49 @@ This generates a JSON file you can submit to a skills repository.
 
 ## Custom Skills Repository
 
-You can configure a custom skills repository for your organization.
+You can host your own skills registry instead of using the default `co-labs-co/context-harness-skills` repository. This is useful for organizations that want to share private skills across teams.
+
+### Creating a Registry Repository
+
+The fastest way to get started is with the `init-repo` command, which creates a properly scaffolded GitHub repository:
+
+```bash
+# Create a private registry under your personal account
+ch skill init-repo my-skills
+
+# Create under an organization
+ch skill init-repo my-org/team-skills
+
+# Create a public registry
+ch skill init-repo my-org/team-skills --public
+
+# Create and configure as your default in one step
+ch skill init-repo my-skills --configure-user
+```
+
+!!! note "Prerequisite"
+    The GitHub CLI (`gh`) must be installed and authenticated. Run `gh auth login` if you haven't already.
+
+The command creates a repository with:
+
+```
+my-skills/
+├── skills.json     # Empty registry: {"schema_version": "1.0", "skills": []}
+├── skill/
+│   └── .gitkeep    # Directory for skill files
+└── README.md       # Usage instructions
+```
+
+Once created, you can start adding skills to the repository with `ch skill extract`.
+
+**Auto-configuration options:**
+
+| Flag | Effect |
+|------|--------|
+| `--configure-user` | Sets the new repo as your default `skills-repo` in `~/.context-harness/config.json` |
+| `--configure-project` | Sets the new repo as the project's `skills-repo` in `opencode.json` |
+
+If you don't use either flag, the command prints manual configuration instructions.
 
 ### Configuration
 

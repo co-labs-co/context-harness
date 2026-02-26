@@ -6,12 +6,16 @@ Tests use mock GitHub client for isolation from actual API calls.
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 from typing import List, Optional
+from unittest.mock import patch
 
 from context_harness.primitives import (
     ErrorCode,
     Failure,
+    RegistryRepo,
+    RepoVisibility,
     SkillSource,
     Success,
 )
@@ -31,6 +35,7 @@ class MockGitHubClient:
         has_repo_access: bool = True,
         registry_content: Optional[str] = None,
         username: str = "test-user",
+        create_repo_url: Optional[str] = "https://github.com/test-user/test-repo",
     ):
         self._authenticated = authenticated
         self._has_repo_access = has_repo_access
@@ -38,6 +43,8 @@ class MockGitHubClient:
         self._username = username
         self._files: dict[str, str] = {}
         self._fetch_directory_succeeds = True
+        self._create_repo_url = create_repo_url
+        self._create_repo_calls: List[dict] = []
 
     def check_auth(self) -> bool:
         return self._authenticated
@@ -72,6 +79,18 @@ This is a test skill.
 
     def get_username(self) -> str:
         return self._username
+
+    def create_repo(
+        self,
+        name: str,
+        *,
+        private: bool = True,
+        description: str = "",
+    ) -> Optional[str]:
+        self._create_repo_calls.append(
+            {"name": name, "private": private, "description": description}
+        )
+        return self._create_repo_url
 
 
 def create_test_registry(skills: List[dict]) -> str:
@@ -1075,3 +1094,276 @@ class TestSkillServiceCompareVersionsEdgeCases:
         )
         # Invalid CH version → inner InvalidVersion re-raises → outer handler → UNKNOWN
         assert result.status == VersionStatus.UNKNOWN
+
+
+# ---------------------------------------------------------------------------
+# init_registry_repo tests
+# ---------------------------------------------------------------------------
+
+
+class TestSkillServiceInitRegistryRepo:
+    """Tests for SkillService.init_registry_repo().
+
+    These tests exercise the pre-subprocess validation paths (auth, repo
+    existence, create_repo) via the mock client.  The subprocess calls for
+    clone/add/commit/push are mocked via ``unittest.mock.patch``.
+    """
+
+    # -- Happy path ---------------------------------------------------------
+
+    def test_init_repo_success(self) -> None:
+        """Happy path: auth OK → repo doesn't exist → create → scaffold → push → Success."""
+        client = MockGitHubClient(
+            authenticated=True,
+            has_repo_access=False,  # repo does NOT exist
+            create_repo_url="https://github.com/test-user/my-skills",
+        )
+        service = SkillService(github_client=client)
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            result = service.init_registry_repo("my-skills")
+
+        assert isinstance(result, Success)
+        repo = result.value
+        assert isinstance(repo, RegistryRepo)
+        assert repo.name == "my-skills"
+        assert repo.url == "https://github.com/test-user/my-skills"
+        assert repo.visibility == RepoVisibility.PRIVATE
+
+    def test_init_repo_public_visibility(self) -> None:
+        """Public visibility flag is reflected in returned RegistryRepo."""
+        client = MockGitHubClient(
+            has_repo_access=False,
+            create_repo_url="https://github.com/test-user/public-skills",
+        )
+        service = SkillService(github_client=client)
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            result = service.init_registry_repo("public-skills", private=False)
+
+        assert isinstance(result, Success)
+        assert result.value.visibility == RepoVisibility.PUBLIC
+
+    def test_init_repo_custom_description(self) -> None:
+        """Custom description is passed through to create_repo."""
+        client = MockGitHubClient(
+            has_repo_access=False,
+            create_repo_url="https://github.com/test-user/my-skills",
+        )
+        service = SkillService(github_client=client)
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            result = service.init_registry_repo(
+                "my-skills", description="Team AI skills"
+            )
+
+        assert isinstance(result, Success)
+        # Verify description was passed to create_repo
+        assert len(client._create_repo_calls) == 1
+        assert client._create_repo_calls[0]["description"] == "Team AI skills"
+
+    def test_init_repo_default_description_used(self) -> None:
+        """When no description is given, a default is provided."""
+        client = MockGitHubClient(
+            has_repo_access=False,
+            create_repo_url="https://github.com/test-user/my-skills",
+        )
+        service = SkillService(github_client=client)
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            service.init_registry_repo("my-skills")
+
+        assert len(client._create_repo_calls) == 1
+        assert client._create_repo_calls[0]["description"] != ""
+
+    def test_init_repo_org_name_passed_through(self) -> None:
+        """Owner/repo name format is passed through to create_repo."""
+        client = MockGitHubClient(
+            has_repo_access=False,
+            create_repo_url="https://github.com/my-org/team-skills",
+        )
+        service = SkillService(github_client=client)
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            result = service.init_registry_repo("my-org/team-skills")
+
+        assert isinstance(result, Success)
+        assert result.value.name == "my-org/team-skills"
+        assert client._create_repo_calls[0]["name"] == "my-org/team-skills"
+
+    # -- Scaffold content verification --------------------------------------
+
+    def test_scaffold_writes_correct_files(self, tmp_path: Path) -> None:
+        """Scaffold writes skills.json, skill/.gitkeep, and README.md."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        assert (tmp_path / "skills.json").exists()
+        assert (tmp_path / "skill" / ".gitkeep").exists()
+        assert (tmp_path / "README.md").exists()
+
+    def test_scaffold_skills_json_content(self, tmp_path: Path) -> None:
+        """skills.json contains empty registry with schema_version 1.0."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        content = json.loads((tmp_path / "skills.json").read_text())
+        assert content["schema_version"] == "1.0"
+        assert content["skills"] == []
+
+    def test_scaffold_readme_contains_repo_name(self, tmp_path: Path) -> None:
+        """README.md references the repository name."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "my-org/team-skills")
+
+        readme = (tmp_path / "README.md").read_text()
+        assert "my-org/team-skills" in readme
+
+    def test_scaffold_gitkeep_is_empty(self, tmp_path: Path) -> None:
+        """skill/.gitkeep is an empty file."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        assert (tmp_path / "skill" / ".gitkeep").read_text() == ""
+
+    # -- Failure paths -------------------------------------------------------
+
+    def test_init_repo_auth_failure(self) -> None:
+        """Auth not available → Failure(AUTH_REQUIRED)."""
+        client = MockGitHubClient(authenticated=False)
+        service = SkillService(github_client=client)
+
+        result = service.init_registry_repo("my-skills")
+
+        assert isinstance(result, Failure)
+        assert result.code == ErrorCode.AUTH_REQUIRED
+
+    def test_init_repo_already_exists(self) -> None:
+        """Repo already exists → Failure(REPO_ALREADY_EXISTS)."""
+        client = MockGitHubClient(
+            has_repo_access=True,  # repo exists
+        )
+        service = SkillService(github_client=client)
+
+        result = service.init_registry_repo("my-skills")
+
+        assert isinstance(result, Failure)
+        assert result.code == ErrorCode.REPO_ALREADY_EXISTS
+
+    def test_init_repo_create_fails(self) -> None:
+        """create_repo returns None → Failure(REPO_CREATE_FAILED)."""
+        client = MockGitHubClient(
+            has_repo_access=False,
+            create_repo_url=None,  # simulate creation failure
+        )
+        service = SkillService(github_client=client)
+
+        result = service.init_registry_repo("bad-name")
+
+        assert isinstance(result, Failure)
+        assert result.code == ErrorCode.REPO_CREATE_FAILED
+
+    def test_init_repo_push_failure(self) -> None:
+        """Subprocess error during clone/commit/push → Failure(REPO_CREATE_FAILED)."""
+        client = MockGitHubClient(
+            has_repo_access=False,
+            create_repo_url="https://github.com/test-user/my-skills",
+        )
+        service = SkillService(github_client=client)
+
+        with patch(
+            "subprocess.run",
+            side_effect=subprocess.CalledProcessError(
+                1, "git push", stderr="push failed"
+            ),
+        ):
+            result = service.init_registry_repo("my-skills")
+
+        assert isinstance(result, Failure)
+        assert result.code == ErrorCode.REPO_CREATE_FAILED
+        assert (
+            "push failed" in result.error.lower()
+            or "scaffold push failed" in result.error.lower()
+        )
+
+    def test_init_repo_push_failure_preserves_url(self) -> None:
+        """Push failure details include the repo URL for debugging."""
+        client = MockGitHubClient(
+            has_repo_access=False,
+            create_repo_url="https://github.com/test-user/my-skills",
+        )
+        service = SkillService(github_client=client)
+
+        with patch(
+            "subprocess.run",
+            side_effect=subprocess.CalledProcessError(
+                1, "git push", stderr="remote error"
+            ),
+        ):
+            result = service.init_registry_repo("my-skills")
+
+        assert isinstance(result, Failure)
+        assert result.details is not None
+        assert result.details["url"] == "https://github.com/test-user/my-skills"
+
+    # -- Subprocess call verification ----------------------------------------
+
+    def test_init_repo_calls_clone_add_commit_push(self) -> None:
+        """Subprocess calls are made in correct order: clone, add, commit, push."""
+        client = MockGitHubClient(
+            has_repo_access=False,
+            create_repo_url="https://github.com/test-user/my-skills",
+        )
+        service = SkillService(github_client=client)
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            service.init_registry_repo("my-skills")
+
+        # Should have 4 subprocess calls: clone, add, commit, push
+        assert mock_run.call_count == 4
+
+        calls = [c.args[0] for c in mock_run.call_args_list]
+        # First call: gh repo clone
+        assert calls[0][0] == "gh"
+        assert "clone" in calls[0]
+        # Second call: git add
+        assert calls[1][0] == "git"
+        assert "add" in calls[1]
+        # Third call: git commit
+        assert calls[2][0] == "git"
+        assert "commit" in calls[2]
+        # Fourth call: git push
+        assert calls[3][0] == "git"
+        assert "push" in calls[3]
+
+    def test_init_repo_private_flag_passed_to_create(self) -> None:
+        """Private=True is passed through to create_repo."""
+        client = MockGitHubClient(
+            has_repo_access=False,
+            create_repo_url="https://github.com/test-user/my-skills",
+        )
+        service = SkillService(github_client=client)
+
+        with patch("subprocess.run"):
+            service.init_registry_repo("my-skills", private=True)
+
+        assert client._create_repo_calls[0]["private"] is True
+
+    def test_init_repo_public_flag_passed_to_create(self) -> None:
+        """Private=False is passed through to create_repo."""
+        client = MockGitHubClient(
+            has_repo_access=False,
+            create_repo_url="https://github.com/test-user/my-skills",
+        )
+        service = SkillService(github_client=client)
+
+        with patch("subprocess.run"):
+            service.init_registry_repo("my-skills", private=False)
+
+        assert client._create_repo_calls[0]["private"] is False

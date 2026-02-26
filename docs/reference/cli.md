@@ -194,6 +194,43 @@ ch skill install <name>    # Install specific skill
 
     - `.claude/skills/<name>/SKILL.md`
 
+### skill init-repo
+
+Initialize a new skills registry repository on GitHub. Creates a scaffolded repository with the standard registry structure (`skills.json`, `skill/` directory, `README.md`), ready to use as a custom `skills-repo` immediately.
+
+**Prerequisite:** GitHub CLI (`gh`) must be installed and authenticated (`gh auth login`).
+
+```bash
+ch skill init-repo my-skills                          # Create private repo
+ch skill init-repo my-org/team-skills --public        # Create under an org, public
+ch skill init-repo my-skills --configure-user         # Create and set as user default
+ch skill init-repo my-skills --configure-project      # Create and set as project default
+ch skill init-repo my-org/skills -d "Team AI skills"  # With custom description
+```
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `--private` / `--public` | Repository visibility (default: `--private`) |
+| `-d`, `--description` | Repository description |
+| `--configure-user` | Set as default `skills-repo` in user config (`~/.context-harness/config.json`) |
+| `--configure-project` | Set as default `skills-repo` in project config (`opencode.json`) |
+
+**Name format:**
+
+| Format | Example | Result |
+|--------|---------|--------|
+| `repo` | `my-skills` | Created under your personal GitHub account |
+| `owner/repo` | `my-org/team-skills` | Created under the specified organization |
+
+**Exit codes:**
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success, or repository already exists |
+| 1 | Error (auth failure, create failure) |
+
 ### skill extract
 
 Export a local skill for sharing. Searches both tool directories.

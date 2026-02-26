@@ -261,3 +261,219 @@ class TestSkillUpgradeCommand:
         assert call_kwargs.kwargs.get("force_compatibility") is True or (
             len(call_kwargs.args) >= 3 and call_kwargs.args[2] is True
         )
+
+
+# ---------------------------------------------------------------------------
+# skill init-repo
+# ---------------------------------------------------------------------------
+
+
+class TestSkillInitRepoCommand:
+    """Tests for `context-harness skill init-repo`."""
+
+    def test_init_repo_success(self) -> None:
+        """Successful creation → exit 0, 'created' in output."""
+        runner = CliRunner()
+
+        with patch(
+            "context_harness.interfaces.cli.skill_cmd.init_repo",
+            return_value=(
+                SkillResult.SUCCESS,
+                "https://github.com/test-user/my-skills",
+            ),
+        ):
+            result = runner.invoke(skill_group, ["init-repo", "my-skills"])
+
+        assert result.exit_code == 0
+        assert "created" in result.output.lower()
+
+    def test_init_repo_success_shows_url(self) -> None:
+        """Successful creation shows the repository URL."""
+        runner = CliRunner()
+
+        with patch(
+            "context_harness.interfaces.cli.skill_cmd.init_repo",
+            return_value=(
+                SkillResult.SUCCESS,
+                "https://github.com/test-user/my-skills",
+            ),
+        ):
+            result = runner.invoke(skill_group, ["init-repo", "my-skills"])
+
+        assert result.exit_code == 0
+        assert "https://github.com/test-user/my-skills" in result.output
+
+    def test_init_repo_already_exists(self) -> None:
+        """Repo already exists → exit 0 (informational), 'already exists' in output."""
+        runner = CliRunner()
+
+        with patch(
+            "context_harness.interfaces.cli.skill_cmd.init_repo",
+            return_value=(SkillResult.ALREADY_EXISTS, None),
+        ):
+            result = runner.invoke(skill_group, ["init-repo", "my-skills"])
+
+        assert result.exit_code == 0
+        assert "already exists" in result.output.lower()
+
+    def test_init_repo_auth_error(self) -> None:
+        """Auth error → exit 1, 'authentication' in output."""
+        runner = CliRunner()
+
+        with patch(
+            "context_harness.interfaces.cli.skill_cmd.init_repo",
+            return_value=(SkillResult.AUTH_ERROR, None),
+        ):
+            result = runner.invoke(skill_group, ["init-repo", "my-skills"])
+
+        assert result.exit_code == 1
+        assert "authentication" in result.output.lower()
+
+    def test_init_repo_generic_error(self) -> None:
+        """Generic error → exit 1."""
+        runner = CliRunner()
+
+        with patch(
+            "context_harness.interfaces.cli.skill_cmd.init_repo",
+            return_value=(SkillResult.ERROR, None),
+        ):
+            result = runner.invoke(skill_group, ["init-repo", "my-skills"])
+
+        assert result.exit_code == 1
+
+    def test_init_repo_private_flag(self) -> None:
+        """--private flag is passed through to init_repo."""
+        runner = CliRunner()
+
+        with patch(
+            "context_harness.interfaces.cli.skill_cmd.init_repo",
+            return_value=(
+                SkillResult.SUCCESS,
+                "https://github.com/test-user/my-skills",
+            ),
+        ) as mock_init:
+            runner.invoke(skill_group, ["init-repo", "my-skills", "--private"])
+
+        mock_init.assert_called_once()
+        assert mock_init.call_args.kwargs["private"] is True
+
+    def test_init_repo_public_flag(self) -> None:
+        """--public flag is passed through to init_repo."""
+        runner = CliRunner()
+
+        with patch(
+            "context_harness.interfaces.cli.skill_cmd.init_repo",
+            return_value=(
+                SkillResult.SUCCESS,
+                "https://github.com/test-user/my-skills",
+            ),
+        ) as mock_init:
+            runner.invoke(skill_group, ["init-repo", "my-skills", "--public"])
+
+        mock_init.assert_called_once()
+        assert mock_init.call_args.kwargs["private"] is False
+
+    def test_init_repo_description_flag(self) -> None:
+        """--description flag is passed through to init_repo."""
+        runner = CliRunner()
+
+        with patch(
+            "context_harness.interfaces.cli.skill_cmd.init_repo",
+            return_value=(
+                SkillResult.SUCCESS,
+                "https://github.com/test-user/my-skills",
+            ),
+        ) as mock_init:
+            runner.invoke(
+                skill_group,
+                ["init-repo", "my-skills", "--description", "Team AI skills"],
+            )
+
+        mock_init.assert_called_once()
+        assert mock_init.call_args.kwargs["description"] == "Team AI skills"
+
+    def test_init_repo_configure_user_flag(self) -> None:
+        """--configure-user flag triggers user config update."""
+        runner = CliRunner()
+
+        with (
+            patch(
+                "context_harness.interfaces.cli.skill_cmd.init_repo",
+                return_value=(
+                    SkillResult.SUCCESS,
+                    "https://github.com/test-user/my-skills",
+                ),
+            ),
+            patch(
+                "context_harness.interfaces.cli.skill_cmd._configure_skills_repo_user",
+            ) as mock_configure,
+        ):
+            result = runner.invoke(
+                skill_group, ["init-repo", "my-skills", "--configure-user"]
+            )
+
+        assert result.exit_code == 0
+        mock_configure.assert_called_once_with("my-skills")
+
+    def test_init_repo_configure_project_flag(self) -> None:
+        """--configure-project flag triggers project config update."""
+        runner = CliRunner()
+
+        with (
+            patch(
+                "context_harness.interfaces.cli.skill_cmd.init_repo",
+                return_value=(
+                    SkillResult.SUCCESS,
+                    "https://github.com/test-user/my-skills",
+                ),
+            ),
+            patch(
+                "context_harness.interfaces.cli.skill_cmd._configure_skills_repo_project",
+            ) as mock_configure,
+        ):
+            result = runner.invoke(
+                skill_group, ["init-repo", "my-skills", "--configure-project"]
+            )
+
+        assert result.exit_code == 0
+        mock_configure.assert_called_once_with("my-skills")
+
+    def test_init_repo_no_configure_shows_instructions(self) -> None:
+        """Without --configure flags, shows manual configuration instructions."""
+        runner = CliRunner()
+
+        with patch(
+            "context_harness.interfaces.cli.skill_cmd.init_repo",
+            return_value=(
+                SkillResult.SUCCESS,
+                "https://github.com/test-user/my-skills",
+            ),
+        ):
+            result = runner.invoke(skill_group, ["init-repo", "my-skills"])
+
+        assert result.exit_code == 0
+        assert "skills-repo" in result.output.lower()
+
+    def test_init_repo_name_is_required(self) -> None:
+        """Missing NAME argument → error from Click."""
+        runner = CliRunner()
+        result = runner.invoke(skill_group, ["init-repo"])
+
+        assert result.exit_code != 0
+
+    def test_init_repo_org_name(self) -> None:
+        """Owner/repo name format is accepted."""
+        runner = CliRunner()
+
+        with patch(
+            "context_harness.interfaces.cli.skill_cmd.init_repo",
+            return_value=(
+                SkillResult.SUCCESS,
+                "https://github.com/my-org/team-skills",
+            ),
+        ) as mock_init:
+            result = runner.invoke(skill_group, ["init-repo", "my-org/team-skills"])
+
+        assert result.exit_code == 0
+        mock_init.assert_called_once()
+        assert mock_init.call_args.kwargs["name"] == "my-org/team-skills"

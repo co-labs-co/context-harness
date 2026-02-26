@@ -17,6 +17,7 @@ from context_harness.skills import (
     extract_skill,
     check_updates,
     upgrade_skill,
+    init_repo,
     SkillResult,
 )
 from context_harness.completion import (
@@ -30,6 +31,8 @@ from context_harness.interfaces.cli.formatters import (
     print_error,
     print_info,
     print_bold,
+    print_success,
+    print_warning,
 )
 
 
@@ -388,3 +391,185 @@ def skill_upgrade_cmd(
             console.print()
             print_error("Failed to upgrade skill.")
             raise SystemExit(1)
+
+
+@skill_group.command("init-repo")
+@click.argument("name")
+@click.option(
+    "--private/--public",
+    default=True,
+    help="Repository visibility (default: private).",
+)
+@click.option(
+    "--description",
+    "-d",
+    default=None,
+    help="Repository description.",
+)
+@click.option(
+    "--configure-user",
+    is_flag=True,
+    help="Set as default skills-repo in user config (~/.context-harness/config.json).",
+)
+@click.option(
+    "--configure-project",
+    is_flag=True,
+    help="Set as default skills-repo in project config (opencode.json).",
+)
+def skill_init_repo_cmd(
+    name: str,
+    private: bool,
+    description: Optional[str],
+    configure_user: bool,
+    configure_project: bool,
+) -> None:
+    """Initialize a new skills registry repository on GitHub.
+
+    Creates a GitHub repository scaffolded with the standard skills
+    registry structure (skills.json, skill directory, README). The
+    repository is ready to use as a custom skills-repo immediately.
+
+    NAME is the repository name. Use "owner/repo" format to create
+    under an organization, or just "repo" for your personal account.
+
+    Requires: GitHub CLI (gh) installed and authenticated.
+
+    Examples:
+
+        context-harness skill init-repo my-skills
+
+        context-harness skill init-repo my-org/team-skills --public
+
+        context-harness skill init-repo my-skills --configure-user
+
+        context-harness skill init-repo my-org/skills -d "Team AI skills"
+    """
+    print_header("Skill Registry Initializer")
+
+    result, repo_url = init_repo(
+        name=name,
+        private=private,
+        description=description,
+    )
+
+    if result == SkillResult.SUCCESS:
+        console.print()
+        print_bold("Skills registry created!")
+        console.print()
+
+        visibility_str = "private" if private else "public"
+        print_info(f"Repository: {name} ({visibility_str})")
+        if repo_url:
+            print_info(f"URL: {repo_url}")
+
+        # Auto-configure if requested
+        configured = False
+        if configure_user:
+            _configure_skills_repo_user(name)
+            configured = True
+        if configure_project:
+            _configure_skills_repo_project(name)
+            configured = True
+
+        if not configured:
+            console.print()
+            console.print("[dim]To use this as your default skills-repo:[/dim]")
+            console.print(f"[dim]  context-harness config set skills-repo {name}[/dim]")
+            console.print(
+                f"[dim]  context-harness config set skills-repo {name} --global[/dim]"
+            )
+
+    elif result == SkillResult.ALREADY_EXISTS:
+        console.print()
+        print_warning(f"Repository '{name}' already exists.")
+        print_info("Use this existing repository, or choose a different name.")
+        raise SystemExit(0)
+    elif result == SkillResult.AUTH_ERROR:
+        console.print()
+        print_error("Authentication failed.")
+        print_info("Make sure GitHub CLI (gh) is installed and authenticated:")
+        console.print("[dim]  gh auth login[/dim]")
+        raise SystemExit(1)
+    elif result == SkillResult.ERROR:
+        console.print()
+        print_error("Failed to create skills registry.")
+        raise SystemExit(1)
+
+
+def _configure_skills_repo_user(repo_name: str) -> None:
+    """Configure the skills-repo in user config.
+
+    Args:
+        repo_name: Repository name (owner/repo format)
+    """
+    try:
+        from context_harness.primitives import Failure
+        from context_harness.primitives.config import (
+            SkillsRegistryConfig,
+            UserConfig,
+        )
+        from context_harness.services.user_config_service import UserConfigService
+
+        service = UserConfigService()
+
+        # Create new config with the skills registry set
+        new_config = UserConfig(
+            skills_registry=SkillsRegistryConfig(default=repo_name),
+        )
+
+        save_result = service.save(new_config)
+        if isinstance(save_result, Failure):
+            print_warning(f"Could not update user config: {save_result.error}")
+            return
+
+        print_success(f"User config updated: skills-repo = {repo_name}")
+    except Exception as e:
+        print_warning(f"Could not update user config: {e}")
+
+
+def _configure_skills_repo_project(repo_name: str) -> None:
+    """Configure the skills-repo in project config.
+
+    Args:
+        repo_name: Repository name (owner/repo format)
+    """
+    try:
+        from pathlib import Path
+
+        from context_harness.primitives import Failure
+        from context_harness.primitives.config import (
+            OpenCodeConfig,
+            SkillsRegistryConfig,
+        )
+        from context_harness.services.config_service import ConfigService
+
+        service = ConfigService()
+
+        # Load or create config
+        result = service.load_or_create()
+        if isinstance(result, Failure):
+            print_warning(f"Could not load project config: {result.error}")
+            return
+
+        config = result.value
+
+        # Create new config with updated skills registry
+        new_config = OpenCodeConfig(
+            schema_version=config.schema_version,
+            mcp=config.mcp,
+            agents=config.agents,
+            commands=config.commands,
+            skills=config.skills,
+            skills_registry=SkillsRegistryConfig(default=repo_name),
+            project_context=config.project_context,
+            raw_data=config.raw_data,
+        )
+
+        save_result = service.save(new_config)
+        if isinstance(save_result, Failure):
+            print_warning(f"Could not update project config: {save_result.error}")
+            return
+
+        print_success(f"Project config updated: skills-repo = {repo_name}")
+    except Exception as e:
+        print_warning(f"Could not update project config: {e}")
