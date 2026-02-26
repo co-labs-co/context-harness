@@ -14,7 +14,6 @@ from rich.table import Table
 from context_harness.primitives.tool_detector import (
     ToolDetector,
     ToolTarget,
-    ToolType,
 )
 
 console = Console()
@@ -196,6 +195,49 @@ def save_mcp_json_config(config_path: Path, config: Dict[str, Any]) -> None:
         f.write("\n")  # Trailing newline
 
 
+def transform_config_for_tool(
+    server_name: str, base_config: Dict[str, Any], tool_type: str
+) -> Dict[str, Any]:
+    """Transform MCP server config for specific tool requirements.
+
+    Args:
+        server_name: Name of the MCP server
+        base_config: Base configuration from MCP_SERVERS registry
+        tool_type: "opencode" or "claude-code"
+
+    Returns:
+        Transformed configuration suitable for the target tool
+    """
+    config = base_config.copy()
+
+    if tool_type == "claude-code":
+        # Claude Code prefers command-based format
+        # Transform HTTP/remote configs to command-based format where possible
+        if server_name == "context7":
+            # Context7 can use npx command
+            return {
+                "command": "npx",
+                "args": ["-y", "@context7/mcp-server"],
+            }
+        elif server_name == "atlassian":
+            # Atlassian MCP uses npx command
+            return {
+                "command": "npx",
+                "args": ["-y", "@modelcontextprotocol/server-atlassian"],
+            }
+        elif server_name == "exa":
+            # Exa can use npx command
+            return {
+                "command": "npx",
+                "args": ["-y", "@exa/mcp-server"],
+            }
+        # For other servers or if no command alternative exists, use base config
+        return config
+
+    # For OpenCode, use the base config (remote/HTTP format)
+    return config
+
+
 def add_mcp_server(
     server_name: str,
     target: str = ".",
@@ -283,6 +325,9 @@ def add_mcp_server(
 
     try:
         for tool_type, config_path in config_paths:
+            # Transform config for tool-specific format
+            tool_config = transform_config_for_tool(server_name, base_config, tool_type)
+
             if tool_type == "opencode":
                 # Update opencode.json format
                 config = load_opencode_config(config_path)
@@ -294,7 +339,7 @@ def add_mcp_server(
 
                 # Check if already configured with same settings
                 if server_name in config["mcp"]:
-                    if config["mcp"][server_name] == base_config:
+                    if config["mcp"][server_name] == tool_config:
                         if not quiet:
                             console.print(
                                 f"[dim]MCP server '{server_name}' already configured "
@@ -302,7 +347,7 @@ def add_mcp_server(
                             )
                         continue  # Skip this config, check others
 
-                config["mcp"][server_name] = base_config
+                config["mcp"][server_name] = tool_config
                 save_opencode_config(config_path, config)
 
                 if existed:
@@ -326,7 +371,7 @@ def add_mcp_server(
 
                 # Check if already configured with same settings
                 if server_name in config["mcpServers"]:
-                    if config["mcpServers"][server_name] == base_config:
+                    if config["mcpServers"][server_name] == tool_config:
                         if not quiet:
                             console.print(
                                 f"[dim]MCP server '{server_name}' already configured "
@@ -334,7 +379,7 @@ def add_mcp_server(
                             )
                         continue  # Skip this config, check others
 
-                config["mcpServers"][server_name] = base_config
+                config["mcpServers"][server_name] = tool_config
                 save_mcp_json_config(config_path, config)
 
                 if existed:

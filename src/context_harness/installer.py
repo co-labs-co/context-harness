@@ -53,6 +53,8 @@ REQUIRED_OPENCODE_FILES = [
     ".opencode/skill/skill-creator/scripts/init_skill.py",
     ".opencode/skill/skill-creator/scripts/package_skill.py",
     ".opencode/skill/skill-creator/scripts/quick_validate.py",
+    "opencode.json",
+    "AGENTS.md",
 ]
 
 # Required template files for Claude Code installation
@@ -199,6 +201,28 @@ def install_framework(
                     opencode_source, opencode_target, force, "skill"
                 )
 
+            # Copy opencode.json for OpenCode
+            opencode_json_source = templates_dir / "opencode.json"
+            opencode_json_target = target_path / "opencode.json"
+            if opencode_json_source.exists():
+                if not opencode_json_target.exists() or force:
+                    if not quiet:
+                        console.print("[dim]Creating opencode.json ...[/dim]")
+                    shutil.copy2(str(opencode_json_source), str(opencode_json_target))
+                elif not quiet:
+                    console.print("[dim]Preserving existing opencode.json[/dim]")
+
+            # Copy AGENTS.md
+            agents_md_source = templates_dir / "AGENTS.md"
+            agents_md_target = target_path / "AGENTS.md"
+            if agents_md_source.exists():
+                if not agents_md_target.exists():
+                    if not quiet:
+                        console.print("[dim]Creating AGENTS.md ...[/dim]")
+                    shutil.copy2(str(agents_md_source), str(agents_md_target))
+                elif not quiet:
+                    console.print("[dim]Preserving existing AGENTS.md[/dim]")
+
         # Copy .claude directory if requested
         if tool_target in ("claude-code", "both"):
             claude_source = templates_dir / ".claude"
@@ -337,8 +361,8 @@ def _copy_preserving_user_content(
 ) -> None:
     """Copy tool directory while preserving user-created content.
 
-    Template skills are updated, but user-created skills, agents, and commands
-    are preserved.
+    Template skills are updated, but user-created skills are preserved.
+    Agents and commands are overwritten from the template.
 
     Args:
         source: Source template directory
@@ -403,6 +427,14 @@ def _print_created_files(target_path: Path, tool_target: TargetType = "both") ->
     contextignore = target_path / ".contextignore"
     if contextignore.exists():
         console.print("  📄 .contextignore")
+
+    opencode_json = target_path / "opencode.json"
+    if opencode_json.exists() and tool_target in ("opencode", "both"):
+        console.print("  📄 opencode.json")
+
+    agents_md = target_path / "AGENTS.md"
+    if agents_md.exists() and tool_target in ("opencode", "both"):
+        console.print("  📄 AGENTS.md")
 
     mcp_json = target_path / ".mcp.json"
     if mcp_json.exists() and tool_target in ("claude-code", "both"):
@@ -489,6 +521,8 @@ def verify_installation(target: str, tool_target: TargetType = "both") -> bool:
                 ".opencode/skill/skill-creator/scripts/init_skill.py",
                 ".opencode/skill/skill-creator/scripts/package_skill.py",
                 ".opencode/skill/skill-creator/scripts/quick_validate.py",
+                "opencode.json",
+                "AGENTS.md",
             ]
         )
 

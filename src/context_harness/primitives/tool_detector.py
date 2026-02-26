@@ -328,6 +328,22 @@ class ToolDetector:
                 return paths.memory_file if paths else None
             return None
 
+    def get_opencode_paths(self) -> ToolPaths:
+        """Get OpenCode paths regardless of whether tool is installed.
+
+        Returns:
+            ToolPaths configured for OpenCode
+        """
+        return self._opencode_paths
+
+    def get_claude_code_paths(self) -> ToolPaths:
+        """Get Claude Code paths regardless of whether tool is installed.
+
+        Returns:
+            ToolPaths configured for Claude Code
+        """
+        return self._claude_code_paths
+
 
 # Convenience functions for common operations
 

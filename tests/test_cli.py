@@ -508,8 +508,9 @@ class TestInitToolFlag:
         config = json.loads(mcp_path.read_text(encoding="utf-8"))
         assert "mcpServers" in config
         assert "context7" in config["mcpServers"]
-        assert config["mcpServers"]["context7"]["type"] == "http"
-        assert "context7.com" in config["mcpServers"]["context7"]["url"]
+        # Claude Code uses command-based format
+        assert config["mcpServers"]["context7"]["command"] == "npx"
+        assert "@context7/mcp-server" in config["mcpServers"]["context7"]["args"]
 
     def test_init_invalid_tool_rejected(self, runner, tmp_path):
         """Test that invalid --tool values are rejected."""

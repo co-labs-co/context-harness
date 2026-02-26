@@ -25,7 +25,6 @@ from rich.table import Table
 from context_harness.primitives.tool_detector import (
     ToolDetector,
     ToolTarget,
-    ToolType,
 )
 from context_harness.services.skills_registry import resolve_skills_repo_with_loading
 
@@ -375,13 +374,13 @@ def install_skill(
     # Determine installation directories based on tool_target
     if tool_target == "both":
         install_dirs = [
-            detector._opencode_paths.skills_dir / skill_name,
-            detector._claude_code_paths.skills_dir / skill_name,
+            detector.get_opencode_paths().skills_dir / skill_name,
+            detector.get_claude_code_paths().skills_dir / skill_name,
         ]
     elif tool_target == "opencode":
-        install_dirs = [detector._opencode_paths.skills_dir / skill_name]
+        install_dirs = [detector.get_opencode_paths().skills_dir / skill_name]
     elif tool_target == "claude-code":
-        install_dirs = [detector._claude_code_paths.skills_dir / skill_name]
+        install_dirs = [detector.get_claude_code_paths().skills_dir / skill_name]
     else:
         # Auto-detect: use primary tool, or default to OpenCode
         detected = detector.detect()
@@ -390,10 +389,10 @@ def install_skill(
             if paths:
                 install_dirs = [paths.skills_dir / skill_name]
             else:
-                install_dirs = [detector._opencode_paths.skills_dir / skill_name]
+                install_dirs = [detector.get_opencode_paths().skills_dir / skill_name]
         else:
             # No tools installed, default to OpenCode
-            install_dirs = [detector._opencode_paths.skills_dir / skill_name]
+            install_dirs = [detector.get_opencode_paths().skills_dir / skill_name]
 
     # Check if already exists in any target directory
     for skill_dest in install_dirs:
@@ -420,6 +419,15 @@ def install_skill(
         skill_dest.parent.mkdir(parents=True, exist_ok=True)
 
         if not _fetch_directory_recursive(skills_repo, skill.path, skill_dest, quiet):
+            # Cleanup any partially created skill directory
+            if skill_dest.exists():
+                shutil.rmtree(skill_dest)
+            # Attempt to remove the parent directory if it is now empty
+            try:
+                skill_dest.parent.rmdir()
+            except OSError:
+                # Parent directory is not empty or cannot be removed; ignore
+                pass
             if not quiet:
                 console.print(f"[red]Failed to install skill '{skill_name}'.[/red]")
             return SkillResult.ERROR
@@ -427,9 +435,17 @@ def install_skill(
         # For subsequent installs (in "both" mode), copy from first install
         if i == 0 and len(install_dirs) > 1:
             # First install succeeded, copy to other directories
-            for other_dest in install_dirs[1:]:
-                other_dest.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copytree(skill_dest, other_dest, dirs_exist_ok=True)
+            try:
+                for other_dest in install_dirs[1:]:
+                    other_dest.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copytree(skill_dest, other_dest, dirs_exist_ok=True)
+            except Exception as e:
+                if not quiet:
+                    console.print(
+                        f"[red]Failed to copy skill '{skill_name}' to all target "
+                        f"directories: {e}[/red]"
+                    )
+                return SkillResult.ERROR
             break  # Don't fetch again, we've copied
 
     if not quiet:

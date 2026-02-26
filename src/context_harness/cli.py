@@ -7,7 +7,7 @@ from rich.console import Console
 from rich.panel import Panel
 
 from context_harness import __version__
-from context_harness.installer import install_framework, InstallResult, TargetType
+from context_harness.installer import install_framework, InstallResult
 from context_harness.mcp_config import (
     add_mcp_server,
     list_mcp_servers,
