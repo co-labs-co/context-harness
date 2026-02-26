@@ -72,9 +72,7 @@ nav:
   - Reference:
       - CLI: reference/cli.md
       - Architecture: reference/architecture.md
-  - Contributing:
-      - Overview: contributing.md
-      - Branch Management: contributing/branch-management.md
+  - Contributing: contributing.md
 
 extra:
   social:
