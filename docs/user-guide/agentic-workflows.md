@@ -113,6 +113,7 @@ safe-outputs:
 permissions:
   contents: read
   pull-requests: read
+  issues: read
 ---
 ```
 
