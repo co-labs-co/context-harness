@@ -251,4 +251,24 @@ gh auth status
 
 ---
 
+## Optional: Enable Agentic Workflows
+
+If the repository uses [GitHub Agentic Workflows](https://github.github.com/gh-aw/) for continuous documentation, set up the `gh-aw` extension:
+
+```bash
+gh extension install github/gh-aw
+```
+
+Then compile the lock file from any existing `.md` workflow files:
+
+```bash
+gh aw compile
+```
+
+This creates `.lock.yml` companion files that GitHub Actions requires. Both the `.md` and `.lock.yml` files must be committed.
+
+See the [Agentic Workflows guide](https://co-labs-co.github.io/context-harness/user-guide/agentic-workflows/) for details.
+
+---
+
 EXECUTE NOW: Complete the TODO list above. Goal: `ch --version` outputs a version AND `ch init` succeeds in the user's project directory.

@@ -374,6 +374,23 @@ Repositories scaffolded by `ch skill init-repo` include CI/CD automation:
 
 See [Skills Guide](../user-guide/skills.md#automated-versioning) for the full versioning lifecycle.
 
+### Agentic Workflows
+
+ContextHarness uses [GitHub Agentic Workflows](https://github.github.com/gh-aw/) for continuous documentation. An AI agent runs on every PR to keep docs in sync with code changes.
+
+```
+┌───────────────┐     ┌───────────────────────────────────────────────┐
+│  PR opened /  │────▶│  update-docs.md  (Agentic Workflow)          │
+│  synchronized │     │                                               │
+└───────────────┘     │  1. Analyze code diff                         │
+                      │  2. Check docs for gaps                       │
+                      │  3. Update affected pages                     │
+                      │  4. Commit changes back to PR                 │
+                      └───────────────────────────────────────────────┘
+```
+
+The workflow file lives at `.github/workflows/update-docs.md` with a compiled `.github/workflows/update-docs.lock.yml`. See the [Agentic Workflows guide](../user-guide/agentic-workflows.md) for setup and customization.
+
 **Agent file locations:**
 
 === "OpenCode"

@@ -106,6 +106,10 @@ We use [Conventional Commits](https://www.conventionalcommits.org/):
 2. Make your changes
 3. Run tests: `uv run pytest`
 4. Create a PR with a clear description
+
+!!! note "Automatic Documentation Updates"
+    When you open a PR against `main`, the [Update Documentation](user-guide/agentic-workflows.md) agentic workflow automatically reviews your code changes and updates any affected documentation pages. You'll see doc update commits appear on your PR branch — review them along with your code changes.
+
 ## License
 
 By contributing, you agree that your contributions will be licensed under the [GNU AGPLv3](https://github.com/co-labs-co/context-harness/blob/main/LICENSE).
