@@ -983,31 +983,20 @@ Skills registry for [ContextHarness](https://github.com/co-labs-co/context-harne
 This registry uses **fully automated semantic versioning**. Authors never touch
 version numbers — just write content and use conventional commits:
 
-```
-Author edits skill/my-skill/SKILL.md
-        │
-        ▼
-Commits: "feat: add new examples"
-        │
-        ▼
-PR merged to main
-        │
-        ▼
-release-please detects path-scoped change
-        │
-        ▼
-Creates release PR:
-  • Bumps skill/my-skill/version.txt (0.1.0 → 0.2.0)
-  • Updates skill/my-skill/CHANGELOG.md
-        │
-        ▼
-Release PR merged → tag: my-skill@v0.2.0
-        │
-        ▼
-sync-registry rebuilds skills.json
-        │
-        ▼
-CLI users: context-harness skill outdated
+```mermaid
+flowchart TD
+    A["Author edits skill/my-skill/SKILL.md"] --> B["Commits: feat: add new examples"]
+    B --> C["PR merged to main"]
+    C --> D["release-please detects path-scoped change"]
+    D --> E["Creates release PR"]
+    E --> |"Bumps version.txt & CHANGELOG.md"| F["Release PR merged"]
+    F --> G["Tag: my-skill@v0.2.0 + GitHub Release"]
+    G --> H["sync-registry rebuilds skills.json"]
+    H --> I["CLI: context-harness skill outdated"]
+
+    style A fill:#f9f,stroke:#333
+    style G fill:#9f9,stroke:#333
+    style I fill:#9cf,stroke:#333
 ```
 
 ## Quick Start
