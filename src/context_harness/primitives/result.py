@@ -43,6 +43,13 @@ class ErrorCode(Enum):
     SKILL_NOT_FOUND = "skill_not_found"
     SKILL_INVALID = "skill_invalid"
     SKILL_INSTALL_FAILED = "skill_install_failed"
+    SKILL_INCOMPATIBLE_VERSION = "skill_incompatible_version"
+    SKILL_UPGRADE_FAILED = "skill_upgrade_failed"
+    SKILL_NO_UPGRADE_AVAILABLE = "skill_no_upgrade_available"
+
+    # Repository errors
+    REPO_ALREADY_EXISTS = "repo_already_exists"
+    REPO_CREATE_FAILED = "repo_create_failed"
 
     # Session errors
     SESSION_NOT_FOUND = "session_not_found"

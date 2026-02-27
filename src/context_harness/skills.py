@@ -26,6 +26,7 @@ from context_harness.primitives.tool_detector import (
     ToolDetector,
     ToolTarget,
 )
+from context_harness.primitives.skill import VersionComparison, VersionStatus
 from context_harness.services.skills_registry import resolve_skills_repo_with_loading
 
 console = Console()
@@ -456,6 +457,66 @@ def install_skill(
             console.print(f"[dim]Location: {skill_dest}[/dim]")
 
     return SkillResult.SUCCESS
+
+
+def init_repo(
+    name: str,
+    *,
+    private: bool = True,
+    description: Optional[str] = None,
+    quiet: bool = False,
+) -> tuple[SkillResult, Optional[str]]:
+    """Initialize a new skills registry repository on GitHub.
+
+    Creates a GitHub repository scaffolded with the standard skills registry
+    structure (skills.json, skill/.gitkeep, README.md).
+
+    Args:
+        name: Repository name (e.g., "my-skills" or "my-org/my-skills")
+        private: Whether the repository should be private
+        description: Repository description
+        quiet: If True, suppress output messages
+
+    Returns:
+        Tuple of (SkillResult, repo URL or None)
+    """
+    from context_harness.services.skill_service import SkillService
+    from context_harness.primitives import Success, Failure, ErrorCode
+
+    service = SkillService()
+
+    if not quiet:
+        console.print(f"[cyan]Creating skills registry: {name}...[/cyan]")
+
+    result = service.init_registry_repo(
+        name=name,
+        private=private,
+        description=description,
+    )
+
+    if isinstance(result, Success):
+        repo = result.value
+        if not quiet:
+            console.print(f"\n[green]✅ {result.message}[/green]")
+            console.print(f"[dim]URL: {repo.url}[/dim]")
+        return SkillResult.SUCCESS, repo.url
+
+    if isinstance(result, Failure):
+        if result.code == ErrorCode.REPO_ALREADY_EXISTS:
+            if not quiet:
+                console.print(f"[yellow]⚠️  {result.error}[/yellow]")
+            return SkillResult.ALREADY_EXISTS, None
+        elif result.code == ErrorCode.AUTH_REQUIRED:
+            if not quiet:
+                console.print(f"[red]Authentication error: {result.error}[/red]")
+                console.print("[dim]Run 'gh auth login' to authenticate.[/dim]")
+            return SkillResult.AUTH_ERROR, None
+        else:
+            if not quiet:
+                console.print(f"[red]❌ {result.error}[/red]")
+            return SkillResult.ERROR, None
+
+    return SkillResult.ERROR, None
 
 
 def _validate_skill(skill_path: Path, quiet: bool = False) -> bool:
@@ -999,3 +1060,137 @@ def _get_github_username() -> str:
         return result.stdout.strip()
     except (subprocess.CalledProcessError, FileNotFoundError):
         return "github-user-unknown"
+
+
+def check_updates(
+    skill_name: Optional[str] = None,
+    source_path: str = ".",
+    quiet: bool = False,
+    tool_target: Optional[ToolTarget] = None,
+) -> tuple[SkillResult, Optional[List[VersionComparison]]]:
+    """Check for available skill updates.
+
+    Args:
+        skill_name: Specific skill to check, or None to check all installed skills
+        source_path: Directory containing local skills
+        quiet: If True, suppress output messages
+        tool_target: Which tool directory to search
+
+    Returns:
+        Tuple of (SkillResult, list of VersionComparison objects or None)
+    """
+    from pathlib import Path as _Path
+    from context_harness.services.skill_service import SkillService
+    from context_harness.primitives import Success, Failure
+
+    service = SkillService()
+    project_path = _Path(source_path).resolve()
+
+    if skill_name is not None:
+        result = service.check_skill_updates(skill_name, project_path, tool_target)
+        if isinstance(result, Failure):
+            if not quiet:
+                console.print(
+                    f"[red]Error checking updates for '{skill_name}': {result.error}[/red]"
+                )
+            return SkillResult.ERROR, None
+        comparisons = [result.value]
+    else:
+        result = service.list_outdated_skills(project_path, tool_target)
+        if isinstance(result, Failure):
+            if not quiet:
+                console.print(f"[red]Error checking for updates: {result.error}[/red]")
+            return SkillResult.ERROR, None
+        comparisons = result.value
+
+    if not quiet:
+        if not comparisons:
+            console.print("[green]✅ All skills are up to date.[/green]")
+        else:
+            table = Table(title="Skill Updates Available")
+            table.add_column("Name", style="cyan")
+            table.add_column("Installed", style="dim")
+            table.add_column("Available", style="green")
+            table.add_column("Status", style="yellow")
+
+            for comp in comparisons:
+                local_v = comp.local_version or "-"
+                remote_v = comp.remote_version or "-"
+                if comp.status == VersionStatus.INCOMPATIBLE:
+                    status_str = f"[red]incompatible (needs CH >= {comp.context_harness_min})[/red]"
+                elif comp.status == VersionStatus.UPGRADE_AVAILABLE:
+                    status_str = "[yellow]upgrade available[/yellow]"
+                else:
+                    status_str = str(comp.status.value)
+                table.add_row(comp.skill_name, local_v, remote_v, status_str)
+
+            console.print(table)
+
+    return SkillResult.SUCCESS, comparisons
+
+
+def upgrade_skill(
+    skill_name: str,
+    source_path: str = ".",
+    force_compatibility: bool = False,
+    quiet: bool = False,
+    tool_target: Optional[ToolTarget] = None,
+) -> SkillResult:
+    """Upgrade a skill to the latest version.
+
+    Args:
+        skill_name: Name of the skill to upgrade
+        source_path: Directory containing local skills
+        force_compatibility: If True, bypass compatibility checks
+        quiet: If True, suppress output messages
+        tool_target: Which tool directory to upgrade
+
+    Returns:
+        SkillResult indicating success or failure
+    """
+    from pathlib import Path as _Path
+    from context_harness.services.skill_service import SkillService
+    from context_harness.primitives import Success, Failure, ErrorCode
+
+    service = SkillService()
+    project_path = _Path(source_path).resolve()
+
+    if not quiet:
+        console.print(f"[cyan]Upgrading skill: {skill_name}...[/cyan]")
+
+    result = service.upgrade_skill(
+        skill_name=skill_name,
+        project_path=project_path,
+        force_compatibility=force_compatibility,
+        tool_target=tool_target,
+    )
+
+    if isinstance(result, Success):
+        if not quiet:
+            console.print(f"\n[green]✅ {result.message}[/green]")
+        return SkillResult.SUCCESS
+
+    if isinstance(result, Failure):
+        if result.code == ErrorCode.SKILL_NO_UPGRADE_AVAILABLE:
+            if not quiet:
+                console.print(f"[green]✅ {result.error}[/green]")
+            return SkillResult.SUCCESS  # Not an error — already up to date
+        elif result.code == ErrorCode.SKILL_INCOMPATIBLE_VERSION:
+            if not quiet:
+                console.print(f"[red]❌ {result.error}[/red]")
+                console.print("[dim]Use --force to bypass compatibility check.[/dim]")
+            return SkillResult.ERROR
+        elif result.code == ErrorCode.SKILL_NOT_FOUND:
+            if not quiet:
+                console.print(f"[red]Skill '{skill_name}' not found.[/red]")
+            return SkillResult.NOT_FOUND
+        elif result.code in (ErrorCode.AUTH_REQUIRED, ErrorCode.PERMISSION_DENIED):
+            if not quiet:
+                console.print(f"[red]Authentication error: {result.error}[/red]")
+            return SkillResult.AUTH_ERROR
+        else:
+            if not quiet:
+                console.print(f"[red]Error upgrading skill: {result.error}[/red]")
+            return SkillResult.ERROR
+
+    return SkillResult.ERROR

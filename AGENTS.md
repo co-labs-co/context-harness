@@ -10,19 +10,40 @@ Key capabilities:
 - **Session Management**: `/ctx`, `/contexts`, `/compact` commands for context preservation
 - **GitHub Integration**: `/issue`, `/pr` commands for repository operations
 - **Baseline Analysis**: `/baseline` command with 5-phase subagent pipeline for PROJECT-CONTEXT.md generation
+- **Skill Management**: `skill list`, `skill install`, `skill outdated`, `skill upgrade`, `skill init-repo` for managing and distributing reusable agent skills
 
 ## Project Structure
 
 ```
 context-harness/
 ├── src/context_harness/        # Python source code
+│   ├── primitives/             # Domain models (dataclasses, enums)
+│   │   ├── __init__.py         # Re-exports all primitives
+│   │   ├── base.py             # Result[T] = Success | Failure, ErrorCode
+│   │   ├── config.py           # Configuration primitives
+│   │   ├── installer.py        # InstallResult enum
+│   │   ├── mcp.py              # MCP server primitives
+│   │   ├── skill.py            # Skill, VersionComparison, RegistryRepo
+│   │   └── tool.py             # ToolType, ToolDetector, ToolTarget
+│   ├── services/               # Business logic layer
+│   │   ├── __init__.py
+│   │   ├── config_service.py   # Configuration management
+│   │   └── skill_service.py    # Skill operations (install, upgrade, init-repo)
+│   ├── interfaces/             # CLI/SDK entry points
+│   │   └── cli/
+│   │       ├── __init__.py
+│   │       ├── skill_cmd.py    # Click commands for skill management
+│   │       └── config_cmd.py   # Click commands for configuration
 │   ├── templates/              # Bundled framework templates
 │   │   ├── .context-harness/   # Session management files
 │   │   └── .opencode/          # Agent and command definitions
-│   ├── cli.py                  # Click CLI entry point
+│   ├── cli.py                  # Click CLI entry point (registers groups)
 │   ├── installer.py            # Framework installation logic
 │   └── mcp_config.py           # MCP server configuration
 ├── tests/                      # pytest test suite
+│   └── unit/
+│       ├── services/           # Service unit tests
+│       └── interfaces/cli/     # CLI integration tests
 ├── .github/workflows/          # CI/CD workflows
 ├── .opencode/                  # Agent definitions for this repo
 │   ├── agent/                  # Subagent specifications
@@ -52,8 +73,11 @@ context-harness/
 
 ### Architecture Patterns
 
+- **Three-Layer Architecture**: Primitives (domain models) → Services (business logic) → Interfaces (CLI/SDK)
 - **Single Executor Pattern**: Primary agent executes all work; subagents provide advisory guidance only
-- **Result Enum Pattern**: Functions return `InstallResult`/`MCPResult` enums instead of exceptions for clean control flow
+- **Result Pattern**: `Result[T] = Union[Success[T], Failure]` for explicit, type-safe error handling in services
+- **Result Enum Pattern**: `InstallResult`/`MCPResult` enums for simpler control flow in installer/MCP modules
+- **Protocol-Based DI**: `typing.Protocol` for structural subtyping enables dependency injection and testable services
 - **Template Bundling**: Templates stored in `src/context_harness/templates/` and located at runtime via `Path(__file__).parent / "templates"`
 - **Backup-Restore Pattern**: Session preservation during `--force` reinstallation
 
@@ -244,6 +268,13 @@ Guide for defining AI agents using OpenCode.ai markdown format with YAML frontma
 
 Guide for creating effective skills with Context7 integration.
 
+#### Skill Release
+
+**Triggers**: skill versioning, skill release lifecycle, conventional commits for skills, release-please, registry repo management, init-repo scaffolding, troubleshooting releases
+**Reference**: @.opencode/skill/skill-release/SKILL.md
+
+Operational guide for creating, versioning, and releasing skills in a ContextHarness skills registry repository.
+
 ---
 
 ## External Dependencies
@@ -274,6 +305,13 @@ uvx --from "git+https://github.com/co-labs-co/context-harness.git" context-harne
 context-harness mcp add context7  # Add Context7 MCP server
 context-harness mcp list          # List configured servers
 
+# Skill management
+context-harness skill list        # List available skills
+context-harness skill install     # Interactive skill picker
+context-harness skill outdated    # Check for updates
+context-harness skill upgrade --all  # Upgrade all outdated
+context-harness skill init-repo my-skills  # Scaffold registry repo
+
 # Framework commands (after installation)
 /ctx my-feature                   # Start/switch session
 /contexts                         # List all sessions
@@ -290,6 +328,10 @@ context-harness mcp list          # List configured servers
 | `src/context_harness/cli.py` | Click CLI entry point |
 | `src/context_harness/installer.py` | Framework installation logic |
 | `src/context_harness/mcp_config.py` | MCP server configuration |
+| `src/context_harness/services/skill_service.py` | Skill operations (install, upgrade, init-repo) |
+| `src/context_harness/interfaces/cli/skill_cmd.py` | Click commands for skill management |
+| `src/context_harness/primitives/skill.py` | Skill, VersionComparison, RegistryRepo models |
+| `src/context_harness/primitives/base.py` | Result[T] = Success \| Failure, ErrorCode |
 | `src/context_harness/templates/` | Bundled framework templates |
 | `pyproject.toml` | Project configuration, dependencies |
 | `commitlint.config.js` | Conventional commits config |
@@ -311,6 +353,26 @@ class MCPResult(Enum):
     UPDATED = "updated"
     ERROR = "error"
 ```
+
+### Result[T] Pattern (Services Layer)
+
+Services use `Result[T] = Union[Success[T], Failure]` for explicit error handling:
+
+```python
+# src/context_harness/primitives/base.py
+@dataclass
+class Success(Generic[T]):
+    value: T
+
+@dataclass
+class Failure:
+    code: ErrorCode
+    message: str
+
+Result = Union[Success[T], Failure]
+```
+
+Used in `skill_service.py` for operations like `init_repo()`, `compare_versions()`, etc.
 
 ### opencode.json Structure
 

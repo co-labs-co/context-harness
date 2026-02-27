@@ -117,6 +117,10 @@ ch skill install           # Interactive picker (type to filter)
 ch skill install <name>    # Install specific skill
 ch skill extract           # Interactive picker for local skills
 ch skill extract <name>    # Share a specific local skill
+ch skill outdated          # Check for available upgrades
+ch skill upgrade <name>    # Upgrade a single skill
+ch skill upgrade --all     # Upgrade all outdated skills
+ch skill init-repo <name>  # Create a skills registry repo on GitHub
 ```
 
 **Interactive skill selection**: Run `skill install` or `skill extract` without a name to get a fuzzy-searchable picker:
@@ -244,9 +248,24 @@ ch skill list  # Uses my-org/private-skills
 
 ### Creating a Custom Skills Repository
 
-To create your own skills repository:
+The fastest way to create a registry with automated versioning:
 
-1. Fork or create a new repo with this structure:
+```bash
+# Create a private registry (16 files scaffolded with CI/CD)
+ch skill init-repo my-skills
+
+# Create under an organization, public
+ch skill init-repo my-org/team-skills --public
+
+# Create and configure as your default in one step
+ch skill init-repo my-skills --configure-user
+```
+
+The scaffold includes release-please for per-skill semantic versioning, PR validation workflows, and automatic `skills.json` updates. See [Skills Guide](https://co-labs-co.github.io/context-harness/user-guide/skills/) for the full workflow.
+
+**Or create manually** with this structure:
+
+1. Create a new repo with this structure:
    ```
    my-skills-repo/
    ├── skills.json          # Registry of available skills
@@ -279,7 +298,6 @@ To create your own skills repository:
    ---
    name: my-skill
    description: What this skill does
-   version: 0.1.0
    ---
    
    # My Skill

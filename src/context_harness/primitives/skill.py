@@ -19,6 +19,22 @@ class SkillSource(Enum):
     BUILTIN = "builtin"  # Bundled with ContextHarness
 
 
+class VersionStatus(Enum):
+    """Status of a skill's version compared to available versions."""
+
+    UP_TO_DATE = "up_to_date"  # Local version matches or exceeds remote
+    UPGRADE_AVAILABLE = "upgrade_available"  # Newer remote version available
+    INCOMPATIBLE = "incompatible"  # Skill requires newer ContextHarness version
+    UNKNOWN = "unknown"  # Unable to determine version status
+
+
+class RepoVisibility(Enum):
+    """Visibility of a GitHub repository."""
+
+    PRIVATE = "private"
+    PUBLIC = "public"
+
+
 @dataclass
 class SkillMetadata:
     """Frontmatter metadata from SKILL.md.
@@ -158,3 +174,75 @@ class SkillRegistryEntry:
             source=SkillSource.REMOTE,
             min_context_harness_version=self.min_context_harness_version,
         )
+
+
+@dataclass
+class VersionComparison:
+    """Comparison of local and remote skill versions.
+
+    Used to detect available upgrades and compatibility issues.
+
+    Attributes:
+        skill_name: Name of the skill being compared
+        local_version: Currently installed version (None if not installed)
+        remote_version: Latest available version from registry
+        status: Comparison status (UP_TO_DATE, UPGRADE_AVAILABLE, etc.)
+        context_harness_min: Minimum ContextHarness version required by skill
+        current_context_harness: Current ContextHarness version
+    """
+
+    skill_name: str
+    local_version: Optional[str]
+    remote_version: str
+    status: VersionStatus
+    context_harness_min: Optional[str] = None
+    current_context_harness: Optional[str] = None
+
+    def needs_upgrade(self) -> bool:
+        """Check if an upgrade is available.
+
+        Returns:
+            True if UPGRADE_AVAILABLE status
+        """
+        return self.status == VersionStatus.UPGRADE_AVAILABLE
+
+    def is_compatible(self) -> bool:
+        """Check if skill is compatible with current ContextHarness version.
+
+        Returns:
+            False if INCOMPATIBLE status, True otherwise
+        """
+        return self.status != VersionStatus.INCOMPATIBLE
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for display/serialization.
+
+        Returns:
+            Dict suitable for JSON serialization
+        """
+        return {
+            "skill_name": self.skill_name,
+            "local_version": self.local_version,
+            "remote_version": self.remote_version,
+            "status": self.status.value,
+            "context_harness_min": self.context_harness_min,
+            "current_context_harness": self.current_context_harness,
+        }
+
+
+@dataclass
+class RegistryRepo:
+    """Information about a skills registry repository.
+
+    Represents a GitHub repository that serves as a private or organizational
+    skills registry, created via `context-harness skill init-repo`.
+
+    Attributes:
+        name: Full repository name (owner/repo or just repo for personal)
+        url: HTTPS URL to the repository
+        visibility: Whether the repo is private or public
+    """
+
+    name: str
+    url: str
+    visibility: RepoVisibility

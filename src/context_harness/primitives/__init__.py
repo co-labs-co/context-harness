@@ -29,9 +29,13 @@ from context_harness.primitives.session import (
     SessionStatus,
 )
 from context_harness.primitives.skill import (
+    RegistryRepo,
+    RepoVisibility,
     Skill,
     SkillMetadata,
     SkillSource,
+    VersionComparison,
+    VersionStatus,
 )
 from context_harness.primitives.oauth import (
     AuthStatus,
@@ -110,9 +114,13 @@ __all__ = [
     "Session",
     "SessionStatus",
     # Skill types
+    "RegistryRepo",
+    "RepoVisibility",
     "Skill",
     "SkillMetadata",
     "SkillSource",
+    "VersionComparison",
+    "VersionStatus",
     # OAuth types
     "AuthStatus",
     "OAuthConfig",

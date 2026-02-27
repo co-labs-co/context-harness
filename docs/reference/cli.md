@@ -115,7 +115,7 @@ ch mcp add context7 -k KEY # With API key for higher limits
       "mcpServers": {
         "context7": {
           "command": "npx",
-          "args": ["-y", "@anthropic-ai/mcp-server-context7"]
+          "args": ["-y", "@upstash/context7-mcp"]
         }
       }
     }
@@ -194,6 +194,76 @@ ch skill install <name>    # Install specific skill
 
     - `.claude/skills/<name>/SKILL.md`
 
+### skill init-repo
+
+Initialize a new skills registry repository on GitHub with fully automated CI/CD for per-skill semantic versioning. Creates 16 files including GitHub Actions workflows for release-please, PR validation, and registry sync.
+
+**Prerequisite:** GitHub CLI (`gh`) must be installed and authenticated (`gh auth login`).
+
+```bash
+ch skill init-repo my-skills                          # Create private repo
+ch skill init-repo my-org/team-skills --public        # Create under an org, public
+ch skill init-repo my-skills --configure-user         # Create and set as user default
+ch skill init-repo my-skills --configure-project      # Create and set as project default
+ch skill init-repo my-org/skills -d "Team AI skills"  # With custom description
+```
+
+**What it creates:**
+
+```
+my-skills/
+├── .github/
+│   ├── workflows/
+│   │   ├── release.yml              # release-please per-skill versioning
+│   │   ├── sync-registry.yml        # Rebuilds skills.json after releases
+│   │   └── validate-skills.yml      # PR validation + sticky comments
+│   ├── ISSUE_TEMPLATE/
+│   │   └── new-skill.md
+│   └── PULL_REQUEST_TEMPLATE.md
+├── scripts/
+│   ├── sync-registry.py             # Frontmatter + version.txt → skills.json
+│   └── validate_skills.py           # Pydantic-based validation
+├── skill/
+│   └── example-skill/
+│       ├── SKILL.md
+│       └── version.txt              # Bootstrapped at 0.1.0
+├── skills.json
+├── release-please-config.json
+├── .release-please-manifest.json
+├── .gitignore
+├── README.md
+├── CONTRIBUTING.md
+└── QUICKSTART.md
+```
+
+For details on the CI/CD automation and versioning lifecycle, see [Automated Versioning](../user-guide/skills.md#automated-versioning).
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `--private` / `--public` | Repository visibility (default: `--private`) |
+| `-d`, `--description` | Repository description |
+| `--configure-user` | Set as default `skills-repo` in user config — applies to all projects (`~/.context-harness/config.json`) |
+| `--configure-project` | Set as default `skills-repo` in project config — applies to this project only (`opencode.json`) |
+
+!!! tip "User vs Project Configuration"
+    `--configure-user` writes to `~/.context-harness/config.json`, so every project on your machine uses this registry by default. `--configure-project` writes to `opencode.json` in the current directory, so only this project is affected. If neither flag is passed, the command prints `config set` instructions for both options.
+
+**Name format:**
+
+| Format | Example | Result |
+|--------|---------|--------|
+| `repo` | `my-skills` | Created under your personal GitHub account |
+| `owner/repo` | `my-org/team-skills` | Created under the specified organization |
+
+**Exit codes:**
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success, or repository already exists |
+| 1 | Error (auth failure, create failure) |
+
 ### skill extract
 
 Export a local skill for sharing. Searches both tool directories.
@@ -202,6 +272,55 @@ Export a local skill for sharing. Searches both tool directories.
 ch skill extract           # Interactive picker
 ch skill extract <name>    # Extract specific skill
 ```
+
+### skill outdated
+
+Check which installed skills have newer versions available in the registry.
+
+```bash
+ch skill outdated
+```
+
+**Example output:**
+
+```
+┏━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┓
+┃ Skill           ┃ Installed     ┃ Latest        ┃ Status              ┃
+┡━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━┩
+│ react-forms     │ 0.1.0         │ 0.2.0         │ upgrade available   │
+│ fastapi-crud    │ 1.0.0         │ 1.0.0         │ up to date          │
+│ django-auth     │ 0.3.0         │ 0.3.1         │ upgrade available   │
+└─────────────────┴───────────────┴───────────────┴─────────────────────┘
+```
+
+If a skill requires a newer version of ContextHarness than is currently installed, it is shown with status `incompatible`.
+
+### skill upgrade
+
+Upgrade one or all installed skills to the latest registry version.
+
+```bash
+ch skill upgrade <name>        # Upgrade a specific skill
+ch skill upgrade --all         # Upgrade all outdated skills
+ch skill upgrade <name> --force  # Upgrade even if version is incompatible
+```
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `--all` | Upgrade every installed skill that has a newer version |
+| `--force` | Skip the `min_context_harness_version` compatibility check |
+
+**Exit codes:**
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success (or already up to date) |
+| 1 | Error (skill not found, network failure, incompatible version) |
+
+!!! tip "Incompatible Skills"
+    If a skill requires a newer version of ContextHarness, the upgrade is blocked and a message is shown. Run `pipx upgrade context-harness` (or `uv tool upgrade context-harness`) first, or use `--force` to override.
 
 ## Configuration Management
 

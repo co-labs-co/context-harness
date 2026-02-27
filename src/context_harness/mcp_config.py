@@ -217,7 +217,7 @@ def transform_config_for_tool(
             # Context7 can use npx command
             return {
                 "command": "npx",
-                "args": ["-y", "@context7/mcp-server"],
+                "args": ["-y", "@upstash/context7-mcp"],
             }
         elif server_name == "atlassian":
             # Atlassian MCP uses npx command

@@ -27,6 +27,7 @@ dependencies = [
     "pyyaml>=6.0",
     "questionary>=2.1.1",
     "pathspec>=0.11.0",
+    "packaging>=23.0",
 ]
 
 [project.scripts]
@@ -42,12 +43,6 @@ Issues = "https://github.com/co-labs-co/context-harness/issues"
 [project.optional-dependencies]
 # Secure token storage via system keyring (recommended for OAuth)
 keyring = ["keyring>=24.0"]
-# Web interface dependencies
-web = [
-    "fastapi>=0.109.0",
-    "uvicorn[standard]>=0.27.0",
-    "pydantic>=2.0",
-]
 
 [build-system]
 requires = ["hatchling", "hatch-vcs"]
@@ -61,15 +56,10 @@ fallback_version = "0.0.0+unknown"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/context_harness"]
-# Include static frontend files in the wheel
-artifacts = [
-    "src/context_harness/interfaces/web/static/**/*",
-]
 
 [tool.hatch.build.targets.sdist]
 include = [
     "src/",
-    "web/",
     "README.md",
     "LICENSE",
 ]

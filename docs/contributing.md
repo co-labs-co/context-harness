@@ -48,15 +48,40 @@ Output is in the `site/` directory.
 ```
 context-harness/
 ├── src/context_harness/
-│   ├── cli.py              # CLI entry point
-│   ├── primitives/         # Data models
-│   ├── services/           # Business logic
+│   ├── primitives/         # Domain models (dataclasses, enums, Result[T])
+│   │   ├── base.py         # Result[T] = Success | Failure, ErrorCode
+│   │   ├── config.py       # Configuration primitives
+│   │   ├── installer.py    # InstallResult enum
+│   │   ├── mcp.py          # MCP server primitives
+│   │   ├── skill.py        # Skill, VersionComparison, RegistryRepo
+│   │   └── tool.py         # ToolType, ToolDetector, ToolTarget
+│   ├── services/           # Business logic (uses Result[T] pattern)
+│   │   ├── config_service.py   # Configuration management
+│   │   └── skill_service.py    # Skill operations (install, upgrade, init-repo)
+│   ├── interfaces/         # CLI/SDK entry points
+│   │   └── cli/
+│   │       ├── skill_cmd.py    # Click commands for skill management
+│   │       └── config_cmd.py   # Click commands for configuration
+│   ├── cli.py              # CLI entry point (registers command groups)
+│   ├── installer.py        # Framework installation logic
+│   ├── mcp_config.py       # MCP server configuration
 │   └── templates/          # Agent and command templates
 ├── tests/                  # Test suite
+│   └── unit/
+│       ├── services/       # Service unit tests
+│       └── interfaces/cli/ # CLI integration tests
 ├── docs/                   # Documentation source
 ├── mkdocs.yml              # MkDocs configuration
 └── pyproject.toml          # Project configuration
 ```
+
+### Architecture: Primitives → Services → Interfaces
+
+The codebase follows a three-layer architecture:
+
+1. **Primitives** (`primitives/`): Pure data models using `@dataclass` and `Enum`. No business logic. Includes `Result[T] = Union[Success[T], Failure]` for explicit error handling.
+2. **Services** (`services/`): Business logic that operates on primitives. Uses Protocol-based dependency injection for testability.
+3. **Interfaces** (`interfaces/`): CLI commands (Click) and SDK clients that call services. Handle user I/O and formatting only.
 
 ## Guidelines
 
@@ -81,7 +106,6 @@ We use [Conventional Commits](https://www.conventionalcommits.org/):
 2. Make your changes
 3. Run tests: `uv run pytest`
 4. Create a PR with a clear description
-
 ## License
 
 By contributing, you agree that your contributions will be licensed under the [GNU AGPLv3](https://github.com/co-labs-co/context-harness/blob/main/LICENSE).

@@ -15,6 +15,9 @@ from context_harness.skills import (
     get_skill_info,
     install_skill,
     extract_skill,
+    check_updates,
+    upgrade_skill,
+    init_repo,
     SkillResult,
 )
 from context_harness.completion import (
@@ -28,6 +31,8 @@ from context_harness.interfaces.cli.formatters import (
     print_error,
     print_info,
     print_bold,
+    print_success,
+    print_warning,
 )
 
 
@@ -240,3 +245,346 @@ def skill_extract_cmd(skill_name: Optional[str], source: str) -> None:
         console.print()
         print_error("Failed to extract skill.")
         raise SystemExit(1)
+
+
+@skill_group.command("outdated")
+@click.option(
+    "--source",
+    "-s",
+    default=".",
+    type=click.Path(exists=True),
+    help="Source directory containing local skills (default: current directory).",
+)
+def skill_outdated_cmd(source: str) -> None:
+    """Show skills with available updates.
+
+    Compares locally installed skills against the remote registry and
+    lists any skills that have a newer version available.
+
+    Examples:
+
+        context-harness skill outdated
+
+        context-harness skill outdated --source ./my-project
+    """
+    print_header("Skill Updates")
+
+    result, comparisons = check_updates(source_path=source)
+
+    if result != SkillResult.SUCCESS:
+        console.print()
+        print_error("Failed to check for updates.")
+        raise SystemExit(1)
+
+    if comparisons:
+        console.print()
+        print_info(
+            f"Found {len(comparisons)} skill(s) with updates available. "
+            "Run 'context-harness skill upgrade <name>' to upgrade."
+        )
+
+
+@skill_group.command("upgrade")
+@click.argument("skill_name", required=False, default=None)
+@click.option(
+    "--source",
+    "-s",
+    default=".",
+    type=click.Path(exists=True),
+    help="Source directory containing local skills (default: current directory).",
+)
+@click.option(
+    "--all",
+    "upgrade_all",
+    is_flag=True,
+    help="Upgrade all outdated skills.",
+)
+@click.option(
+    "--force",
+    "-f",
+    is_flag=True,
+    help="Bypass compatibility checks.",
+)
+def skill_upgrade_cmd(
+    skill_name: Optional[str], source: str, upgrade_all: bool, force: bool
+) -> None:
+    """Upgrade a skill to the latest version.
+
+    Downloads and installs the latest version of the specified skill.
+    Use --all to upgrade all outdated skills at once.
+
+    If the skill requires a newer version of ContextHarness, you will
+    be warned. Use --force to bypass the compatibility check.
+
+    Examples:
+
+        context-harness skill upgrade react-forms
+
+        context-harness skill upgrade --all
+
+        context-harness skill upgrade react-forms --force
+    """
+    print_header("Skill Upgrade")
+
+    if not skill_name and not upgrade_all:
+        console.print()
+        print_error("Specify a skill name or use --all to upgrade all outdated skills.")
+        print_info("Use 'context-harness skill outdated' to see what's available.")
+        raise SystemExit(1)
+
+    if upgrade_all:
+        # Check for all outdated skills and upgrade them
+        check_result, comparisons = check_updates(source_path=source, quiet=True)
+        if check_result != SkillResult.SUCCESS or comparisons is None:
+            console.print()
+            print_error("Failed to check for updates.")
+            raise SystemExit(1)
+
+        if not comparisons:
+            console.print()
+            console.print("[green]✅ All skills are already up to date.[/green]")
+            return
+
+        console.print()
+        print_info(f"Upgrading {len(comparisons)} skill(s)...")
+        console.print()
+
+        failed_skills: list[str] = []
+        for comp in comparisons:
+            result = upgrade_skill(
+                comp.skill_name,
+                source_path=source,
+                force_compatibility=force,
+            )
+            if result != SkillResult.SUCCESS:
+                failed_skills.append(comp.skill_name)
+
+        if failed_skills:
+            console.print()
+            print_error(
+                f"Failed to upgrade {len(failed_skills)} skill(s): "
+                + ", ".join(failed_skills)
+            )
+            raise SystemExit(1)
+    else:
+        assert skill_name is not None  # guaranteed by the guard above
+        result = upgrade_skill(
+            skill_name,
+            source_path=source,
+            force_compatibility=force,
+        )
+
+        if result == SkillResult.SUCCESS:
+            console.print()
+            print_bold("Skill upgraded!")
+        elif result == SkillResult.NOT_FOUND:
+            console.print()
+            print_error(f"Skill '{skill_name}' not found locally.")
+            print_info(
+                "Use 'context-harness skill list-local' to see installed skills."
+            )
+            raise SystemExit(1)
+        elif result == SkillResult.AUTH_ERROR:
+            console.print()
+            print_error("Authentication failed.")
+            print_info("Make sure you're logged in with 'gh auth login'.")
+            raise SystemExit(1)
+        elif result == SkillResult.ERROR:
+            console.print()
+            print_error("Failed to upgrade skill.")
+            raise SystemExit(1)
+
+
+@skill_group.command("init-repo")
+@click.argument("name")
+@click.option(
+    "--private/--public",
+    default=True,
+    help="Repository visibility (default: private).",
+)
+@click.option(
+    "--description",
+    "-d",
+    default=None,
+    help="Repository description.",
+)
+@click.option(
+    "--configure-user",
+    is_flag=True,
+    help="Set as default skills-repo in user config (~/.context-harness/config.json).",
+)
+@click.option(
+    "--configure-project",
+    is_flag=True,
+    help="Set as default skills-repo in project config (opencode.json).",
+)
+def skill_init_repo_cmd(
+    name: str,
+    private: bool,
+    description: Optional[str],
+    configure_user: bool,
+    configure_project: bool,
+) -> None:
+    """Initialize a new skills registry repository on GitHub.
+
+    Creates a GitHub repository scaffolded with the standard skills
+    registry structure (skills.json, skill directory, README). The
+    repository is ready to use as a custom skills-repo immediately.
+
+    NAME is the repository name. Use "owner/repo" format to create
+    under an organization, or just "repo" for your personal account.
+
+    Requires: GitHub CLI (gh) installed and authenticated.
+
+    Examples:
+
+        context-harness skill init-repo my-skills
+
+        context-harness skill init-repo my-org/team-skills --public
+
+        context-harness skill init-repo my-skills --configure-user
+
+        context-harness skill init-repo my-org/skills -d "Team AI skills"
+    """
+    print_header("Skill Registry Initializer")
+
+    result, repo_url = init_repo(
+        name=name,
+        private=private,
+        description=description,
+    )
+
+    if result == SkillResult.SUCCESS:
+        console.print()
+        print_bold("Skills registry created!")
+        console.print()
+
+        # Derive owner/repo from URL for config commands (the URL always
+        # contains the real owner, which may differ from `name` when the
+        # user omits the org prefix).
+        config_name = name
+        if repo_url:
+            # e.g. "https://github.com/cmtzco/my-test-skills" → "cmtzco/my-test-skills"
+            stripped = repo_url.rstrip("/").removesuffix(".git")
+            parts = stripped.split("/")
+            if len(parts) >= 2 and "github.com" in repo_url:
+                config_name = f"{parts[-2]}/{parts[-1]}"
+
+        visibility_str = "private" if private else "public"
+        print_info(f"Repository: {config_name} ({visibility_str})")
+        if repo_url:
+            print_info(f"URL: {repo_url}")
+
+        # Auto-configure if requested
+        configured = False
+        if configure_user:
+            _configure_skills_repo_user(config_name)
+            configured = True
+        if configure_project:
+            _configure_skills_repo_project(config_name)
+            configured = True
+
+        if not configured:
+            console.print()
+            console.print("[dim]To use this as your default skills-repo:[/dim]")
+            console.print(
+                f"[dim]  context-harness config set skills-repo {config_name}        # this project[/dim]"
+            )
+            console.print(
+                f"[dim]  context-harness config set skills-repo {config_name} --user  # all projects[/dim]"
+            )
+
+    elif result == SkillResult.ALREADY_EXISTS:
+        console.print()
+        print_warning(f"Repository '{name}' already exists.")
+        print_info("Use this existing repository, or choose a different name.")
+        raise SystemExit(0)
+    elif result == SkillResult.AUTH_ERROR:
+        console.print()
+        print_error("Authentication failed.")
+        print_info("Make sure GitHub CLI (gh) is installed and authenticated:")
+        console.print("[dim]  gh auth login[/dim]")
+        raise SystemExit(1)
+    elif result == SkillResult.ERROR:
+        console.print()
+        print_error("Failed to create skills registry.")
+        raise SystemExit(1)
+
+
+def _configure_skills_repo_user(repo_name: str) -> None:
+    """Configure the skills-repo in user config.
+
+    Args:
+        repo_name: Repository name (owner/repo format)
+    """
+    try:
+        from context_harness.primitives import Failure
+        from context_harness.primitives.config import (
+            SkillsRegistryConfig,
+            UserConfig,
+        )
+        from context_harness.services.user_config_service import UserConfigService
+
+        service = UserConfigService()
+
+        # Create new config with the skills registry set
+        new_config = UserConfig(
+            skills_registry=SkillsRegistryConfig(default=repo_name),
+        )
+
+        save_result = service.save(new_config)
+        if isinstance(save_result, Failure):
+            print_warning(f"Could not update user config: {save_result.error}")
+            return
+
+        print_success(f"User config updated: skills-repo = {repo_name}")
+    except Exception as e:
+        print_warning(f"Could not update user config: {e}")
+
+
+def _configure_skills_repo_project(repo_name: str) -> None:
+    """Configure the skills-repo in project config.
+
+    Args:
+        repo_name: Repository name (owner/repo format)
+    """
+    try:
+        from pathlib import Path
+
+        from context_harness.primitives import Failure
+        from context_harness.primitives.config import (
+            OpenCodeConfig,
+            SkillsRegistryConfig,
+        )
+        from context_harness.services.config_service import ConfigService
+
+        service = ConfigService()
+
+        # Load or create config
+        result = service.load_or_create()
+        if isinstance(result, Failure):
+            print_warning(f"Could not load project config: {result.error}")
+            return
+
+        config = result.value
+
+        # Create new config with updated skills registry
+        new_config = OpenCodeConfig(
+            schema_version=config.schema_version,
+            mcp=config.mcp,
+            agents=config.agents,
+            commands=config.commands,
+            skills=config.skills,
+            skills_registry=SkillsRegistryConfig(default=repo_name),
+            project_context=config.project_context,
+            raw_data=config.raw_data,
+        )
+
+        save_result = service.save(new_config)
+        if isinstance(save_result, Failure):
+            print_warning(f"Could not update project config: {save_result.error}")
+            return
+
+        print_success(f"Project config updated: skills-repo = {repo_name}")
+    except Exception as e:
+        print_warning(f"Could not update project config: {e}")

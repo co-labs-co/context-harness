@@ -261,7 +261,7 @@ The research and documentation subagents require [Context7 MCP](https://github.c
       "mcpServers": {
         "context7": {
           "command": "npx",
-          "args": ["-y", "@anthropic-ai/mcp-server-context7"]
+          "args": ["-y", "@upstash/context7-mcp"]
         }
       }
     }
@@ -295,7 +295,7 @@ For higher rate limits:
       "mcpServers": {
         "context7": {
           "command": "npx",
-          "args": ["-y", "@anthropic-ai/mcp-server-context7"],
+          "args": ["-y", "@upstash/context7-mcp"],
           "env": {
             "CONTEXT7_API_KEY": "YOUR_API_KEY"
           }
@@ -317,6 +317,62 @@ All agent behaviors are defined in markdown files:
 | Research Subagent (`research-subagent.md`) | API lookups, best practices |
 | Docs Subagent (`docs-subagent.md`) | Documentation summaries |
 | Compaction Guide (`compaction-guide.md`) | Context preservation |
+
+## Code Architecture
+
+### Three-Layer Pattern
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      Interfaces Layer                       │
+│                                                             │
+│  CLI commands (Click)          SDK clients (future)         │
+│  skill_cmd.py, config_cmd.py  Handle user I/O only         │
+└──────────────────────────┬──────────────────────────────────┘
+                           │ calls
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│                      Services Layer                         │
+│                                                             │
+│  skill_service.py              config_service.py            │
+│  Business logic, orchestration                              │
+│  Returns Result[T] = Success[T] | Failure                   │
+│  Uses Protocol-based dependency injection                   │
+└──────────────────────────┬──────────────────────────────────┘
+                           │ operates on
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│                     Primitives Layer                         │
+│                                                             │
+│  Pure dataclasses: Skill, VersionComparison, RegistryRepo   │
+│  Enums: SkillSource, VersionStatus, RepoVisibility          │
+│  Result types: Success[T], Failure, ErrorCode               │
+│  No business logic — just data                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Skills Registry Architecture
+
+The skills system uses a distributed registry model where repositories host skills and a CLI fetches them:
+
+```
+┌──────────────────────┐     ┌──────────────────────────────────────┐
+│   CLI (ch skill ...)  │────▶│  GitHub Repository (skills registry) │
+│                      │     │                                      │
+│  • skill list        │     │  skills.json ◀── sync-registry.yml   │
+│  • skill install     │     │  skill/*/SKILL.md                    │
+│  • skill outdated    │     │  skill/*/version.txt ◀── release.yml │
+│  • skill upgrade     │     │                                      │
+└──────────────────────┘     └──────────────────────────────────────┘
+```
+
+Repositories scaffolded by `ch skill init-repo` include CI/CD automation:
+
+- **release-please** manages per-skill `version.txt` and `CHANGELOG.md` via conventional commits
+- **sync-registry** rebuilds `skills.json` from frontmatter + `version.txt` after each release
+- **validate-skills** checks PR changes for schema compliance
+
+See [Skills Guide](../user-guide/skills.md#automated-versioning) for the full versioning lifecycle.
 
 **Agent file locations:**
 
