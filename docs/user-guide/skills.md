@@ -259,7 +259,7 @@ Once created, you can start adding skills to the repository. See [Adding Skills 
 | Flag | Effect |
 |------|--------|
 | `--configure-user` | Sets the new repo as your default `skills-repo` in `~/.context-harness/config.json` — applies to **all projects** on your machine |
-| `--configure-project` | Sets the new repo as the project's `skills-repo` in `opencode.json` — applies to **this project only** |
+| `--configure-project` | Sets the new repo as the project's `skills-repo` in `.context-harness/config.json` — applies to **this project only** |
 
 If you don't use either flag, the command prints manual `config set` instructions for both scopes.
 
@@ -271,7 +271,7 @@ If you don't use either flag, the command prints manual `config set` instruction
 === "OpenCode"
 
     ```bash
-    # Project-level (in opencode.json)
+    # Project-level (in .context-harness/config.json)
     ch config set skills-repo my-org/my-skills-repo
     
     # User-level (in ~/.context-harness/config.json)
@@ -607,6 +607,6 @@ Skills repository is resolved in this order:
 | Priority | Source | Location |
 |----------|--------|----------|
 | 1 (Highest) | Environment Variable | `CONTEXT_HARNESS_SKILLS_REPO` |
-| 2 | Project Config | `opencode.json` → `skillsRegistry.default` |
+| 2 | Project Config | `.context-harness/config.json` → `skillsRegistry.default` |
 | 3 | User Config | `~/.context-harness/config.json` |
 | 4 (Lowest) | Default | Official skills repository |

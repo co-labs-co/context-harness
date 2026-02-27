@@ -245,10 +245,10 @@ For details on the CI/CD automation and versioning lifecycle, see [Automated Ver
 | `--private` / `--public` | Repository visibility (default: `--private`) |
 | `-d`, `--description` | Repository description |
 | `--configure-user` | Set as default `skills-repo` in user config — applies to all projects (`~/.context-harness/config.json`) |
-| `--configure-project` | Set as default `skills-repo` in project config — applies to this project only (`opencode.json`) |
+| `--configure-project` | Set as default `skills-repo` in project config — applies to this project only (`.context-harness/config.json`) |
 
 !!! tip "User vs Project Configuration"
-    `--configure-user` writes to `~/.context-harness/config.json`, so every project on your machine uses this registry by default. `--configure-project` writes to `opencode.json` in the current directory, so only this project is affected. If neither flag is passed, the command prints `config set` instructions for both options.
+    `--configure-user` writes to `~/.context-harness/config.json`, so every project on your machine uses this registry by default. `--configure-project` writes to `.context-harness/config.json` in the current directory, so only this project is affected. If neither flag is passed, the command prints `config set` instructions for both options.
 
 **Name format:**
 
@@ -347,7 +347,7 @@ Set a configuration value.
 === "OpenCode"
 
     ```bash
-    # Project-level (in opencode.json)
+    # Project-level (in .context-harness/config.json)
     ch config set skills-repo <repo>
     
     # User-level (in ~/.context-harness/config.json)
