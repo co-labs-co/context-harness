@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import List, Optional
 from unittest.mock import patch
 
+import pytest
+
 from context_harness.primitives import (
     ErrorCode,
     Failure,
@@ -1198,14 +1200,31 @@ class TestSkillServiceInitRegistryRepo:
 
     # -- Scaffold content verification --------------------------------------
 
-    def test_scaffold_writes_correct_files(self, tmp_path: Path) -> None:
-        """Scaffold writes skills.json, skill/.gitkeep, and README.md."""
+    def test_scaffold_writes_all_expected_files(self, tmp_path: Path) -> None:
+        """Scaffold writes complete CI/CD file tree."""
         service = SkillService(github_client=MockGitHubClient())
         service._write_registry_scaffold(tmp_path, "test-user/my-skills")
 
-        assert (tmp_path / "skills.json").exists()
-        assert (tmp_path / "skill" / ".gitkeep").exists()
-        assert (tmp_path / "README.md").exists()
+        expected_files = [
+            "skills.json",
+            "release-please-config.json",
+            ".release-please-manifest.json",
+            ".gitignore",
+            "README.md",
+            "CONTRIBUTING.md",
+            "QUICKSTART.md",
+            ".github/PULL_REQUEST_TEMPLATE.md",
+            ".github/ISSUE_TEMPLATE/new-skill.md",
+            ".github/workflows/release.yml",
+            ".github/workflows/sync-registry.yml",
+            ".github/workflows/validate-skills.yml",
+            "scripts/sync-registry.py",
+            "scripts/validate_skills.py",
+            "skill/example-skill/SKILL.md",
+            "skill/example-skill/version.txt",
+        ]
+        for filepath in expected_files:
+            assert (tmp_path / filepath).exists(), f"Missing: {filepath}"
 
     def test_scaffold_skills_json_content(self, tmp_path: Path) -> None:
         """skills.json contains empty registry with schema_version 1.0."""
@@ -1224,12 +1243,173 @@ class TestSkillServiceInitRegistryRepo:
         readme = (tmp_path / "README.md").read_text()
         assert "my-org/team-skills" in readme
 
-    def test_scaffold_gitkeep_is_empty(self, tmp_path: Path) -> None:
-        """skill/.gitkeep is an empty file."""
+    def test_scaffold_readme_contains_lifecycle_diagram(self, tmp_path: Path) -> None:
+        """README.md includes the ASCII lifecycle flow."""
         service = SkillService(github_client=MockGitHubClient())
         service._write_registry_scaffold(tmp_path, "test-user/my-skills")
 
-        assert (tmp_path / "skill" / ".gitkeep").read_text() == ""
+        readme = (tmp_path / "README.md").read_text()
+        assert "release-please" in readme
+        assert "version.txt" in readme
+        assert "sync-registry" in readme
+
+    def test_scaffold_release_please_config(self, tmp_path: Path) -> None:
+        """release-please-config.json has correct monorepo structure."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        config = json.loads((tmp_path / "release-please-config.json").read_text())
+        assert config["separate-pull-requests"] is True
+        assert config["include-component-in-tag"] is True
+        assert config["tag-separator"] == "@"
+        assert "skill/example-skill" in config["packages"]
+        pkg = config["packages"]["skill/example-skill"]
+        assert pkg["release-type"] == "simple"
+        assert pkg["component"] == "example-skill"
+
+    def test_scaffold_release_please_manifest(self, tmp_path: Path) -> None:
+        """.release-please-manifest.json has initial version for example skill."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        manifest = json.loads((tmp_path / ".release-please-manifest.json").read_text())
+        assert manifest["skill/example-skill"] == "0.1.0"
+
+    def test_scaffold_example_skill_md_no_version(self, tmp_path: Path) -> None:
+        """Example SKILL.md has frontmatter without version field."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        content = (tmp_path / "skill" / "example-skill" / "SKILL.md").read_text()
+        assert "name: example-skill" in content
+        assert "description:" in content
+        # Version must NOT be in frontmatter
+        lines = content.split("\n")
+        in_frontmatter = False
+        for line in lines:
+            if line.strip() == "---":
+                in_frontmatter = not in_frontmatter
+                continue
+            if in_frontmatter and line.strip().startswith("version:"):
+                pytest.fail("version field found in SKILL.md frontmatter")
+
+    def test_scaffold_example_skill_version_txt(self, tmp_path: Path) -> None:
+        """Example skill has version.txt bootstrapped at 0.1.0."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        version = (
+            (tmp_path / "skill" / "example-skill" / "version.txt").read_text().strip()
+        )
+        assert version == "0.1.0"
+
+    def test_scaffold_release_workflow_uses_release_please(
+        self, tmp_path: Path
+    ) -> None:
+        """release.yml uses googleapis/release-please-action@v4."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        content = (tmp_path / ".github" / "workflows" / "release.yml").read_text()
+        assert "googleapis/release-please-action@v4" in content
+        assert "release-please-config.json" in content
+
+    def test_scaffold_sync_registry_workflow(self, tmp_path: Path) -> None:
+        """sync-registry.yml triggers on version.txt and SKILL.md changes."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        content = (tmp_path / ".github" / "workflows" / "sync-registry.yml").read_text()
+        assert "skill/*/version.txt" in content
+        assert "skill/*/SKILL.md" in content
+        assert "sync-registry.py" in content
+        assert "[skip ci]" in content
+
+    def test_scaffold_validate_skills_workflow(self, tmp_path: Path) -> None:
+        """validate-skills.yml runs on PRs touching skill directories."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        content = (
+            tmp_path / ".github" / "workflows" / "validate-skills.yml"
+        ).read_text()
+        assert "pull_request" in content
+        assert "skill/**" in content
+        assert "validate_skills.py" in content
+        assert "marocchino/sticky-pull-request-comment@v2" in content
+
+    def test_scaffold_sync_registry_script(self, tmp_path: Path) -> None:
+        """sync-registry.py parses frontmatter and version.txt."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        content = (tmp_path / "scripts" / "sync-registry.py").read_text()
+        assert "frontmatter" in content
+        assert "version.txt" in content
+        assert "content_hash" in content
+        assert "skills.json" in content
+
+    def test_scaffold_validate_skills_script(self, tmp_path: Path) -> None:
+        """validate_skills.py checks frontmatter and rejects version field."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        content = (tmp_path / "scripts" / "validate_skills.py").read_text()
+        assert "pydantic" in content.lower() or "BaseModel" in content
+        assert "version" in content
+        assert "validation-report.md" in content
+
+    def test_scaffold_contributing_mentions_no_version(self, tmp_path: Path) -> None:
+        """CONTRIBUTING.md warns against adding version to frontmatter."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        content = (tmp_path / "CONTRIBUTING.md").read_text()
+        assert "version.txt" in content
+        assert "release-please" in content
+        assert "Never edit" in content or "never" in content.lower()
+
+    def test_scaffold_contributing_contains_repo_name(self, tmp_path: Path) -> None:
+        """CONTRIBUTING.md references the repository name."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "my-org/team-skills")
+
+        content = (tmp_path / "CONTRIBUTING.md").read_text()
+        assert "my-org/team-skills" in content
+
+    def test_scaffold_quickstart_contains_repo_name(self, tmp_path: Path) -> None:
+        """QUICKSTART.md references the repository name."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "my-org/team-skills")
+
+        content = (tmp_path / "QUICKSTART.md").read_text()
+        assert "my-org/team-skills" in content
+
+    def test_scaffold_gitignore_present(self, tmp_path: Path) -> None:
+        """.gitignore excludes Python and OS artifacts."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        content = (tmp_path / ".gitignore").read_text()
+        assert "__pycache__" in content
+        assert ".DS_Store" in content
+
+    def test_scaffold_pr_template_present(self, tmp_path: Path) -> None:
+        """PR template includes conventional commit guidance."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        content = (tmp_path / ".github" / "PULL_REQUEST_TEMPLATE.md").read_text()
+        assert "feat:" in content or "fix:" in content
+        assert "version" in content.lower()
+
+    def test_scaffold_issue_template_present(self, tmp_path: Path) -> None:
+        """Issue template for new skill requests exists."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        content = (tmp_path / ".github" / "ISSUE_TEMPLATE" / "new-skill.md").read_text()
+        assert "Skill Name" in content or "name" in content.lower()
 
     # -- Failure paths -------------------------------------------------------
 

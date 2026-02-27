@@ -865,39 +865,156 @@ class SkillService:
         )
 
     def _write_registry_scaffold(self, repo_path: Path, repo_name: str) -> None:
-        """Write the standard skills registry scaffold files.
+        """Write the full skills registry scaffold with CI/CD automation.
 
-        Creates:
-        - skills.json: Empty registry manifest
-        - skill/.gitkeep: Placeholder for skill directories
-        - README.md: Repository documentation
+        Creates the complete file tree for a skills registry with:
+        - release-please for automated per-skill semantic versioning
+        - GitHub Actions for validation, release, and registry sync
+        - Example skill with proper structure
+        - Contributing and quickstart documentation
+
+        Lifecycle:
+            1. Author edits skill/my-skill/SKILL.md (NO version in frontmatter)
+            2. Author commits with conventional commits (feat:, fix:, etc.)
+            3. release-please creates release PR bumping version.txt + CHANGELOG.md
+            4. Merge release PR → scoped tag (my-skill@v1.0.0) + GitHub Release
+            5. sync-registry.yml rebuilds skills.json from all skills
 
         Args:
             repo_path: Path to the cloned repository
-            repo_name: Repository name for use in README
+            repo_name: Repository name for use in templates
         """
-        # skills.json — empty registry
+        # Create directory structure
+        (repo_path / ".github" / "workflows").mkdir(parents=True, exist_ok=True)
+        (repo_path / ".github" / "ISSUE_TEMPLATE").mkdir(parents=True, exist_ok=True)
+        (repo_path / "scripts").mkdir(parents=True, exist_ok=True)
+        (repo_path / "skill" / "example-skill").mkdir(parents=True, exist_ok=True)
+
+        # --- Root files ---
+        self._write_scaffold_skills_json(repo_path)
+        self._write_scaffold_release_please_config(repo_path)
+        self._write_scaffold_release_please_manifest(repo_path)
+        self._write_scaffold_gitignore(repo_path)
+        self._write_scaffold_readme(repo_path, repo_name)
+        self._write_scaffold_contributing(repo_path, repo_name)
+        self._write_scaffold_quickstart(repo_path, repo_name)
+
+        # --- GitHub templates ---
+        self._write_scaffold_pr_template(repo_path)
+        self._write_scaffold_issue_template(repo_path)
+
+        # --- GitHub Actions workflows ---
+        self._write_scaffold_release_workflow(repo_path)
+        self._write_scaffold_sync_registry_workflow(repo_path)
+        self._write_scaffold_validate_skills_workflow(repo_path)
+
+        # --- Scripts ---
+        self._write_scaffold_sync_registry_script(repo_path)
+        self._write_scaffold_validate_skills_script(repo_path)
+
+        # --- Example skill ---
+        self._write_scaffold_example_skill(repo_path)
+
+    # -- Scaffold file writers -----------------------------------------------
+
+    def _write_scaffold_skills_json(self, repo_path: Path) -> None:
+        """Write skills.json — empty registry manifest."""
         registry = {"schema_version": "1.0", "skills": []}
         (repo_path / "skills.json").write_text(
             json.dumps(registry, indent=2) + "\n", encoding="utf-8"
         )
 
-        # skill/.gitkeep — placeholder directory
-        (repo_path / "skill").mkdir(parents=True, exist_ok=True)
-        (repo_path / "skill" / ".gitkeep").write_text("")
+    def _write_scaffold_release_please_config(self, repo_path: Path) -> None:
+        """Write release-please-config.json for monorepo per-skill releases."""
+        config = {
+            "$schema": "https://raw.githubusercontent.com/googleapis/"
+            "release-please/main/schemas/config.json",
+            "separate-pull-requests": True,
+            "include-component-in-tag": True,
+            "tag-separator": "@",
+            "packages": {
+                "skill/example-skill": {
+                    "release-type": "simple",
+                    "component": "example-skill",
+                }
+            },
+        }
+        (repo_path / "release-please-config.json").write_text(
+            json.dumps(config, indent=2) + "\n", encoding="utf-8"
+        )
 
-        # README.md
-        readme_content = f"""# {repo_name}
+    def _write_scaffold_release_please_manifest(self, repo_path: Path) -> None:
+        """Write .release-please-manifest.json with initial versions."""
+        manifest = {"skill/example-skill": "0.1.0"}
+        (repo_path / ".release-please-manifest.json").write_text(
+            json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+        )
 
-Private skills registry for [ContextHarness](https://github.com/co-labs-co/context-harness).
+    def _write_scaffold_gitignore(self, repo_path: Path) -> None:
+        """Write .gitignore for the registry repo."""
+        content = """\
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
 
-## Getting Started
+# OS
+.DS_Store
+Thumbs.db
 
-This repository was initialized by `context-harness skill init-repo`.
-It serves as a custom skills registry that can be used instead of (or in
-addition to) the default `co-labs-co/context-harness-skills` registry.
+# IDE
+.vscode/
+.idea/
+*.swp
+"""
+        (repo_path / ".gitignore").write_text(content, encoding="utf-8")
 
-### Configure as your default registry
+    def _write_scaffold_readme(self, repo_path: Path, repo_name: str) -> None:
+        """Write README.md with lifecycle documentation."""
+        content = f"""\
+# {repo_name}
+
+Skills registry for [ContextHarness](https://github.com/co-labs-co/context-harness).
+
+## How It Works
+
+This registry uses **fully automated semantic versioning**. Authors never touch
+version numbers — just write content and use conventional commits:
+
+```
+Author edits skill/my-skill/SKILL.md
+        │
+        ▼
+Commits: "feat: add new examples"
+        │
+        ▼
+PR merged to main
+        │
+        ▼
+release-please detects path-scoped change
+        │
+        ▼
+Creates release PR:
+  • Bumps skill/my-skill/version.txt (0.1.0 → 0.2.0)
+  • Updates skill/my-skill/CHANGELOG.md
+        │
+        ▼
+Release PR merged → tag: my-skill@v0.2.0
+        │
+        ▼
+sync-registry rebuilds skills.json
+        │
+        ▼
+CLI users: context-harness skill outdated
+```
+
+## Quick Start
+
+See [QUICKSTART.md](QUICKSTART.md) for adding your first skill.
+
+## Configure as Your Registry
 
 ```bash
 # Set for current project
@@ -907,53 +1024,685 @@ context-harness config set skills-repo {repo_name}
 context-harness config set skills-repo {repo_name} --global
 ```
 
-### Add a skill
+## Commit Convention
 
-1. Create a new skill directory under `skill/`:
-   ```
-   skill/my-skill/
-   └── SKILL.md
-   ```
-2. Register it in `skills.json`
-3. Commit and push
-
-### Extract a skill from a project
-
-```bash
-context-harness skill extract my-skill
-```
+| Commit prefix | Version bump | Example |
+|---------------|-------------|---------|
+| `fix:` | Patch (0.0.x) | `fix: correct typo in examples` |
+| `feat:` | Minor (0.x.0) | `feat: add error handling patterns` |
+| `feat!:` | Major (x.0.0) | `feat!: restructure skill format` |
+| `docs:` | No release | `docs: update readme` |
+| `chore:` | No release | `chore: clean up formatting` |
 
 ## Structure
 
 ```
 {repo_name}/
-├── skills.json      # Registry manifest
-├── skill/           # Skill directories
-│   └── .gitkeep
+├── .github/
+│   └── workflows/
+│       ├── release.yml           # release-please automation
+│       ├── sync-registry.yml     # Rebuilds skills.json post-release
+│       └── validate-skills.yml   # PR validation checks
+├── scripts/
+│   ├── sync-registry.py          # Parses skills → skills.json
+│   └── validate_skills.py        # Pydantic-based validation
+├── skill/
+│   └── example-skill/
+│       ├── SKILL.md              # Skill content (no version field)
+│       └── version.txt           # Managed by release-please
+├── skills.json                   # Auto-maintained registry manifest
+├── release-please-config.json    # Per-skill release configuration
+├── .release-please-manifest.json # Current versions (CI-managed)
+├── CONTRIBUTING.md
+├── QUICKSTART.md
 └── README.md
 ```
 
-## Registry Format
+## Contributing
 
-`skills.json` follows this schema:
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to add or update skills.
+"""
+        (repo_path / "README.md").write_text(content, encoding="utf-8")
+
+    def _write_scaffold_contributing(self, repo_path: Path, repo_name: str) -> None:
+        """Write CONTRIBUTING.md with skill authoring guidelines."""
+        content = f"""\
+# Contributing to {repo_name}
+
+## Adding a New Skill
+
+1. **Create the skill directory**:
+   ```bash
+   mkdir -p skill/my-skill
+   ```
+
+2. **Create SKILL.md** with frontmatter (no version field!):
+   ```markdown
+   ---
+   name: my-skill
+   description: Brief description of what this skill does
+   author: your-name
+   tags:
+     - category
+   ---
+
+   # My Skill
+
+   Your skill content here...
+   ```
+
+3. **Create version.txt** (bootstrapped at 0.1.0):
+   ```bash
+   echo "0.1.0" > skill/my-skill/version.txt
+   ```
+
+4. **Register with release-please** — add to `release-please-config.json`:
+   ```json
+   {{
+     "packages": {{
+       "skill/my-skill": {{
+         "release-type": "simple",
+         "component": "my-skill"
+       }}
+     }}
+   }}
+   ```
+
+   And to `.release-please-manifest.json`:
+   ```json
+   {{
+     "skill/my-skill": "0.1.0"
+   }}
+   ```
+
+5. **Commit and push**:
+   ```bash
+   git add skill/my-skill/ release-please-config.json .release-please-manifest.json
+   git commit -m "feat: add my-skill"
+   git push origin main
+   ```
+
+## Updating a Skill
+
+1. Edit the skill's `SKILL.md` file
+2. Commit with a conventional commit message:
+   - `fix: correct typo in examples` → patch bump
+   - `feat: add new section on error handling` → minor bump
+   - `feat!: restructure skill format` → major bump
+3. Push and merge your PR
+4. release-please will automatically create a release PR
+
+## Important Notes
+
+- **Never edit `version.txt` manually** — release-please manages it
+- **Never edit `skills.json` manually** — CI rebuilds it after releases
+- **Never add `version` to SKILL.md frontmatter** — it lives in `version.txt`
+- The `name` field in SKILL.md **must match** the directory name
+"""
+        (repo_path / "CONTRIBUTING.md").write_text(content, encoding="utf-8")
+
+    def _write_scaffold_quickstart(self, repo_path: Path, repo_name: str) -> None:
+        """Write QUICKSTART.md with step-by-step first skill guide."""
+        content = f"""\
+# Quick Start: Add Your First Skill
+
+This guide walks you through adding a skill to **{repo_name}**.
+
+## Prerequisites
+
+- Git installed
+- GitHub CLI (`gh`) installed and authenticated
+- Repository cloned locally
+
+## Steps
+
+### 1. Create the Skill
+
+```bash
+# Create skill directory
+mkdir -p skill/my-first-skill
+
+# Create SKILL.md
+cat > skill/my-first-skill/SKILL.md << 'SKILLEOF'
+---
+name: my-first-skill
+description: My first custom skill
+author: your-name
+tags:
+  - getting-started
+---
+
+# My First Skill
+
+Instructions and content for your skill go here.
+SKILLEOF
+
+# Bootstrap version (required for release-please)
+echo "0.1.0" > skill/my-first-skill/version.txt
+```
+
+### 2. Register with Release-Please
+
+Add the skill to `release-please-config.json` under `"packages"`:
 
 ```json
-{{
-  "schema_version": "1.0",
-  "skills": [
-    {{
-      "name": "example-skill",
-      "description": "What this skill does",
-      "version": "1.0.0",
-      "author": "your-name",
-      "tags": ["example"],
-      "path": "skill/example-skill"
-    }}
-  ]
+"skill/my-first-skill": {{
+  "release-type": "simple",
+  "component": "my-first-skill"
 }}
 ```
+
+Add to `.release-please-manifest.json`:
+
+```json
+"skill/my-first-skill": "0.1.0"
+```
+
+### 3. Commit and Push
+
+```bash
+git add .
+git commit -m "feat: add my-first-skill"
+git push origin main
+```
+
+### 4. What Happens Next
+
+1. **release-please** creates a release PR bumping `version.txt`
+2. Merge the release PR → tag `my-first-skill@v0.1.0` is created
+3. **sync-registry** rebuilds `skills.json` automatically
+4. Users can now install: `context-harness skill install my-first-skill`
+
+## Install Your Skill
+
+```bash
+# Configure this registry (one time)
+context-harness config set skills-repo {repo_name}
+
+# Install
+context-harness skill install my-first-skill
+```
 """
-        (repo_path / "README.md").write_text(readme_content, encoding="utf-8")
+        (repo_path / "QUICKSTART.md").write_text(content, encoding="utf-8")
+
+    def _write_scaffold_pr_template(self, repo_path: Path) -> None:
+        """Write .github/PULL_REQUEST_TEMPLATE.md."""
+        content = """\
+## Summary
+
+<!-- Brief description of changes -->
+
+## Type of Change
+
+- [ ] New skill (`feat: add skill-name`)
+- [ ] Skill update (`feat:` or `fix:` depending on change)
+- [ ] Documentation (`docs:`)
+- [ ] CI/Infrastructure (`ci:` or `chore:`)
+
+## Checklist
+
+- [ ] SKILL.md has valid frontmatter (`name`, `description`, `author`, `tags`)
+- [ ] `name` in frontmatter matches directory name
+- [ ] No `version` field in SKILL.md frontmatter
+- [ ] `version.txt` exists (for new skills, bootstrapped at `0.1.0`)
+- [ ] release-please config updated (for new skills)
+- [ ] Commit message follows conventional commits format
+"""
+        (repo_path / ".github" / "PULL_REQUEST_TEMPLATE.md").write_text(
+            content, encoding="utf-8"
+        )
+
+    def _write_scaffold_issue_template(self, repo_path: Path) -> None:
+        """Write .github/ISSUE_TEMPLATE/new-skill.md."""
+        content = """\
+---
+name: New Skill Request
+about: Propose a new skill for the registry
+title: "[skill] "
+labels: new-skill
+---
+
+## Skill Name
+
+<!-- Must be lowercase, hyphenated: my-skill-name -->
+
+## Description
+
+<!-- What does this skill help agents do? -->
+
+## Use Cases
+
+<!-- When should an agent use this skill? -->
+
+## Tags
+
+<!-- Categories (e.g., python, testing, deployment) -->
+
+## Content Outline
+
+<!-- High-level outline of what the skill would contain -->
+"""
+        (repo_path / ".github" / "ISSUE_TEMPLATE" / "new-skill.md").write_text(
+            content, encoding="utf-8"
+        )
+
+    def _write_scaffold_release_workflow(self, repo_path: Path) -> None:
+        """Write .github/workflows/release.yml for release-please."""
+        content = """\
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          manifest-file: .release-please-manifest.json
+          config-file: release-please-config.json
+"""
+        (repo_path / ".github" / "workflows" / "release.yml").write_text(
+            content, encoding="utf-8"
+        )
+
+    def _write_scaffold_sync_registry_workflow(self, repo_path: Path) -> None:
+        """Write .github/workflows/sync-registry.yml for post-release sync."""
+        content = """\
+name: Sync Registry
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "skill/*/version.txt"
+      - "skill/*/SKILL.md"
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install python-frontmatter
+
+      - name: Rebuild skills.json
+        run: python scripts/sync-registry.py
+
+      - name: Commit updated skills.json
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add skills.json
+          git diff --cached --quiet || git commit -m "chore: sync skills.json [skip ci]"
+          git push
+"""
+        (repo_path / ".github" / "workflows" / "sync-registry.yml").write_text(
+            content, encoding="utf-8"
+        )
+
+    def _write_scaffold_validate_skills_workflow(self, repo_path: Path) -> None:
+        """Write .github/workflows/validate-skills.yml for PR checks."""
+        content = """\
+name: Validate Skills
+
+on:
+  pull_request:
+    paths:
+      - "skill/**"
+      - "release-please-config.json"
+      - ".release-please-manifest.json"
+
+permissions:
+  pull-requests: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install python-frontmatter pydantic>=2.0 semver
+
+      - name: Validate skills
+        id: validate
+        run: python scripts/validate_skills.py
+        continue-on-error: true
+
+      - name: Read validation report
+        if: always()
+        id: report
+        run: |
+          if [ -f validation-report.md ]; then
+            {
+              echo 'REPORT<<REPORTEOF'
+              cat validation-report.md
+              echo 'REPORTEOF'
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Post PR comment
+        if: always() && steps.report.outputs.REPORT
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: skill-validation
+          message: ${{ steps.report.outputs.REPORT }}
+
+      - name: Fail if validation errors
+        if: steps.validate.outcome == 'failure'
+        run: exit 1
+"""
+        (repo_path / ".github" / "workflows" / "validate-skills.yml").write_text(
+            content, encoding="utf-8"
+        )
+
+    def _write_scaffold_sync_registry_script(self, repo_path: Path) -> None:
+        """Write scripts/sync-registry.py to rebuild skills.json."""
+        content = '''\
+#!/usr/bin/env python3
+"""Rebuild skills.json from skill directories.
+
+Parses SKILL.md frontmatter and version.txt for each skill,
+then writes the consolidated skills.json registry manifest.
+
+Usage:
+    python scripts/sync-registry.py
+"""
+
+import hashlib
+import json
+from pathlib import Path
+
+import frontmatter
+
+
+def build_registry() -> dict:
+    """Scan skill/ directories and build registry manifest."""
+    skills_dir = Path("skill")
+    skills = []
+
+    if not skills_dir.exists():
+        return {"schema_version": "1.0", "skills": []}
+
+    for skill_dir in sorted(skills_dir.iterdir()):
+        if not skill_dir.is_dir():
+            continue
+
+        skill_md = skill_dir / "SKILL.md"
+        version_txt = skill_dir / "version.txt"
+
+        if not skill_md.exists():
+            continue
+
+        # Parse frontmatter
+        post = frontmatter.load(str(skill_md))
+        metadata = post.metadata
+
+        # Read version from version.txt (fall back to 0.1.0)
+        version = "0.1.0"
+        if version_txt.exists():
+            version = version_txt.read_text().strip()
+
+        # Compute content hash for change detection
+        content_hash = hashlib.sha256(skill_md.read_bytes()).hexdigest()[:16]
+
+        skills.append(
+            {
+                "name": metadata.get("name", skill_dir.name),
+                "description": metadata.get("description", ""),
+                "version": version,
+                "author": metadata.get("author", ""),
+                "tags": metadata.get("tags", []),
+                "path": f"skill/{skill_dir.name}",
+                "min_context_harness_version": metadata.get(
+                    "min_context_harness_version"
+                ),
+                "content_hash": content_hash,
+            }
+        )
+
+    return {"schema_version": "1.0", "skills": skills}
+
+
+def main() -> None:
+    """Rebuild and write skills.json."""
+    registry = build_registry()
+
+    Path("skills.json").write_text(
+        json.dumps(registry, indent=2) + "\\n", encoding="utf-8"
+    )
+
+    print(f"Updated skills.json with {len(registry['skills'])} skill(s)")
+    for skill in registry["skills"]:
+        print(f"  - {skill['name']} v{skill['version']}")
+
+
+if __name__ == "__main__":
+    main()
+'''
+        (repo_path / "scripts" / "sync-registry.py").write_text(
+            content, encoding="utf-8"
+        )
+
+    def _write_scaffold_validate_skills_script(self, repo_path: Path) -> None:
+        """Write scripts/validate_skills.py for PR validation."""
+        content = '''\
+#!/usr/bin/env python3
+"""Validate skill directories for CI checks.
+
+Checks:
+- SKILL.md exists and has valid frontmatter
+- name field matches directory name
+- No version field in frontmatter (managed by release-please)
+- version.txt exists
+- No duplicate skill names
+- Tags are a list of strings
+
+Writes validation-report.md for PR comment integration.
+
+Usage:
+    python scripts/validate_skills.py
+"""
+
+import sys
+from pathlib import Path
+from typing import List
+
+import frontmatter
+from pydantic import BaseModel, field_validator
+
+
+class SkillFrontmatter(BaseModel):
+    """Expected SKILL.md frontmatter schema."""
+
+    name: str
+    description: str
+    author: str = ""
+    tags: List[str] = []
+    min_context_harness_version: str | None = None
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def validate_tags(cls, v: object) -> List[str]:
+        """Ensure tags is a list of strings."""
+        if not isinstance(v, list):
+            msg = "tags must be a list"
+            raise ValueError(msg)
+        for tag in v:
+            if not isinstance(tag, str):
+                msg = f"tag must be a string, got {type(tag).__name__}"
+                raise ValueError(msg)
+        return v
+
+
+def validate_skill(skill_dir: Path) -> List[str]:
+    """Validate a single skill directory. Returns list of errors."""
+    errors: List[str] = []
+    skill_name = skill_dir.name
+
+    # Check SKILL.md exists
+    skill_md = skill_dir / "SKILL.md"
+    if not skill_md.exists():
+        errors.append(f"{skill_name}: missing SKILL.md")
+        return errors
+
+    # Parse frontmatter
+    try:
+        post = frontmatter.load(str(skill_md))
+        metadata = post.metadata
+    except Exception as e:
+        errors.append(f"{skill_name}: failed to parse frontmatter: {e}")
+        return errors
+
+    # Validate schema
+    try:
+        parsed = SkillFrontmatter(**metadata)
+    except Exception as e:
+        errors.append(f"{skill_name}: invalid frontmatter: {e}")
+        return errors
+
+    # Name must match directory
+    if parsed.name != skill_name:
+        errors.append(
+            f"{skill_name}: name '{parsed.name}' does not match "
+            f"directory '{skill_name}'"
+        )
+
+    # Version must NOT be in frontmatter
+    if "version" in metadata:
+        errors.append(
+            f"{skill_name}: remove 'version' from frontmatter "
+            f"(managed by release-please via version.txt)"
+        )
+
+    # version.txt must exist
+    version_txt = skill_dir / "version.txt"
+    if not version_txt.exists():
+        errors.append(f"{skill_name}: missing version.txt (bootstrap with '0.1.0')")
+
+    return errors
+
+
+def main() -> None:
+    """Validate all skills and write report."""
+    skills_dir = Path("skill")
+    all_errors: List[str] = []
+    validated_count = 0
+    skill_names: List[str] = []
+
+    if not skills_dir.exists():
+        print("No skill/ directory found")
+        sys.exit(0)
+
+    for skill_dir in sorted(skills_dir.iterdir()):
+        if not skill_dir.is_dir():
+            continue
+
+        validated_count += 1
+        skill_names.append(skill_dir.name)
+        errors = validate_skill(skill_dir)
+        all_errors.extend(errors)
+
+    # Check for duplicate names
+    seen = set()
+    for name in skill_names:
+        if name in seen:
+            all_errors.append(f"Duplicate skill directory: {name}")
+        seen.add(name)
+
+    # Write report
+    report_lines = ["## Skill Validation Report\\n"]
+
+    if all_errors:
+        report_lines.append(f"**{len(all_errors)} error(s)** "
+                          f"found in {validated_count} skill(s):\\n")
+        for error in all_errors:
+            report_lines.append(f"- ❌ {error}")
+    else:
+        report_lines.append(
+            f"✅ **All {validated_count} skill(s) passed validation**"
+        )
+
+    report = "\\n".join(report_lines) + "\\n"
+
+    Path("validation-report.md").write_text(report, encoding="utf-8")
+
+    print(report)
+
+    if all_errors:
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
+'''
+        (repo_path / "scripts" / "validate_skills.py").write_text(
+            content, encoding="utf-8"
+        )
+
+    def _write_scaffold_example_skill(self, repo_path: Path) -> None:
+        """Write skill/example-skill/SKILL.md and version.txt."""
+        skill_md = """\
+---
+name: example-skill
+description: An example skill to demonstrate the registry structure
+author: your-name
+tags:
+  - example
+  - getting-started
+---
+
+# Example Skill
+
+This is a template skill to show the expected structure. Replace this
+content with your actual skill instructions.
+
+## When to Use
+
+Use this skill when you need an example of the skill format.
+
+## Instructions
+
+1. Copy this directory as a starting point for new skills
+2. Update the frontmatter (name, description, author, tags)
+3. Replace this content with your skill's instructions
+4. Create a version.txt with `0.1.0`
+5. Register in release-please-config.json
+"""
+        (repo_path / "skill" / "example-skill" / "SKILL.md").write_text(
+            skill_md, encoding="utf-8"
+        )
+
+        # version.txt — bootstrapped at 0.1.0 (required by release-please)
+        (repo_path / "skill" / "example-skill" / "version.txt").write_text(
+            "0.1.0\n", encoding="utf-8"
+        )
 
     def _compare_versions(
         self,
