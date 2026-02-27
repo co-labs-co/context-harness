@@ -20,6 +20,8 @@ from context_harness.primitives import (
     RepoVisibility,
     SkillSource,
     Success,
+    VersionComparison,
+    VersionStatus,
 )
 from context_harness.services.skill_service import (
     GitHubClient,
@@ -600,8 +602,6 @@ class TestSkillServiceExtract:
 # ---------------------------------------------------------------------------
 # Version comparison tests
 # ---------------------------------------------------------------------------
-
-from context_harness.primitives import VersionComparison, VersionStatus  # noqa: E402
 
 
 class TestSkillServiceCompareVersions:

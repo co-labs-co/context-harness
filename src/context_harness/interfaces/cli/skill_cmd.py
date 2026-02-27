@@ -282,9 +282,6 @@ def skill_outdated_cmd(source: str) -> None:
             f"Found {len(comparisons)} skill(s) with updates available. "
             "Run 'context-harness skill upgrade <name>' to upgrade."
         )
-    else:
-        console.print()
-        console.print("[green]✅ All skills are up to date.[/green]")
 
 
 @skill_group.command("upgrade")
@@ -352,7 +349,7 @@ def skill_upgrade_cmd(
         print_info(f"Upgrading {len(comparisons)} skill(s)...")
         console.print()
 
-        had_error = False
+        failed_skills: list[str] = []
         for comp in comparisons:
             result = upgrade_skill(
                 comp.skill_name,
@@ -360,9 +357,14 @@ def skill_upgrade_cmd(
                 force_compatibility=force,
             )
             if result != SkillResult.SUCCESS:
-                had_error = True
+                failed_skills.append(comp.skill_name)
 
-        if had_error:
+        if failed_skills:
+            console.print()
+            print_error(
+                f"Failed to upgrade {len(failed_skills)} skill(s): "
+                + ", ".join(failed_skills)
+            )
             raise SystemExit(1)
     else:
         assert skill_name is not None  # guaranteed by the guard above
@@ -463,8 +465,9 @@ def skill_init_repo_cmd(
         config_name = name
         if repo_url:
             # e.g. "https://github.com/cmtzco/my-test-skills" → "cmtzco/my-test-skills"
-            parts = repo_url.rstrip("/").split("/")
-            if len(parts) >= 2:
+            stripped = repo_url.rstrip("/").removesuffix(".git")
+            parts = stripped.split("/")
+            if len(parts) >= 2 and "github.com" in repo_url:
                 config_name = f"{parts[-2]}/{parts[-1]}"
 
         visibility_str = "private" if private else "public"

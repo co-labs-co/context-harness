@@ -26,7 +26,7 @@ from context_harness.primitives.tool_detector import (
     ToolDetector,
     ToolTarget,
 )
-from context_harness.primitives.skill import VersionStatus
+from context_harness.primitives.skill import VersionComparison, VersionStatus
 from context_harness.services.skills_registry import resolve_skills_repo_with_loading
 
 console = Console()
@@ -446,6 +446,7 @@ def install_skill(
                         f"[red]Failed to copy skill '{skill_name}' to all target "
                         f"directories: {e}[/red]"
                     )
+                return SkillResult.ERROR
             break  # Don't fetch again, we've copied
 
     if not quiet:
@@ -1066,7 +1067,7 @@ def check_updates(
     source_path: str = ".",
     quiet: bool = False,
     tool_target: Optional[ToolTarget] = None,
-) -> tuple[SkillResult, Optional[List[Any]]]:
+) -> tuple[SkillResult, Optional[List[VersionComparison]]]:
     """Check for available skill updates.
 
     Args:
@@ -1076,7 +1077,7 @@ def check_updates(
         tool_target: Which tool directory to search
 
     Returns:
-        Tuple of (SkillResult, list of VersionComparison dicts or None)
+        Tuple of (SkillResult, list of VersionComparison objects or None)
     """
     from pathlib import Path as _Path
     from context_harness.services.skill_service import SkillService

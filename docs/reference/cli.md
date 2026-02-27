@@ -405,4 +405,4 @@ _CH_COMPLETE=fish_source ch | source
 |------|---------|
 | 0 | Success |
 | 1 | General error |
-| 2 | Invalid arguments or incompatible version |
+| 2 | Invalid arguments |

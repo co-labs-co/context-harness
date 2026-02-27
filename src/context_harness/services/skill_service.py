@@ -9,6 +9,7 @@ Supports both OpenCode (.opencode/skill/) and Claude Code (.claude/skills/) tool
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import tempfile
@@ -697,7 +698,7 @@ class SkillService:
         # Version comparison failed — cannot determine safe upgrade path
         if comparison.status == VersionStatus.UNKNOWN:
             return Failure(
-                error=f"Skill '{skill_name}' has an unrecognisable version (local={comparison.local_version}, remote={comparison.remote_version}). Cannot determine upgrade path.",
+                error=f"Skill '{skill_name}' has an unrecognizable version (local={comparison.local_version}, remote={comparison.remote_version}). Cannot determine upgrade path.",
                 code=ErrorCode.SKILL_UPGRADE_FAILED,
             )
 
@@ -754,8 +755,9 @@ class SkillService:
         """Initialize a new skills registry repository on GitHub.
 
         Creates a new GitHub repository scaffolded with the standard skills
-        registry structure (skills.json, skill/.gitkeep, README.md). The
-        repository is ready to use as a custom skills-repo immediately.
+        registry structure (skills.json, skill/example-skill/ with SKILL.md
+        and version.txt, README.md, and CI/CD workflows). The repository is
+        ready to use as a custom skills-repo immediately.
 
         Workflow: Create repo → Clone to tmpdir → Write scaffold → Commit → Push
 
@@ -768,6 +770,14 @@ class SkillService:
         Returns:
             Result containing RegistryRepo on success, or Failure with details
         """
+        # 0. Validate repo name format
+        # Allow "repo-name" or "org/repo-name" with alphanumeric, hyphens, underscores, dots
+        if not re.match(r"^[a-zA-Z0-9._-]+(/[a-zA-Z0-9._-]+)?$", name):
+            return Failure(
+                error=f"Invalid repository name '{name}'. Use alphanumeric characters, hyphens, underscores, or dots. Format: 'repo-name' or 'org/repo-name'.",
+                code=ErrorCode.VALIDATION_ERROR,
+            )
+
         # 1. Validate gh auth
         if not self.github.check_auth():
             return Failure(
