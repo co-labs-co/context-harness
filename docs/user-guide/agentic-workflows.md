@@ -105,11 +105,11 @@ on:
     types: [opened, synchronize]
     branches: [main]
 tools:
-  - github
-  - edit
-  - bash
+  github:
+  edit:
+  bash:
 safe-outputs:
-  - push-to-branch
+  push-to-branch:
 permissions:
   contents: read
   pull-requests: read
