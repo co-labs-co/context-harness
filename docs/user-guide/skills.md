@@ -362,19 +362,47 @@ Repositories scaffolded by `ch skill init-repo` use [release-please](https://git
 
 ### How It Works
 
-```mermaid
-flowchart TD
-    A[Author edits skill/my-skill/SKILL.md] --> B[Commits with conventional message]
-    B --> C[PR merged to main]
-    C --> D[release-please detects path-scoped change]
-    D --> E[Creates release PR]
-    E --> F{Release PR reviewed & merged}
-    F --> G[Bumps skill/my-skill/version.txt]
-    G --> H[Updates skill/my-skill/CHANGELOG.md]
-    H --> I["Creates scoped tag: my-skill@v1.1.0"]
-    I --> J[sync-registry.yml fires]
-    J --> K[Rebuilds skills.json from all version.txt files]
-    K --> L["CLI users run 'ch skill outdated' → sees update"]
+```
+  ┌─────────────────────────────────────┐
+  │  1. Author edits SKILL.md           │
+  │     skill/my-skill/SKILL.md         │
+  └──────────────────┬──────────────────┘
+                     ▼
+  ┌─────────────────────────────────────┐
+  │  2. Commits with conventional msg   │
+  │     "feat: add new examples"        │
+  └──────────────────┬──────────────────┘
+                     ▼
+  ┌─────────────────────────────────────┐
+  │  3. PR merged to main               │
+  └──────────────────┬──────────────────┘
+                     ▼
+  ┌─────────────────────────────────────┐
+  │  4. release-please detects change   │
+  │     (path-based: skill/my-skill/*) │
+  └──────────────────┬──────────────────┘
+                     ▼
+  ┌─────────────────────────────────────┐
+  │  5. Creates release PR              │
+  │     Bumps version.txt + CHANGELOG   │
+  └──────────────────┬──────────────────┘
+                     ▼
+  ┌─────────────────────────────────────┐
+  │  6. Release PR merged               │
+  │     → Tag: my-skill@v1.1.0         │
+  │     → GitHub Release created        │
+  └──────────────────┬──────────────────┘
+                     ▼
+  ┌─────────────────────────────────────┐
+  │  7. sync-registry.yml fires         │
+  │     Rebuilds skills.json from all   │
+  │     version.txt files               │
+  └──────────────────┬──────────────────┘
+                     ▼
+  ┌─────────────────────────────────────┐
+  │  8. CLI users see update            │
+  │     ch skill outdated → upgrade     │
+  └─────────────────────────────────────┘
 ```
 
 ### Conventional Commits Drive Versioning

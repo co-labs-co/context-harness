@@ -268,6 +268,13 @@ Guide for defining AI agents using OpenCode.ai markdown format with YAML frontma
 
 Guide for creating effective skills with Context7 integration.
 
+#### Skill Release
+
+**Triggers**: skill versioning, skill release lifecycle, conventional commits for skills, release-please, registry repo management, init-repo scaffolding, troubleshooting releases
+**Reference**: @.opencode/skill/skill-release/SKILL.md
+
+Operational guide for creating, versioning, and releasing skills in a ContextHarness skills registry repository.
+
 ---
 
 ## External Dependencies

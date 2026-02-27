@@ -1222,6 +1222,9 @@ class TestSkillServiceInitRegistryRepo:
             "scripts/validate_skills.py",
             "skill/example-skill/SKILL.md",
             "skill/example-skill/version.txt",
+            "skill/skill-release/SKILL.md",
+            "skill/skill-release/version.txt",
+            "skill/skill-release/references/troubleshooting.md",
         ]
         for filepath in expected_files:
             assert (tmp_path / filepath).exists(), f"Missing: {filepath}"
@@ -1266,14 +1269,20 @@ class TestSkillServiceInitRegistryRepo:
         pkg = config["packages"]["skill/example-skill"]
         assert pkg["release-type"] == "simple"
         assert pkg["component"] == "example-skill"
+        # skill-release must also be registered
+        assert "skill/skill-release" in config["packages"]
+        sr_pkg = config["packages"]["skill/skill-release"]
+        assert sr_pkg["release-type"] == "simple"
+        assert sr_pkg["component"] == "skill-release"
 
     def test_scaffold_release_please_manifest(self, tmp_path: Path) -> None:
-        """.release-please-manifest.json has initial version for example skill."""
+        """.release-please-manifest.json has initial version for all skills."""
         service = SkillService(github_client=MockGitHubClient())
         service._write_registry_scaffold(tmp_path, "test-user/my-skills")
 
         manifest = json.loads((tmp_path / ".release-please-manifest.json").read_text())
         assert manifest["skill/example-skill"] == "0.1.0"
+        assert manifest["skill/skill-release"] == "0.1.0"
 
     def test_scaffold_example_skill_md_no_version(self, tmp_path: Path) -> None:
         """Example SKILL.md has frontmatter without version field."""
@@ -1302,6 +1311,60 @@ class TestSkillServiceInitRegistryRepo:
             (tmp_path / "skill" / "example-skill" / "version.txt").read_text().strip()
         )
         assert version == "0.1.0"
+
+    def test_scaffold_skill_release_md_no_version(self, tmp_path: Path) -> None:
+        """skill-release SKILL.md has frontmatter without version field."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        content = (tmp_path / "skill" / "skill-release" / "SKILL.md").read_text()
+        assert "name: skill-release" in content
+        assert "description:" in content
+        # Version must NOT be in frontmatter
+        lines = content.split("\n")
+        in_frontmatter = False
+        for line in lines:
+            if line.strip() == "---":
+                in_frontmatter = not in_frontmatter
+                continue
+            if in_frontmatter and line.strip().startswith("version:"):
+                pytest.fail("version field found in skill-release SKILL.md frontmatter")
+
+    def test_scaffold_skill_release_version_txt(self, tmp_path: Path) -> None:
+        """skill-release has version.txt bootstrapped at 0.1.0."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        version = (
+            (tmp_path / "skill" / "skill-release" / "version.txt").read_text().strip()
+        )
+        assert version == "0.1.0"
+
+    def test_scaffold_skill_release_troubleshooting(self, tmp_path: Path) -> None:
+        """skill-release includes references/troubleshooting.md."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        troubleshooting = (
+            tmp_path / "skill" / "skill-release" / "references" / "troubleshooting.md"
+        ).read_text()
+        assert "Decision Tree" in troubleshooting
+        assert "Diagnostic Commands" in troubleshooting
+        assert "release-please" in troubleshooting
+
+    def test_scaffold_skill_release_content_covers_workflows(
+        self, tmp_path: Path
+    ) -> None:
+        """skill-release SKILL.md covers create, update, and release workflows."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        content = (tmp_path / "skill" / "skill-release" / "SKILL.md").read_text()
+        assert "Golden Rules" in content
+        assert "Create a New Skill" in content
+        assert "Update an Existing Skill" in content
+        assert "Release Lifecycle" in content
+        assert "Common Mistakes" in content
 
     def test_scaffold_release_workflow_uses_release_please(
         self, tmp_path: Path
@@ -1337,6 +1400,7 @@ class TestSkillServiceInitRegistryRepo:
         assert "skill/**" in content
         assert "validate_skills.py" in content
         assert "marocchino/sticky-pull-request-comment@v2" in content
+        assert "contents: read" in content
 
     def test_scaffold_sync_registry_script(self, tmp_path: Path) -> None:
         """sync-registry.py parses frontmatter and version.txt."""

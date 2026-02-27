@@ -889,6 +889,9 @@ class SkillService:
         (repo_path / ".github" / "ISSUE_TEMPLATE").mkdir(parents=True, exist_ok=True)
         (repo_path / "scripts").mkdir(parents=True, exist_ok=True)
         (repo_path / "skill" / "example-skill").mkdir(parents=True, exist_ok=True)
+        (repo_path / "skill" / "skill-release" / "references").mkdir(
+            parents=True, exist_ok=True
+        )
 
         # --- Root files ---
         self._write_scaffold_skills_json(repo_path)
@@ -915,6 +918,9 @@ class SkillService:
         # --- Example skill ---
         self._write_scaffold_example_skill(repo_path)
 
+        # --- Skill-release skill (bundled operational guide) ---
+        self._write_scaffold_skill_release(repo_path)
+
     # -- Scaffold file writers -----------------------------------------------
 
     def _write_scaffold_skills_json(self, repo_path: Path) -> None:
@@ -936,7 +942,11 @@ class SkillService:
                 "skill/example-skill": {
                     "release-type": "simple",
                     "component": "example-skill",
-                }
+                },
+                "skill/skill-release": {
+                    "release-type": "simple",
+                    "component": "skill-release",
+                },
             },
         }
         (repo_path / "release-please-config.json").write_text(
@@ -945,7 +955,10 @@ class SkillService:
 
     def _write_scaffold_release_please_manifest(self, repo_path: Path) -> None:
         """Write .release-please-manifest.json with initial versions."""
-        manifest = {"skill/example-skill": "0.1.0"}
+        manifest = {
+            "skill/example-skill": "0.1.0",
+            "skill/skill-release": "0.1.0",
+        }
         (repo_path / ".release-please-manifest.json").write_text(
             json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
         )
@@ -1362,6 +1375,7 @@ on:
       - ".release-please-manifest.json"
 
 permissions:
+  contents: read
   pull-requests: write
 
 jobs:
@@ -1690,6 +1704,320 @@ Use this skill when you need an example of the skill format.
 
         # version.txt — bootstrapped at 0.1.0 (required by release-please)
         (repo_path / "skill" / "example-skill" / "version.txt").write_text(
+            "0.1.0\n", encoding="utf-8"
+        )
+
+    def _write_scaffold_skill_release(self, repo_path: Path) -> None:
+        """Write skill/skill-release/ — bundled operational guide for releases.
+
+        Provides workflows for creating, updating, and releasing skills
+        within the registry, including release-please conventions,
+        conventional commit guidance, and troubleshooting procedures.
+        """
+        skill_md = """\
+---
+name: skill-release
+description: >-
+  Guide for creating, versioning, and releasing skills in a ContextHarness
+  skills registry repository. Use when adding new skills to a registry repo,
+  releasing skill versions, updating existing skills with proper conventional
+  commit messages, troubleshooting release-please automation, understanding
+  the release lifecycle, or managing the skill lifecycle in an init-repo
+  scaffolded repository.
+---
+
+# Skill Release
+
+Operational guide for authoring, versioning, and releasing skills within a
+ContextHarness skills registry repository (created via
+`context-harness skill init-repo`).
+
+## Golden Rules
+
+These three rules prevent the most common issues:
+
+1. **Never edit `version.txt` manually** — release-please manages it
+2. **Never edit `skills.json` manually** — CI rebuilds it after every release
+3. **Never add `version` to SKILL.md frontmatter** — the version lives only
+   in `version.txt`
+
+## How Versioning Works
+
+This registry uses **release-please** with the `simple` release type.
+Version bumps are fully automated based on conventional commit messages.
+The system uses **path-based detection** to attribute commits to skills
+based on which files they touch.
+
+**Common misconception**: Commit scopes like `feat(my-skill): ...` are
+cosmetic only. release-please determines which skill a commit belongs to
+by checking which files under `skill/<name>/` were modified, NOT by
+parsing the commit scope.
+
+## Workflow 1: Create a New Skill
+
+### Step 1 — Create the directory and files
+
+```bash
+mkdir -p skill/<skill-name>
+```
+
+### Step 2 — Create SKILL.md with frontmatter
+
+```markdown
+---
+name: <skill-name>
+description: Brief description of what this skill does
+author: your-name
+tags:
+  - category
+---
+
+# Skill Title
+
+Your skill content here...
+```
+
+**Requirements**:
+- `name` must match the directory name exactly
+- `description` is required and should explain both what the skill does
+  AND when to use it
+- Do NOT include a `version` field
+
+### Step 3 — Bootstrap version.txt
+
+```bash
+echo "0.1.0" > skill/<skill-name>/version.txt
+```
+
+### Step 4 — Register with release-please
+
+Add to `release-please-config.json` under `"packages"`:
+
+```json
+"skill/<skill-name>": {
+  "release-type": "simple",
+  "component": "<skill-name>"
+}
+```
+
+Add to `.release-please-manifest.json`:
+
+```json
+"skill/<skill-name>": "0.1.0"
+```
+
+### Step 5 — Commit with feat: prefix
+
+```bash
+git add skill/<skill-name>/ release-please-config.json \\
+  .release-please-manifest.json
+git commit -m "feat: add <skill-name>"
+git push origin main
+```
+
+The `feat:` prefix is critical — it is a releasable commit type that
+triggers release-please to create the initial release PR.
+
+## Workflow 2: Update an Existing Skill
+
+1. Edit the skill's `SKILL.md` (or any file in `skill/<skill-name>/`)
+2. Commit with the appropriate conventional commit prefix:
+   - `fix: correct typo in examples` — patch bump (0.1.0 → 0.1.1)
+   - `feat: add error handling section` — minor bump (0.1.0 → 0.2.0)
+   - `feat!: restructure skill format` — major bump (0.1.0 → 1.0.0)
+3. Push and merge to main
+4. release-please automatically creates a release PR
+
+## Workflow 3: Release Lifecycle
+
+After a releasable commit merges to main:
+
+```
+1. release.yml triggers → release-please-action runs
+2. Detects changed paths under skill/<name>/
+3. Creates release PR: "chore(main): release <name> X.Y.Z"
+   - Bumps skill/<name>/version.txt
+   - Generates/updates skill/<name>/CHANGELOG.md
+4. Maintainer merges the release PR
+5. release-please creates:
+   - Git tag: <name>@vX.Y.Z
+   - GitHub Release with changelog
+6. sync-registry.yml triggers on version.txt change
+7. Rebuilds skills.json automatically
+8. Users detect update: context-harness skill outdated
+```
+
+## Commit Convention Quick Reference
+
+| Prefix | Version Bump | Use When |
+|--------|-------------|----------|
+| `fix:` | Patch (0.0.x) | Correcting errors, typos, broken examples |
+| `feat:` | Minor (0.x.0) | Adding new content, sections, examples |
+| `feat!:` | Major (x.0.0) | Restructuring, breaking format changes |
+| `docs:` | No release | README, CONTRIBUTING changes (not skill content) |
+| `chore:` | No release | Formatting, cleanup, CI config |
+
+**For skill content changes, always use `feat:` or `fix:`**. Using
+`docs:` or `chore:` for SKILL.md edits will NOT trigger a release.
+
+### Version Override
+
+Force a specific version with the `Release-As` trailer:
+
+```bash
+git commit --allow-empty -m "chore: release 2.0.0" -m "Release-As: 2.0.0"
+```
+
+## Common Mistakes
+
+| Mistake | Symptom | Fix |
+|---------|---------|-----|
+| Using `docs:` for skill edits | No release PR created | Use `feat:` or `fix:` |
+| Adding `version` to frontmatter | Validation failure | Remove it |
+| Forgetting release-please registration | No release PR | Add to both JSON files |
+| Editing `version.txt` manually | Version conflict | Revert; let CI manage |
+| Editing `skills.json` manually | Overwritten on release | Let CI rebuild it |
+
+## Troubleshooting
+
+For detailed troubleshooting with diagnostic commands, see
+[references/troubleshooting.md](references/troubleshooting.md).
+
+Quick checks:
+- **No release PR appearing?** Verify commit used `feat:` or `fix:`,
+  check Actions tab for release.yml runs
+- **skills.json not updated?** Only updates after a release PR merge;
+  check sync-registry.yml runs
+- **Validation failing?** Run `python scripts/validate_skills.py` locally
+"""
+        (repo_path / "skill" / "skill-release" / "SKILL.md").write_text(
+            skill_md, encoding="utf-8"
+        )
+
+        troubleshooting_md = """\
+# Troubleshooting Guide
+
+Diagnostic procedures for common issues in the skills registry release
+pipeline.
+
+## Decision Tree
+
+### Release PR not created after merge
+
+```
+1. Was the commit prefix releasable? (feat: or fix:)
+   NO  → Recommit with feat: or fix: prefix
+   YES → Continue
+
+2. Did the commit touch files under skill/<name>/?
+   NO  → release-please uses path-based detection, not commit scope
+   YES → Continue
+
+3. Is the skill registered in release-please-config.json?
+   NO  → Add package entry and re-push
+   YES → Continue
+
+4. Did the release.yml workflow run?
+   Check: gh run list --workflow=release.yml --limit=5
+   NO  → Check workflow trigger (must be push to main)
+   YES → Check the run logs for errors
+```
+
+### skills.json not updated after release
+
+```
+1. Was the release PR actually merged (not just the feature PR)?
+   NO  → Merge the release PR first
+   YES → Continue
+
+2. Did sync-registry.yml trigger?
+   Check: gh run list --workflow=sync-registry.yml --limit=5
+   NO  → sync-registry triggers on skill/*/version.txt changes;
+         the release PR must bump version.txt
+   YES → Check logs for errors
+
+3. Manual rebuild:
+   python scripts/sync-registry.py
+   git add skills.json
+   git commit -m "chore: sync skills.json [skip ci]"
+   git push
+```
+
+### Validation failing on PR
+
+```
+1. Check the validation report:
+   python scripts/validate_skills.py
+
+2. Common failures:
+   - "missing SKILL.md"                 → Create the file
+   - "name does not match directory"    → Align frontmatter name with dir
+   - "remove 'version' from frontmatter" → Delete version field
+   - "missing version.txt"             → echo "0.1.0" > skill/<name>/version.txt
+   - "invalid frontmatter"             → Check YAML syntax in header
+```
+
+### Release created wrong version
+
+```
+1. Check which commits release-please included:
+   gh pr view <release-pr-number> --json body
+
+2. If version is wrong, use Release-As override:
+   git commit --allow-empty -m "chore: release X.Y.Z" \\
+     -m "Release-As: X.Y.Z"
+
+3. If a release was already tagged incorrectly:
+   - Delete the GitHub Release via UI or API
+   - Delete the git tag: git push --delete origin <tag>
+   - Update .release-please-manifest.json to correct version
+   - Push a new releasable commit to trigger fresh release PR
+```
+
+## Diagnostic Commands
+
+```bash
+# Recent release workflow runs
+gh run list --workflow=release.yml --limit=5
+
+# Pending release PRs
+gh pr list --label "autorelease: pending"
+
+# Recent sync workflow runs
+gh run list --workflow=sync-registry.yml --limit=5
+
+# Commits touching a specific skill
+git log --oneline -- skill/<skill-name>/
+
+# Validate locally before pushing
+python scripts/validate_skills.py
+```
+
+## Known release-please Quirks
+
+1. **`releases_created` output is unreliable in v4** — Use per-path
+   outputs: `steps.release.outputs['skill/name--release_created']`
+
+2. **Do not use `@` in skill names** — Known bug (#2661) causes tag
+   parsing failures
+
+3. **First release for new skill** — The initial `feat: add <name>`
+   commit triggers the first release PR, bumping from the bootstrapped
+   0.1.0 to the appropriate next version.
+
+4. **`python-frontmatter` pip name vs import** — Install with
+   `pip install python-frontmatter`, but import as `import frontmatter`
+
+5. **`[skip ci]` in sync-registry commits** — The sync-registry workflow
+   uses `[skip ci]` to prevent infinite workflow loops when it commits
+   the updated skills.json
+"""
+        (
+            repo_path / "skill" / "skill-release" / "references" / "troubleshooting.md"
+        ).write_text(troubleshooting_md, encoding="utf-8")
+
+        # version.txt — bootstrapped at 0.1.0 (required by release-please)
+        (repo_path / "skill" / "skill-release" / "version.txt").write_text(
             "0.1.0\n", encoding="utf-8"
         )
 
