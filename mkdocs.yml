@@ -69,6 +69,7 @@ nav:
       - Sessions: user-guide/sessions.md
       - Skills: user-guide/skills.md
       - Ignore Patterns: user-guide/ignore-patterns.md
+      - Agentic Workflows: user-guide/agentic-workflows.md
   - Reference:
       - CLI: reference/cli.md
       - Architecture: reference/architecture.md

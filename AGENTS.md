@@ -60,6 +60,7 @@ context-harness/
 - **Package Manager**: uv
 - **Test Framework**: pytest with Click's CliRunner
 - **CI/CD**: GitHub Actions + semantic-release (Node.js)
+- **Continuous Documentation**: GitHub Agentic Workflows (gh-aw) for auto-updating docs on PRs
 - **Linting**: commitlint for conventional commits
 
 ## Code Standards
