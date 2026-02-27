@@ -13,6 +13,7 @@ tools:
   bash: true
 safe-outputs:
   push-to-pull-request-branch:
+    max: 1
 permissions:
   contents: read
   pull-requests: read
@@ -79,7 +80,7 @@ Documentation lives in:
    - New skills, commands, or architecture patterns were added
    - Technology stack or dependencies changed
 
-6. **Commit changes** back to the PR branch using the `push-to-branch` safe output.
+6. **Commit changes** back to the PR branch using the `push-to-pull-request-branch` safe output.
    - Use a clear commit message: `docs: update documentation for PR changes`
    - Only commit if there are actual documentation updates to make
 

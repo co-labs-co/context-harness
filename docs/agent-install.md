@@ -2,7 +2,7 @@
 
 > Context-aware agent framework for AI coding assistants that maintains session continuity across conversations. Supports OpenCode and Claude Code.
 
-If you're an LLM agent (Claude Code or opencode) helping a user install ContextHarness, welcome! Execute these steps autonomously.
+If you're an LLM agent (Claude Code or OpenCode) helping a user install ContextHarness, welcome! Execute these steps autonomously.
 
 **OBJECTIVE**: Install the `ch` CLI tool and initialize it in the user's project.
 
@@ -126,7 +126,11 @@ ch init --tool both          # Both (default)
 **What this creates:**
 - `.context-harness/` — Session storage and project context (shared by both tools)
 - `.opencode/` — OpenCode agent definitions, commands, and skills (when tool is `opencode` or `both`)
+- `AGENTS.md` — OpenCode agent memory and project context (when tool is `opencode` or `both`)
+- `opencode.json` — OpenCode tool configuration (when tool is `opencode` or `both`)
 - `.claude/` — Claude Code agent definitions, commands, and skills (when tool is `claude-code` or `both`)
+- `CLAUDE.md` — Claude Code agent memory and project context (when tool is `claude-code` or `both`)
+- `.mcp.json` — Claude Code MCP tool configuration (when tool is `claude-code` or `both`)
 
 **Expected output**: Success message indicating files were created.
 

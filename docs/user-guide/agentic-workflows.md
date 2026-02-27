@@ -110,6 +110,7 @@ tools:
   bash: true
 safe-outputs:
   push-to-pull-request-branch:
+    max: 1
 permissions:
   contents: read
   pull-requests: read
