@@ -35,7 +35,7 @@ module.exports = {
         'skill',      // Skill management
         'mcp',        // MCP server integration
         'oauth',      // OAuth authentication
-        'web',        // Web UI interface
+        'config',     // Configuration system
       ],
     ],
     'subject-case': [2, 'always', 'lower-case'],
