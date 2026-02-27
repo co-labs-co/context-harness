@@ -109,7 +109,7 @@ tools:
   edit:
   bash:
 safe-outputs:
-  push-to-branch:
+  push-to-pull-request-branch:
 permissions:
   contents: read
   pull-requests: read
@@ -123,7 +123,7 @@ permissions:
 | `name` | Display name for the workflow |
 | `on` | Trigger events (same syntax as GitHub Actions) |
 | `tools` | Tools available to the agent (`github`, `edit`, `bash`) |
-| `safe-outputs` | Pre-approved write operations (`push-to-branch`, `create-pr`, `comment`) |
+| `safe-outputs` | Pre-approved write operations (`push-to-pull-request-branch`, `create-pull-request`, `add-comment`) |
 | `permissions` | Repository permissions (read-only by default) |
 
 ### Tools
@@ -140,11 +140,11 @@ Safe outputs are the mechanism for write operations. The agent runs with read-on
 
 | Safe Output | What It Does |
 |-------------|--------------|
-| `push-to-branch` | Push commits to the PR's branch |
-| `create-pr` | Create a new pull request |
-| `comment` | Comment on issues or PRs |
+| `push-to-pull-request-branch` | Push commits to the PR's branch |
+| `create-pull-request` | Create a new pull request |
+| `add-comment` | Comment on issues or PRs |
 
-For this workflow, we use `push-to-branch` to commit documentation updates back to the PR.
+For this workflow, we use `push-to-pull-request-branch` to commit documentation updates back to the PR.
 
 ## Customization
 

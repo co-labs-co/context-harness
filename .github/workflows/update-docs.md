@@ -12,7 +12,7 @@ tools:
   edit:
   bash:
 safe-outputs:
-  push-to-branch:
+  push-to-pull-request-branch:
 permissions:
   contents: read
   pull-requests: read
