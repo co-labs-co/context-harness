@@ -196,7 +196,7 @@ ch skill install <name>    # Install specific skill
 
 ### skill init-repo
 
-Initialize a new skills registry repository on GitHub. Creates a scaffolded repository with the standard registry structure (`skills.json`, `skill/` directory, `README.md`), ready to use as a custom `skills-repo` immediately.
+Initialize a new skills registry repository on GitHub with fully automated CI/CD for per-skill semantic versioning. Creates 16 files including GitHub Actions workflows for release-please, PR validation, and registry sync.
 
 **Prerequisite:** GitHub CLI (`gh`) must be installed and authenticated (`gh auth login`).
 
@@ -207,6 +207,36 @@ ch skill init-repo my-skills --configure-user         # Create and set as user d
 ch skill init-repo my-skills --configure-project      # Create and set as project default
 ch skill init-repo my-org/skills -d "Team AI skills"  # With custom description
 ```
+
+**What it creates:**
+
+```
+my-skills/
+├── .github/
+│   ├── workflows/
+│   │   ├── release.yml              # release-please per-skill versioning
+│   │   ├── sync-registry.yml        # Rebuilds skills.json after releases
+│   │   └── validate-skills.yml      # PR validation + sticky comments
+│   ├── ISSUE_TEMPLATE/
+│   │   └── new-skill.md
+│   └── PULL_REQUEST_TEMPLATE.md
+├── scripts/
+│   ├── sync-registry.py             # Frontmatter + version.txt → skills.json
+│   └── validate_skills.py           # Pydantic-based validation
+├── skill/
+│   └── example-skill/
+│       ├── SKILL.md
+│       └── version.txt              # Bootstrapped at 0.1.0
+├── skills.json
+├── release-please-config.json
+├── .release-please-manifest.json
+├── .gitignore
+├── README.md
+├── CONTRIBUTING.md
+└── QUICKSTART.md
+```
+
+For details on the CI/CD automation and versioning lifecycle, see [Automated Versioning](../user-guide/skills.md#automated-versioning).
 
 **Options:**
 

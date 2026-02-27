@@ -59,7 +59,7 @@ That's it. Your context persists across sessions.
 - **Automatic Compaction**: Context is saved every 2nd user interaction
 - **GitHub Integration**: Automatic branch creation, issue tracking, PR creation
 - **Subagent System**: Research and documentation lookup via Context7 MCP
-- **Skill System**: Install pre-built patterns and workflows
+- **Skill System**: Install, upgrade, and manage pre-built patterns and workflows — with custom registry support
 
 ## How It Differs from Other Approaches
 
