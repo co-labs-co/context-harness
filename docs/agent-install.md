@@ -1,6 +1,6 @@
 # context-harness
 
-> Context-aware agent framework for OpenCode.ai that maintains session continuity across conversations.
+> Context-aware agent framework for AI coding assistants that maintains session continuity across conversations. Supports OpenCode and Claude Code.
 
 If you're an LLM agent (Claude Code or opencode) helping a user install ContextHarness, welcome! Execute these steps autonomously.
 
@@ -100,7 +100,7 @@ export PATH="$HOME/.local/bin:$PATH"
 ch --version
 ```
 
-**Expected output**: A version string like `context-harness 0.x.x`
+**Expected output**: A version string like `context-harness, version X.Y.Z`
 
 - If version **is displayed**: Continue to Step 5
 - If **command not found**: Check that `~/.local/bin` is in PATH, then retry
@@ -115,16 +115,25 @@ Navigate to the user's project directory (if not already there), then run:
 ch init
 ```
 
+By default this installs support for **both** OpenCode and Claude Code. To install for a specific tool only:
+
+```bash
+ch init --tool opencode      # OpenCode only
+ch init --tool claude-code   # Claude Code only
+ch init --tool both          # Both (default)
+```
+
 **What this creates:**
-- `.context-harness/` — Session storage directory
-- `.opencode/agent/` — Agent definitions for OpenCode
-- `.opencode/command/` — Slash command definitions
+- `.context-harness/` — Session storage and project context (shared by both tools)
+- `.opencode/` — OpenCode agent definitions, commands, and skills (when tool is `opencode` or `both`)
+- `.claude/` — Claude Code agent definitions, commands, and skills (when tool is `claude-code` or `both`)
 
 **Expected output**: Success message indicating files were created.
 
 **Options** (if needed):
-- `ch init --force` — Overwrite existing files
+- `ch init --force` — Overwrite existing files (preserves active sessions)
 - `ch init --target ./path` — Install in a specific directory
+- `ch init --tool <tool>` — Choose which tool(s) to install for
 
 ---
 
@@ -136,10 +145,12 @@ If all steps completed successfully, tell the user:
 > 
 > - CLI version: [version from step 4]
 > - Project initialized: `.context-harness/` directory created
+> - Tool support: [OpenCode / Claude Code / both]
 > 
 > **Next steps:**
-> 1. Run `/baseline` in OpenCode to analyze your project
+> 1. Run `/baseline` to analyze your project and generate PROJECT-CONTEXT.md
 > 2. Run `/ctx my-feature` to start your first session
+> 3. Run `ch skill list` to browse available skills
 > 
 > See the [documentation](https://co-labs-co.github.io/context-harness/) for more details.
 
@@ -204,6 +215,25 @@ ch mcp add context7
 For higher rate limits, add with an API key:
 ```bash
 ch mcp add context7 -k YOUR_API_KEY
+```
+
+---
+
+## Optional: Install Skills
+
+ContextHarness skills extend AI agent capabilities with specialized knowledge and workflows. Browse and install available skills:
+
+```bash
+ch skill list                    # Browse available skills
+ch skill install                 # Interactive skill picker
+ch skill install <skill-name>    # Install a specific skill
+```
+
+To check for updates and upgrade installed skills:
+
+```bash
+ch skill outdated                # Check for newer versions
+ch skill upgrade --all           # Upgrade all outdated skills
 ```
 
 ---
