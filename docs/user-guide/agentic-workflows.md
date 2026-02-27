@@ -107,7 +107,7 @@ on:
 tools:
   github:
   edit:
-  bash:
+  bash: true
 safe-outputs:
   push-to-pull-request-branch:
 permissions:
@@ -132,7 +132,7 @@ permissions:
 |------|---------|
 | `github` | Read repository files, PRs, issues, and diffs |
 | `edit` | Modify files in the repository |
-| `bash` | Execute shell commands |
+| `bash: true` | Execute shell commands (`true` enables all; use `["cmd1", "cmd2"]` to restrict) |
 
 ### Safe Outputs
 

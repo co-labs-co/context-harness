@@ -10,7 +10,7 @@ on:
 tools:
   github:
   edit:
-  bash:
+  bash: true
 safe-outputs:
   push-to-pull-request-branch:
 permissions:
