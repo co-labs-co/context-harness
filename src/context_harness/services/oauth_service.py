@@ -785,7 +785,7 @@ class OAuthService:
         if tokens is None:
             return Failure(
                 error=f"Not authenticated with {service_name}. "
-                f"Run 'context-harness mcp auth {service_name}' first.",
+                f"Run 'ch mcp auth {service_name}' first.",
                 code=ErrorCode.AUTH_REQUIRED,
             )
 

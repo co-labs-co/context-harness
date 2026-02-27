@@ -86,17 +86,17 @@ def init(force: bool, target: str, tool: str):
 
     Examples:
 
-        context-harness init
+        ch init
 
-        context-harness init --target ./my-project
+        ch init --target ./my-project
 
-        context-harness init --force
+        ch init --force
 
-        context-harness init --tool opencode
+        ch init --tool opencode
 
-        context-harness init --tool claude-code
+        ch init --tool claude-code
 
-        context-harness init --force --tool both
+        ch init --force --tool both
     """
     console.print()
     console.print(
@@ -124,7 +124,7 @@ def init(force: bool, target: str, tool: str):
         console.print("[bold]Next steps:[/bold]")
         if tool in ("opencode", "both"):
             console.print(
-                "  1. (Optional) Add Context7 MCP: [cyan]context-harness mcp add context7[/cyan]"
+                "  1. (Optional) Add Context7 MCP: [cyan]ch mcp add context7[/cyan]"
             )
             console.print(
                 "  2. Start a session: [cyan]@context-harness /ctx my-feature[/cyan]"
@@ -194,15 +194,15 @@ def mcp_add(server: str | None, api_key: str, target: str):
 
     Examples:
 
-        context-harness mcp add
+        ch mcp add
 
-        context-harness mcp add context7
+        ch mcp add context7
 
-        context-harness mcp add atlassian
+        ch mcp add atlassian
 
-        context-harness mcp add context7 --api-key YOUR_API_KEY
+        ch mcp add context7 --api-key YOUR_API_KEY
 
-        context-harness mcp add context7 --target ./my-project
+        ch mcp add context7 --target ./my-project
     """
     console.print()
     console.print(
@@ -253,9 +253,9 @@ def mcp_list(target: str):
 
     Examples:
 
-        context-harness mcp list
+        ch mcp list
 
-        context-harness mcp list --target ./my-project
+        ch mcp list --target ./my-project
     """
     console.print()
     list_mcp_servers(target=target)
@@ -293,14 +293,14 @@ def mcp_auth(server: str, client_id: str, status: bool, logout: bool):
 
     Examples:
 
-        context-harness mcp auth atlassian --client-id YOUR_CLIENT_ID
+        ch mcp auth atlassian --client-id YOUR_CLIENT_ID
 
         export ATLASSIAN_CLIENT_ID=your_client_id
-        context-harness mcp auth atlassian
+        ch mcp auth atlassian
 
-        context-harness mcp auth atlassian --status
+        ch mcp auth atlassian --status
 
-        context-harness mcp auth atlassian --logout
+        ch mcp auth atlassian --logout
     """
     console.print()
     console.print(
@@ -326,7 +326,7 @@ def mcp_auth(server: str, client_id: str, status: bool, logout: bool):
         )
         if server_info.auth_type == "api-key":
             console.print(
-                f"[dim]Use 'context-harness mcp add {server} --api-key YOUR_KEY' instead.[/dim]"
+                f"[dim]Use 'ch mcp add {server} --api-key YOUR_KEY' instead.[/dim]"
             )
         raise SystemExit(1)
 
@@ -386,14 +386,10 @@ def _handle_oauth_auth(
                 console.print(f"[dim]Scopes: {tokens.scope}[/dim]")
         elif auth_status == AuthStatus.TOKEN_EXPIRED:
             console.print("[yellow]⚠ Token expired[/yellow]")
-            console.print(
-                f"[dim]Run 'context-harness mcp auth {server}' to refresh.[/dim]"
-            )
+            console.print(f"[dim]Run 'ch mcp auth {server}' to refresh.[/dim]")
         else:
             console.print(f"[dim]Not authenticated with {display_name}[/dim]")
-            console.print(
-                f"[dim]Run 'context-harness mcp auth {server}' to authenticate.[/dim]"
-            )
+            console.print(f"[dim]Run 'ch mcp auth {server}' to authenticate.[/dim]")
         console.print()
         return
 
@@ -413,9 +409,7 @@ def _handle_oauth_auth(
 
         console.print()
         console.print("[bold]Next steps:[/bold]")
-        console.print(
-            f"  • Run 'context-harness mcp add {server}' to configure the MCP"
-        )
+        console.print(f"  • Run 'ch mcp add {server}' to configure the MCP")
         console.print("  • The agent will use your stored credentials automatically")
         console.print()
 
@@ -502,7 +496,7 @@ def config():
 
     \b
     1. Environment variable (highest priority)
-    2. Project config (opencode.json)
+    2. Project config (.context-harness/config.json)
     3. User config (~/.context-harness/config.json)
     4. Default values (lowest priority)
     """
@@ -522,7 +516,7 @@ def config_get(key: str):
 
     Examples:
 
-        context-harness config get skills-repo
+        ch config get skills-repo
     """
     if key == "skills-repo":
         result = get_skills_repo_info()
@@ -549,7 +543,7 @@ def config_get(key: str):
             + (" [green]← active[/green]" if source == "environment" else "")
         )
         console.print(
-            f"  2. Project (opencode.json): {proj_val}"
+            f"  2. Project (.context-harness/config.json): {proj_val}"
             + (" [green]← active[/green]" if source == "project" else "")
         )
         console.print(
@@ -618,12 +612,12 @@ def _parse_repo_value(value: str) -> Optional[str]:
     "scope",
     flag_value="project",
     default=True,
-    help="Set in project config (opencode.json) [default]",
+    help="Set in project config (.context-harness/config.json) [default]",
 )
 def config_set(key: str, value: str, scope: str):
     """Set a configuration value.
 
-    By default, sets values in project config (opencode.json).
+    By default, sets values in project config (.context-harness/config.json).
     Use --user to set in user config (~/.context-harness/config.json).
 
     \b
@@ -632,13 +626,13 @@ def config_set(key: str, value: str, scope: str):
 
     Examples:
 
-        context-harness config set skills-repo my-org/my-skills
+        ch config set skills-repo my-org/my-skills
 
-        context-harness config set skills-repo https://github.com/my-org/my-skills
+        ch config set skills-repo https://github.com/my-org/my-skills
 
-        context-harness config set skills-repo my-org/my-skills --user
+        ch config set skills-repo my-org/my-skills --user
 
-        context-harness config set skills-repo my-org/my-skills --project
+        ch config set skills-repo my-org/my-skills --project
     """
     if key == "skills-repo":
         # Parse and normalize repo value (accepts owner/repo or full GitHub URL)
@@ -690,30 +684,26 @@ def _set_user_skills_repo(repo: str) -> None:
 
 
 def _set_project_skills_repo(repo: str) -> None:
-    """Set skills repo in project config."""
-    service = ConfigService()
+    """Set skills repo in project config (.context-harness/config.json)."""
+    from context_harness.primitives.config import (
+        ProjectHarnessConfig,
+        SkillsRegistryConfig,
+    )
+    from context_harness.services.project_harness_config_service import (
+        ProjectHarnessConfigService,
+    )
 
-    # Load or create config
-    result = service.load_or_create()
+    service = ProjectHarnessConfigService()
+
+    # Load existing config
+    result = service.load()
     if isinstance(result, Failure):
         console.print(f"[red]Error: {result.error}[/red]")
         raise SystemExit(1)
 
-    config = result.value
-
-    # Import here to avoid circular import
-    from context_harness.primitives.config import OpenCodeConfig
-
     # Create new config with updated skills registry
-    new_config = OpenCodeConfig(
-        schema_version=config.schema_version,
-        mcp=config.mcp,
-        agents=config.agents,
-        commands=config.commands,
-        skills=config.skills,
+    new_config = ProjectHarnessConfig(
         skills_registry=SkillsRegistryConfig(default=repo),
-        project_context=config.project_context,
-        raw_data=config.raw_data,
     )
 
     # Save
@@ -724,7 +714,7 @@ def _set_project_skills_repo(repo: str) -> None:
 
     console.print()
     console.print(f"[green]✓ Set skills-repo to '{repo}' in project config[/green]")
-    console.print(f"[dim]Location: {service.project_config.opencode_json_path}[/dim]")
+    console.print(f"[dim]Location: {service.config_path}[/dim]")
     console.print()
 
 
@@ -736,7 +726,7 @@ def config_list():
 
     Example:
 
-        context-harness config list
+        ch config list
     """
     from pathlib import Path
 
@@ -764,7 +754,9 @@ def config_list():
     # Show paths
     console.print("[bold]Configuration Paths[/bold]")
     console.print(f"  User config: [dim]{UserConfig.config_path()}[/dim]")
-    console.print(f"  Project config: [dim]{Path.cwd() / 'opencode.json'}[/dim]")
+    console.print(
+        f"  Project config: [dim]{Path.cwd() / '.context-harness' / 'config.json'}[/dim]"
+    )
     console.print()
 
     # Show environment variable
@@ -803,9 +795,9 @@ def config_unset(key: str, scope: str):
 
     Examples:
 
-        context-harness config unset skills-repo
+        ch config unset skills-repo
 
-        context-harness config unset skills-repo --user
+        ch config unset skills-repo --user
     """
     if key == "skills-repo":
         if scope == "user":
@@ -846,33 +838,20 @@ def _unset_user_skills_repo() -> None:
 
 
 def _unset_project_skills_repo() -> None:
-    """Remove skills repo from project config."""
-    service = ConfigService()
+    """Remove skills repo from project config (.context-harness/config.json)."""
+    from context_harness.primitives.config import ProjectHarnessConfig
+    from context_harness.services.project_harness_config_service import (
+        ProjectHarnessConfigService,
+    )
+
+    service = ProjectHarnessConfigService()
 
     if not service.exists():
         console.print("[dim]Project config does not exist, nothing to unset.[/dim]")
         return
 
-    result = service.load()
-    if isinstance(result, Failure):
-        console.print(f"[red]Error: {result.error}[/red]")
-        raise SystemExit(1)
-
-    config = result.value
-
-    from context_harness.primitives.config import OpenCodeConfig
-
     # Create new config without skills registry
-    new_config = OpenCodeConfig(
-        schema_version=config.schema_version,
-        mcp=config.mcp,
-        agents=config.agents,
-        commands=config.commands,
-        skills=config.skills,
-        skills_registry=None,
-        project_context=config.project_context,
-        raw_data=config.raw_data,
-    )
+    new_config = ProjectHarnessConfig(skills_registry=None)
 
     save_result = service.save(new_config)
     if isinstance(save_result, Failure):

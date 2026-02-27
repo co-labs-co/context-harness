@@ -2,7 +2,7 @@
 
 Provides functions to resolve the skills repository with layered precedence:
 1. Environment variable (highest priority)
-2. Project config (opencode.json)
+2. Project config (.context-harness/config.json)
 3. User config (~/.context-harness/config.json)
 4. Default (lowest priority)
 """
@@ -16,7 +16,7 @@ from typing import Optional, Tuple
 
 from context_harness.primitives import (
     DEFAULT_SKILLS_REPO,
-    OpenCodeConfig,
+    ProjectHarnessConfig,
     Result,
     SKILLS_REPO_ENV_VAR,
     Success,
@@ -25,25 +25,25 @@ from context_harness.primitives import (
 
 
 def resolve_skills_repo(
-    project_config: Optional[OpenCodeConfig] = None,
+    project_config: Optional[ProjectHarnessConfig] = None,
     user_config: Optional[UserConfig] = None,
 ) -> Tuple[str, str]:
     """Resolve the skills repository with layered precedence.
 
     Priority (highest to lowest):
     1. CONTEXT_HARNESS_SKILLS_REPO environment variable
-    2. Project config (opencode.json skillsRegistry.default)
+    2. Project config (.context-harness/config.json skillsRegistry.default)
     3. User config (~/.context-harness/config.json skillsRegistry.default)
     4. Default (co-labs-co/context-harness-skills)
 
     Args:
-        project_config: Optional project configuration (opencode.json)
+        project_config: Optional project configuration (.context-harness/config.json)
         user_config: Optional user configuration
 
     Returns:
         Tuple of (repo, source) where source indicates where it came from:
         - "environment" if from env var
-        - "project" if from opencode.json
+        - "project" if from .context-harness/config.json
         - "user" if from user config
         - "default" if using hardcoded default
     """
@@ -52,7 +52,7 @@ def resolve_skills_repo(
     if env_repo:
         return (env_repo, "environment")
 
-    # 2. Project config
+    # 2. Project config (.context-harness/config.json)
     if project_config and project_config.skills_registry:
         return (project_config.skills_registry.default, "project")
 
@@ -74,7 +74,7 @@ def resolve_skills_repo_with_loading(
     have the configs loaded.
 
     Args:
-        project_path: Optional project path for loading opencode.json
+        project_path: Optional project path for loading .context-harness/config.json
 
     Returns:
         Tuple of (repo, source) - see resolve_skills_repo() for details
@@ -84,18 +84,18 @@ def resolve_skills_repo_with_loading(
     if env_repo:
         return (env_repo, "environment")
 
-    # 2. Try to load project config
-    project_config: Optional[OpenCodeConfig] = None
+    # 2. Try to load project config (.context-harness/config.json)
+    project_config: Optional[ProjectHarnessConfig] = None
     if project_path:
-        config_file = project_path / "opencode.json"
+        config_file = project_path / ".context-harness" / "config.json"
     else:
-        config_file = Path.cwd() / "opencode.json"
+        config_file = Path.cwd() / ".context-harness" / "config.json"
 
     if config_file.exists():
         try:
             with open(config_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            project_config = OpenCodeConfig.from_dict(data)
+            project_config = ProjectHarnessConfig.from_dict(data)
         except (json.JSONDecodeError, ValueError, OSError):
             pass  # Invalid or unreadable config, fall through to next option
 
@@ -136,14 +136,14 @@ def get_skills_repo_info() -> Result[dict]:
     """
     env_value = os.environ.get(SKILLS_REPO_ENV_VAR)
 
-    # Load project config
+    # Load project config (.context-harness/config.json)
     project_value: Optional[str] = None
-    config_file = Path.cwd() / "opencode.json"
+    config_file = Path.cwd() / ".context-harness" / "config.json"
     if config_file.exists():
         try:
             with open(config_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            project_config = OpenCodeConfig.from_dict(data)
+            project_config = ProjectHarnessConfig.from_dict(data)
             if project_config.skills_registry:
                 project_value = project_config.skills_registry.default
         except (json.JSONDecodeError, OSError):

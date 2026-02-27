@@ -1,7 +1,7 @@
 """Shell completion support for ContextHarness CLI.
 
 This module provides tab completion and fuzzy finding for skill names
-when using the `context-harness skill install` command.
+when using the `ch skill install` command.
 """
 
 from __future__ import annotations
@@ -181,7 +181,7 @@ def complete_skill_names(
     """Provide shell completion for skill names.
 
     This function is called by Click's shell completion system when
-    the user presses Tab after `context-harness skill install`.
+    the user presses Tab after `ch skill install`.
 
     Args:
         ctx: Click context
@@ -424,7 +424,7 @@ def complete_mcp_servers(
     """Provide shell completion for MCP server names.
 
     This function is called by Click's shell completion system when
-    the user presses Tab after `context-harness mcp add`.
+    the user presses Tab after `ch mcp add`.
 
     Args:
         ctx: Click context

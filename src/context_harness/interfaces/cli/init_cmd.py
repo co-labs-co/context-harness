@@ -1,6 +1,6 @@
 """Init command for ContextHarness CLI.
 
-Handles the `context-harness init` command for initializing the framework.
+Handles the `ch init` command for initializing the framework.
 """
 
 from __future__ import annotations
@@ -37,11 +37,11 @@ def init_command(force: bool, target: str) -> None:
 
     Examples:
 
-        context-harness init
+        ch init
 
-        context-harness init --target ./my-project
+        ch init --target ./my-project
 
-        context-harness init --force
+        ch init --force
     """
     print_header("Installer")
 
@@ -51,7 +51,7 @@ def init_command(force: bool, target: str) -> None:
         print_success("ContextHarness initialized successfully!")
         print_next_steps(
             [
-                "(Optional) Add Context7 MCP: [cyan]context-harness mcp add context7[/cyan]",
+                "(Optional) Add Context7 MCP: [cyan]ch mcp add context7[/cyan]",
                 "Start a session: [cyan]@context-harness /ctx my-feature[/cyan]",
                 "Work normally - the agent handles execution",
                 "Compact when ready: [cyan]/compact[/cyan]",

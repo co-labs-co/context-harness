@@ -1,6 +1,6 @@
 """Worktree commands for ContextHarness CLI.
 
-Handles the `context-harness worktree` command group for git worktree management.
+Handles the `ch worktree` command group for git worktree management.
 """
 
 from __future__ import annotations
@@ -48,9 +48,9 @@ def worktree_list(target: str) -> None:
 
     Examples:
 
-        context-harness worktree list
+        ch worktree list
 
-        context-harness worktree list --target ./my-project
+        ch worktree list --target ./my-project
     """
     print_header("Git Worktrees")
 
@@ -109,9 +109,9 @@ def worktree_current(target: str) -> None:
 
     Examples:
 
-        context-harness worktree current
+        ch worktree current
 
-        context-harness worktree current --target ./my-project
+        ch worktree current --target ./my-project
     """
     service = WorktreeService()
     result = service.get_current(Path(target))
@@ -193,13 +193,13 @@ def worktree_add(
     Examples:
 
         # Create worktree for existing branch
-        context-harness worktree add ../feature-auth --branch feature-auth
+        ch worktree add ../feature-auth --branch feature-auth
 
         # Create worktree with new branch
-        context-harness worktree add ../hotfix-123 --new-branch hotfix-123
+        ch worktree add ../hotfix-123 --new-branch hotfix-123
 
         # Create worktree with new branch from specific base
-        context-harness worktree add ../feature-x --new-branch feature-x --base main
+        ch worktree add ../feature-x --new-branch feature-x --base main
     """
     print_header("Create Worktree")
 
@@ -257,9 +257,9 @@ def worktree_remove(path: str, force: bool, target: str) -> None:
 
     Examples:
 
-        context-harness worktree remove ../feature-auth
+        ch worktree remove ../feature-auth
 
-        context-harness worktree remove ../feature-auth --force
+        ch worktree remove ../feature-auth --force
     """
     print_header("Remove Worktree")
 
@@ -295,7 +295,7 @@ def worktree_prune(target: str) -> None:
 
     Examples:
 
-        context-harness worktree prune
+        ch worktree prune
     """
     print_header("Prune Worktrees")
 

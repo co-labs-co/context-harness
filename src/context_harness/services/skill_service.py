@@ -1015,7 +1015,7 @@ flowchart TD
     E --> |"Bumps version.txt & CHANGELOG.md"| F["Release PR merged"]
     F --> G["Tag: my-skill@v0.2.0 + GitHub Release"]
     G --> H["sync-registry rebuilds skills.json"]
-    H --> I["CLI: context-harness skill outdated"]
+    H --> I["CLI: ch skill outdated"]
 
     style A fill:#f9f,stroke:#333
     style G fill:#9f9,stroke:#333
@@ -1030,10 +1030,10 @@ See [QUICKSTART.md](QUICKSTART.md) for adding your first skill.
 
 ```bash
 # Set for current project
-context-harness config set skills-repo {repo_name}
+ch config set skills-repo {repo_name}
 
 # Set for all projects (user-level)
-context-harness config set skills-repo {repo_name} --global
+ch config set skills-repo {repo_name} --global
 ```
 
 ## Commit Convention
@@ -1223,16 +1223,16 @@ git push origin main
 1. **release-please** creates a release PR bumping `version.txt`
 2. Merge the release PR → tag `my-first-skill@v0.1.0` is created
 3. **sync-registry** rebuilds `skills.json` automatically
-4. Users can now install: `context-harness skill install my-first-skill`
+4. Users can now install: `ch skill install my-first-skill`
 
 ## Install Your Skill
 
 ```bash
 # Configure this registry (one time)
-context-harness config set skills-repo {repo_name}
+ch config set skills-repo {repo_name}
 
 # Install
-context-harness skill install my-first-skill
+ch skill install my-first-skill
 ```
 """
         (repo_path / "QUICKSTART.md").write_text(content, encoding="utf-8")
@@ -1740,7 +1740,7 @@ description: >-
 
 Operational guide for authoring, versioning, and releasing skills within a
 ContextHarness skills registry repository (created via
-`context-harness skill init-repo`).
+`ch skill init-repo`).
 
 ## Golden Rules
 
@@ -1854,7 +1854,7 @@ After a releasable commit merges to main:
    - GitHub Release with changelog
 6. sync-registry.yml triggers on version.txt change
 7. Rebuilds skills.json automatically
-8. Users detect update: context-harness skill outdated
+8. Users detect update: ch skill outdated
 ```
 
 ## Commit Convention Quick Reference

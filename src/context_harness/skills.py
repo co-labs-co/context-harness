@@ -40,7 +40,7 @@ def get_current_skills_repo() -> str:
 
     Uses the layered configuration resolution:
     1. CONTEXT_HARNESS_SKILLS_REPO environment variable
-    2. Project config (opencode.json skillsRegistry.default)
+    2. Project config (.context-harness/config.json skillsRegistry.default)
     3. User config (~/.context-harness/config.json)
     4. Default (co-labs-co/context-harness-skills)
 
@@ -923,9 +923,7 @@ def list_local_skills(
             for skills_dir in skills_dirs:
                 console.print(f"[dim]Checked: {skills_dir}[/dim]")
             console.print()
-            console.print(
-                "[dim]Run 'context-harness init' to initialize ContextHarness.[/dim]"
-            )
+            console.print("[dim]Run 'ch init' to initialize ContextHarness.[/dim]")
         return []
 
     skills: List[LocalSkillInfo] = []
@@ -1015,7 +1013,7 @@ def list_local_skills(
             console.print()
             console.print(
                 "[dim]Extract a skill to share: "
-                "[cyan]context-harness skill extract <name>[/cyan][/dim]"
+                "[cyan]ch skill extract <name>[/cyan][/dim]"
             )
 
     return skills

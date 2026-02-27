@@ -1051,9 +1051,7 @@ class AtlassianOAuthFlow:
         """
         tokens = self.get_tokens()
         if tokens is None:
-            raise OAuthError(
-                "Not authenticated. Run 'context-harness mcp auth atlassian' first."
-            )
+            raise OAuthError("Not authenticated. Run 'ch mcp auth atlassian' first.")
 
         if tokens.is_expired():
             if tokens.refresh_token:
@@ -1064,7 +1062,7 @@ class AtlassianOAuthFlow:
                 except OAuthError:
                     raise OAuthError(
                         "Token refresh failed. Please re-authenticate with "
-                        "'context-harness mcp auth atlassian'"
+                        "'ch mcp auth atlassian'"
                     )
             else:
                 raise OAuthError(
@@ -1397,7 +1395,7 @@ class MCPOAuthFlow:
         tokens = self.get_tokens()
         if tokens is None:
             raise OAuthError(
-                f"Not authenticated. Run 'context-harness mcp auth {self.service_name}' first."
+                f"Not authenticated. Run 'ch mcp auth {self.service_name}' first."
             )
 
         if tokens.is_expired():
@@ -1409,7 +1407,7 @@ class MCPOAuthFlow:
                 except OAuthError:
                     raise OAuthError(
                         f"Token refresh failed. Please re-authenticate with "
-                        f"'context-harness mcp auth {self.service_name}'"
+                        f"'ch mcp auth {self.service_name}'"
                     )
             else:
                 raise OAuthError(

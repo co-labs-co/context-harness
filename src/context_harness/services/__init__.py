@@ -17,6 +17,9 @@ from context_harness.services.oauth_service import (
     MemoryTokenStorage,
     OAuthService,
 )
+from context_harness.services.project_harness_config_service import (
+    ProjectHarnessConfigService,
+)
 from context_harness.services.skill_service import (
     DefaultGitHubClient,
     SkillService,
@@ -34,6 +37,7 @@ from context_harness.services.ignore_service import (
 __all__ = [
     # Config
     "ConfigService",
+    "ProjectHarnessConfigService",
     # MCP
     "MCPService",
     # OAuth

@@ -1,6 +1,6 @@
 """MCP commands for ContextHarness CLI.
 
-Handles the `context-harness mcp` command group for MCP server management.
+Handles the `ch mcp` command group for MCP server management.
 """
 
 from __future__ import annotations
@@ -82,15 +82,15 @@ def mcp_add(server: Optional[str], api_key: Optional[str], target: str) -> None:
 
     Examples:
 
-        context-harness mcp add
+        ch mcp add
 
-        context-harness mcp add context7
+        ch mcp add context7
 
-        context-harness mcp add atlassian
+        ch mcp add atlassian
 
-        context-harness mcp add context7 --api-key YOUR_API_KEY
+        ch mcp add context7 --api-key YOUR_API_KEY
 
-        context-harness mcp add context7 --target ./my-project
+        ch mcp add context7 --target ./my-project
     """
     print_header("MCP Configuration")
 
@@ -134,9 +134,9 @@ def mcp_list(target: str) -> None:
 
     Examples:
 
-        context-harness mcp list
+        ch mcp list
 
-        context-harness mcp list --target ./my-project
+        ch mcp list --target ./my-project
     """
     console.print()
     list_mcp_servers(target=target)
@@ -174,14 +174,14 @@ def mcp_auth(server: str, client_id: Optional[str], status: bool, logout: bool) 
 
     Examples:
 
-        context-harness mcp auth atlassian --client-id YOUR_CLIENT_ID
+        ch mcp auth atlassian --client-id YOUR_CLIENT_ID
 
         export ATLASSIAN_CLIENT_ID=your_client_id
-        context-harness mcp auth atlassian
+        ch mcp auth atlassian
 
-        context-harness mcp auth atlassian --status
+        ch mcp auth atlassian --status
 
-        context-harness mcp auth atlassian --logout
+        ch mcp auth atlassian --logout
     """
     print_header("MCP Authentication")
 
@@ -195,9 +195,7 @@ def mcp_auth(server: str, client_id: Optional[str], status: bool, logout: bool) 
     if server_info.auth_type != "oauth":
         print_warning(f"Server '{server}' does not use OAuth authentication.")
         if server_info.auth_type == "api-key":
-            print_info(
-                f"Use 'context-harness mcp add {server} --api-key YOUR_KEY' instead."
-            )
+            print_info(f"Use 'ch mcp add {server} --api-key YOUR_KEY' instead.")
         raise SystemExit(1)
 
     # Check if this is a registered OAuth provider
@@ -242,10 +240,10 @@ def _handle_oauth_auth(
                 print_info(f"Scopes: {tokens.scope}")
         elif auth_status == AuthStatus.TOKEN_EXPIRED:
             print_warning("Token expired")
-            print_info(f"Run 'context-harness mcp auth {server}' to refresh.")
+            print_info(f"Run 'ch mcp auth {server}' to refresh.")
         else:
             print_info(f"Not authenticated with {display_name}")
-            print_info(f"Run 'context-harness mcp auth {server}' to authenticate.")
+            print_info(f"Run 'ch mcp auth {server}' to authenticate.")
         console.print()
         return
 
@@ -265,9 +263,7 @@ def _handle_oauth_auth(
 
         console.print()
         print_bold("Next steps:")
-        console.print(
-            f"  • Run 'context-harness mcp add {server}' to configure the MCP"
-        )
+        console.print(f"  • Run 'ch mcp add {server}' to configure the MCP")
         console.print("  • The agent will use your stored credentials automatically")
         console.print()
 
