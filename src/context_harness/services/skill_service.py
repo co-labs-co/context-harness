@@ -878,7 +878,15 @@ class SkillService:
         full_name = name
         if "/" not in name:
             full_name = f"{self.github.get_username()}/{name}"
-        self.github.enable_workflow_pr_creation(full_name)
+        workflow_enabled = self.github.enable_workflow_pr_creation(full_name)
+        workflow_warning = None
+        if not workflow_enabled:
+            workflow_warning = (
+                "Could not enable GitHub Actions workflow PR creation. "
+                "Release-please may not be able to open PRs automatically. "
+                "To fix manually: Repository Settings → Actions → General → "
+                "Enable 'Allow GitHub Actions to create and approve pull requests'"
+            )
 
         # 4. Clone → Scaffold → Commit → Push (all in a temp directory)
         try:
@@ -936,13 +944,17 @@ class SkillService:
 
         visibility = RepoVisibility.PRIVATE if private else RepoVisibility.PUBLIC
 
+        success_message = f"Skills registry '{name}' created successfully"
+        if workflow_warning:
+            success_message += f" (Warning: {workflow_warning})"
+
         return Success(
             value=RegistryRepo(
                 name=name,
                 url=repo_url,
                 visibility=visibility,
             ),
-            message=f"Skills registry '{name}' created successfully",
+            message=success_message,
         )
 
     def _write_registry_scaffold(self, repo_path: Path, repo_name: str) -> None:
@@ -1109,7 +1121,7 @@ See [QUICKSTART.md](QUICKSTART.md) for adding your first skill.
 ch config set skills-repo {repo_name}
 
 # Set for all projects (user-level)
-ch config set skills-repo {repo_name} --global
+ch config set skills-repo {repo_name} --user
 ```
 
 ## Commit Convention
@@ -2386,12 +2398,15 @@ python scripts/validate_skills.py
                         existing_idx = i
                         break
 
+                # Use version from metadata if available, otherwise use INITIAL_VERSION
+                skill_version = metadata.version or INITIAL_VERSION
+
                 skill_entry = {
                     "name": skill_name,
                     "description": self._truncate_description(
                         metadata.description, 200
                     ),
-                    "version": metadata.version,
+                    "version": skill_version,
                     "author": self.github.get_username(),
                     "tags": metadata.tags,
                     "path": f"{SKILLS_DIR}/{skill_name}",
@@ -2407,7 +2422,7 @@ python scripts/validate_skills.py
                 # Create version.txt for release-please (bootstrap version)
                 version_file = skill_dest / "version.txt"
                 if not version_file.exists():
-                    version_file.write_text(f"{INITIAL_VERSION}\n")
+                    version_file.write_text(f"{skill_version}\n")
 
                 # Strip version from SKILL.md frontmatter (release-please
                 # manages versions via version.txt, not frontmatter)
@@ -2417,7 +2432,20 @@ python scripts/validate_skills.py
                 skill_package_path = f"{SKILLS_DIR}/{skill_name}"
                 rp_config_path = tmppath / RELEASE_PLEASE_CONFIG
                 if rp_config_path.exists():
-                    rp_config = json.loads(rp_config_path.read_text(encoding="utf-8"))
+                    try:
+                        rp_config = json.loads(
+                            rp_config_path.read_text(encoding="utf-8")
+                        )
+                    except json.JSONDecodeError:
+                        # Invalid JSON, use defaults (no quiet flag in service layer)
+                        rp_config = {
+                            "$schema": "https://raw.githubusercontent.com/googleapis/"
+                            "release-please/main/schemas/config.json",
+                            "separate-pull-requests": True,
+                            "include-component-in-tag": True,
+                            "tag-separator": "@",
+                            "packages": {},
+                        }
                 else:
                     rp_config = {
                         "$schema": "https://raw.githubusercontent.com/googleapis/"
@@ -2438,14 +2466,18 @@ python scripts/validate_skills.py
                 # Update .release-please-manifest.json (add version entry)
                 rp_manifest_path = tmppath / RELEASE_PLEASE_MANIFEST
                 if rp_manifest_path.exists():
-                    rp_manifest = json.loads(
-                        rp_manifest_path.read_text(encoding="utf-8")
-                    )
+                    try:
+                        rp_manifest = json.loads(
+                            rp_manifest_path.read_text(encoding="utf-8")
+                        )
+                    except json.JSONDecodeError:
+                        # Invalid JSON, use defaults
+                        rp_manifest = {}
                 else:
                     rp_manifest = {}
 
                 if skill_package_path not in rp_manifest:
-                    rp_manifest[skill_package_path] = INITIAL_VERSION
+                    rp_manifest[skill_package_path] = skill_version
                     rp_manifest_path.write_text(
                         json.dumps(rp_manifest, indent=2) + "\n"
                     )

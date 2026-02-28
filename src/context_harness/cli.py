@@ -685,17 +685,15 @@ def _set_user_skills_repo(repo: str) -> None:
 
 def _set_project_skills_repo(repo: str) -> None:
     """Set skills repo in project config (.context-harness/config.json)."""
-    from context_harness.primitives.config import (
-        ProjectHarnessConfig,
-        SkillsRegistryConfig,
-    )
+    from context_harness.primitives.config import ProjectHarnessConfig
     from context_harness.services.project_harness_config_service import (
         ProjectHarnessConfigService,
     )
 
     service = ProjectHarnessConfigService()
 
-    # Load existing config
+    # Pre-flight check: verify config file is readable/parseable before writing
+    # This catches permission/parse errors early before attempting to save
     result = service.load()
     if isinstance(result, Failure):
         console.print(f"[red]Error: {result.error}[/red]")

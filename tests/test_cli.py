@@ -705,3 +705,249 @@ class TestMCPCommand:
 
             cwd = Path(os.getcwd())
             assert (cwd / "opencode.json").is_file()
+
+
+class TestConfigCommand:
+    """Tests for the config command group."""
+
+    def test_config_help(self, runner):
+        """Test that config --help works."""
+        result = runner.invoke(main, ["config", "--help"])
+        assert result.exit_code == 0
+        assert "configuration" in result.output.lower()
+
+    def test_config_set_skills_repo_project(self, runner, tmp_path):
+        """Test setting skills-repo in project config."""
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            # Create .context-harness directory
+            Path(".context-harness").mkdir()
+
+            result = runner.invoke(
+                main,
+                ["config", "set", "skills-repo", "my-org/my-skills"],
+            )
+            assert result.exit_code == 0
+            assert (
+                "Set skills-repo to 'my-org/my-skills' in project config"
+                in result.output
+            )
+
+            # Verify config file was created with correct content
+            config_file = Path(".context-harness") / "config.json"
+            assert config_file.is_file()
+
+            config = json.loads(config_file.read_text(encoding="utf-8"))
+            assert "skillsRegistry" in config
+            assert config["skillsRegistry"]["default"] == "my-org/my-skills"
+
+    def test_config_set_skills_repo_project_explicit_flag(self, runner, tmp_path):
+        """Test setting skills-repo with explicit --project flag."""
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            # Create .context-harness directory
+            Path(".context-harness").mkdir()
+
+            result = runner.invoke(
+                main,
+                ["config", "set", "skills-repo", "test-org/test-repo", "--project"],
+            )
+            assert result.exit_code == 0
+            assert "project config" in result.output
+
+    def test_config_unset_skills_repo_project(self, runner, tmp_path):
+        """Test unsetting skills-repo in project config."""
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            # Create .context-harness directory and set a value first
+            Path(".context-harness").mkdir()
+            runner.invoke(
+                main,
+                ["config", "set", "skills-repo", "my-org/my-skills"],
+            )
+
+            # Verify it was set
+            config_file = Path(".context-harness") / "config.json"
+            assert config_file.is_file()
+
+            # Now unset it
+            result = runner.invoke(
+                main,
+                ["config", "unset", "skills-repo"],
+            )
+            assert result.exit_code == 0
+            assert "Removed skills-repo from project config" in result.output
+
+            # Verify config was cleaned up (should be empty dict now)
+            config = json.loads(config_file.read_text(encoding="utf-8"))
+            assert (
+                "skillsRegistry" not in config or config.get("skillsRegistry") is None
+            )
+
+    def test_config_get_skills_repo_project(self, runner, tmp_path):
+        """Test getting skills-repo value after setting in project config."""
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            # Create .context-harness directory and set a value
+            Path(".context-harness").mkdir()
+            runner.invoke(
+                main,
+                ["config", "set", "skills-repo", "my-org/my-skills"],
+            )
+
+            # Get the value
+            result = runner.invoke(
+                main,
+                ["config", "get", "skills-repo"],
+            )
+            assert result.exit_code == 0
+            assert "my-org/my-skills" in result.output
+            assert "Source: project" in result.output
+
+    def test_config_set_skills_repo_user(self, runner, tmp_path):
+        """Test setting skills-repo in user config."""
+        # Create a temporary user config directory
+        user_config_dir = tmp_path / "user_config"
+        user_config_dir.mkdir()
+        user_config_path = user_config_dir / "config.json"
+
+        # Mock the UserConfig.config_path method to use tmp_path
+        from unittest.mock import patch
+
+        with patch(
+            "context_harness.primitives.config.UserConfig.config_path",
+            return_value=user_config_path,
+        ):
+            with patch(
+                "context_harness.primitives.config.UserConfig.config_dir",
+                return_value=user_config_dir,
+            ):
+                result = runner.invoke(
+                    main,
+                    ["config", "set", "skills-repo", "user-org/user-skills", "--user"],
+                )
+
+        assert result.exit_code == 0
+        assert (
+            "Set skills-repo to 'user-org/user-skills' in user config" in result.output
+        )
+
+        # Verify user config file was created
+        assert user_config_path.is_file()
+        config = json.loads(user_config_path.read_text(encoding="utf-8"))
+        assert config["skillsRegistry"]["default"] == "user-org/user-skills"
+
+    def test_config_unset_skills_repo_user(self, runner, tmp_path):
+        """Test unsetting skills-repo in user config."""
+        # Create a temporary user config
+        user_config_dir = tmp_path / "user_config"
+        user_config_dir.mkdir()
+        user_config_path = user_config_dir / "config.json"
+
+        from unittest.mock import patch
+
+        with patch(
+            "context_harness.primitives.config.UserConfig.config_path",
+            return_value=user_config_path,
+        ):
+            with patch(
+                "context_harness.primitives.config.UserConfig.config_dir",
+                return_value=user_config_dir,
+            ):
+                # Set a value first
+                runner.invoke(
+                    main,
+                    ["config", "set", "skills-repo", "user-org/user-skills", "--user"],
+                )
+
+                # Verify it was set
+                assert user_config_path.is_file()
+
+                # Unset it
+                result = runner.invoke(
+                    main,
+                    ["config", "unset", "skills-repo", "--user"],
+                )
+
+        assert result.exit_code == 0
+        assert "Removed skills-repo from user config" in result.output
+
+    def test_config_set_skills_repo_creates_context_harness_dir(self, runner, tmp_path):
+        """Test setting project config creates .context-harness directory if needed."""
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            # Try to set config without .context-harness directory
+            result = runner.invoke(
+                main,
+                ["config", "set", "skills-repo", "my-org/my-skills"],
+            )
+
+            # Should succeed and create the directory
+            assert result.exit_code == 0
+            assert Path(".context-harness").is_dir()
+            assert Path(".context-harness/config.json").is_file()
+
+    def test_config_get_skills_repo_not_set(self, runner, tmp_path):
+        """Test getting skills-repo when nothing is configured (should show default)."""
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            # Create .context-harness directory but don't set any config
+            Path(".context-harness").mkdir()
+
+            result = runner.invoke(
+                main,
+                ["config", "get", "skills-repo"],
+            )
+
+            assert result.exit_code == 0
+            # Should show the default value
+            assert "co-labs-co/context-harness-skills" in result.output
+            assert "Source: default" in result.output
+
+    def test_config_list_shows_skills_repo(self, runner, tmp_path):
+        """Test that config list shows skills-repo information."""
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            # Create .context-harness directory and set a value
+            Path(".context-harness").mkdir()
+            runner.invoke(
+                main,
+                ["config", "set", "skills-repo", "my-org/my-skills"],
+            )
+
+            result = runner.invoke(
+                main,
+                ["config", "list"],
+            )
+
+            assert result.exit_code == 0
+            assert "Skills Registry" in result.output
+            assert "skills-repo" in result.output
+            assert "my-org/my-skills" in result.output
+            assert "Configuration Paths" in result.output
+
+    def test_config_set_invalid_key(self, runner, tmp_path):
+        """Test setting an unknown configuration key."""
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            Path(".context-harness").mkdir()
+
+            result = runner.invoke(
+                main,
+                ["config", "set", "invalid-key", "some-value"],
+            )
+
+            assert result.exit_code == 1
+            assert "Unknown configuration key" in result.output
+
+    def test_config_get_invalid_key(self, runner, tmp_path):
+        """Test getting an unknown configuration key."""
+        result = runner.invoke(
+            main,
+            ["config", "get", "invalid-key"],
+        )
+
+        assert result.exit_code == 1
+        assert "Unknown configuration key" in result.output
+
+    def test_config_unset_invalid_key(self, runner, tmp_path):
+        """Test unsetting an unknown configuration key."""
+        result = runner.invoke(
+            main,
+            ["config", "unset", "invalid-key"],
+        )
+
+        assert result.exit_code == 1
+        assert "Unknown configuration key" in result.output

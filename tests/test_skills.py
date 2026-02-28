@@ -1200,7 +1200,7 @@ class TestExtractReleasePleaseFiles:
 
         # Verify version.txt was created
         assert "skill/test-skill/version.txt" in created_files
-        assert created_files["skill/test-skill/version.txt"].strip() == "0.1.0"
+        assert created_files["skill/test-skill/version.txt"].strip() == "1.0.0"
 
         # Verify SKILL.md has version stripped from frontmatter
         assert "skill/test-skill/SKILL.md" in created_files
@@ -1217,7 +1217,7 @@ class TestExtractReleasePleaseFiles:
         # Verify .release-please-manifest.json was created
         assert ".release-please-manifest.json" in created_files
         rp_manifest = json.loads(created_files[".release-please-manifest.json"])
-        assert rp_manifest["skill/test-skill"] == "0.1.0"
+        assert rp_manifest["skill/test-skill"] == "1.0.0"
 
     @patch("context_harness.skills.check_gh_auth")
     @patch("context_harness.skills.check_repo_access")
@@ -1339,7 +1339,7 @@ class TestExtractReleasePleaseFiles:
 
         rp_manifest = json.loads(created_files[".release-please-manifest.json"])
         assert rp_manifest["skill/existing-skill"] == "1.2.3"
-        assert rp_manifest["skill/test-skill"] == "0.1.0"
+        assert rp_manifest["skill/test-skill"] == "1.0.0"
 
 
 class TestCheckUpdatesSkillsRepo:

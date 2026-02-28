@@ -164,7 +164,7 @@ class TestOpenCodeConfigNoSkillsRegistry:
         config = OpenCodeConfig.from_dict(
             {"skillsRegistry": {"default": "custom/repo"}}
         )
-        assert not hasattr(config, "skills_registry") or config.skills_registry is None  # type: ignore[attr-defined]
+        assert not hasattr(config, "skills_registry")
 
     def test_to_dict_no_skills_registry(self) -> None:
         """Test to_dict does not include skillsRegistry."""

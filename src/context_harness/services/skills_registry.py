@@ -96,7 +96,7 @@ def resolve_skills_repo_with_loading(
             with open(config_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
             project_config = ProjectHarnessConfig.from_dict(data)
-        except (json.JSONDecodeError, ValueError, OSError):
+        except (json.JSONDecodeError, ValueError, OSError, AttributeError, TypeError):
             pass  # Invalid or unreadable config, fall through to next option
 
     if project_config and project_config.skills_registry:
@@ -146,7 +146,7 @@ def get_skills_repo_info() -> Result[dict]:
             project_config = ProjectHarnessConfig.from_dict(data)
             if project_config.skills_registry:
                 project_value = project_config.skills_registry.default
-        except (json.JSONDecodeError, OSError):
+        except (json.JSONDecodeError, OSError, AttributeError, TypeError):
             pass  # Invalid or unreadable config, project_value stays None
 
     # Load user config
@@ -159,7 +159,7 @@ def get_skills_repo_info() -> Result[dict]:
             user_config = UserConfig.from_dict(data)
             if user_config.skills_registry:
                 user_value = user_config.skills_registry.default
-        except (json.JSONDecodeError, OSError):
+        except (json.JSONDecodeError, OSError, AttributeError, TypeError):
             pass  # Invalid or unreadable config, user_value stays None
 
     repo, source = resolve_skills_repo_with_loading()

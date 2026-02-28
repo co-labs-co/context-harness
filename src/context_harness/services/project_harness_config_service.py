@@ -74,6 +74,15 @@ class ProjectHarnessConfigService:
         try:
             with open(self._config_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
+
+            # Validate that parsed JSON is a dict
+            if not isinstance(data, dict):
+                return Failure(
+                    error="Invalid project config: expected a JSON object",
+                    code=ErrorCode.CONFIG_INVALID,
+                    details={"path": str(self._config_path)},
+                )
+
             config = ProjectHarnessConfig.from_dict(data)
             return Success(value=config)
         except json.JSONDecodeError as e:

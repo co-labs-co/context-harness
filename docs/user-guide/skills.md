@@ -645,27 +645,6 @@ $ ch skill list-local
 └────────────────────┴────────────────────────────────────┴─────────┴────────┘
 ```
 
-**Example output:**
-
-```
-┏━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┓
-┃ Skill           ┃ Installed     ┃ Latest        ┃ Status              ┃
-┡━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━┩
-│ react-forms     │ 0.1.0         │ 0.2.0         │ upgrade available   │
-│ fastapi-crud    │ 1.0.0         │ 1.0.0         │ up to date          │
-└─────────────────┴───────────────┴───────────────┴─────────────────────┘
-```
-
-### Upgrade Skills
-
-```bash
-# Upgrade a single skill
-ch skill upgrade react-forms
-
-# Upgrade all outdated skills at once
-ch skill upgrade --all
-```
-
 ### Compatibility
 
 Skills can declare a minimum ContextHarness version they require via `min_context_harness_version` in their metadata. If your installed version is too old, the upgrade is blocked:

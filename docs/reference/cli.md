@@ -312,18 +312,6 @@ Checking for skill updates...
 └────────────────────┴───────────────┴───────────────┴─────────────────────┘
 ```
 
-**Example output:**
-
-```
-┏━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┓
-┃ Skill           ┃ Installed     ┃ Latest        ┃ Status              ┃
-┡━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━┩
-│ react-forms     │ 0.1.0         │ 0.2.0         │ upgrade available   │
-│ fastapi-crud    │ 1.0.0         │ 1.0.0         │ up to date          │
-│ django-auth     │ 0.3.0         │ 0.3.1         │ upgrade available   │
-└─────────────────┴───────────────┴───────────────┴─────────────────────┘
-```
-
 If a skill requires a newer version of ContextHarness than is currently installed, it is shown with status `incompatible`.
 
 ### skill upgrade

@@ -762,10 +762,13 @@ def extract_skill(
                     existing_idx = i
                     break
 
+            # Use version from frontmatter if available, otherwise use INITIAL_VERSION
+            skill_version = frontmatter.get("version", INITIAL_VERSION)
+
             skill_entry = {
                 "name": skill_name,
                 "description": _truncate_description(skill_description, 200),
-                "version": frontmatter.get("version", "0.1.0"),
+                "version": skill_version,
                 "author": _get_github_username(),
                 "tags": [],  # Can be expanded later
                 "path": f"{SKILLS_DIR}/{skill_name}",
@@ -781,7 +784,7 @@ def extract_skill(
             # Create version.txt for release-please (bootstrap version)
             version_file = skill_dest / "version.txt"
             if not version_file.exists():
-                version_file.write_text(f"{INITIAL_VERSION}\n")
+                version_file.write_text(f"{skill_version}\n")
                 if not quiet:
                     console.print(
                         f"[dim]Created {SKILLS_DIR}/{skill_name}/version.txt[/dim]"
@@ -795,7 +798,21 @@ def extract_skill(
             skill_package_path = f"{SKILLS_DIR}/{skill_name}"
             rp_config_path = tmppath / RELEASE_PLEASE_CONFIG
             if rp_config_path.exists():
-                rp_config = json.loads(rp_config_path.read_text(encoding="utf-8"))
+                try:
+                    rp_config = json.loads(rp_config_path.read_text(encoding="utf-8"))
+                except json.JSONDecodeError:
+                    if not quiet:
+                        console.print(
+                            "[yellow]⚠️  Invalid JSON in release-please-config.json, using defaults[/yellow]"
+                        )
+                    rp_config = {
+                        "$schema": "https://raw.githubusercontent.com/googleapis/"
+                        "release-please/main/schemas/config.json",
+                        "separate-pull-requests": True,
+                        "include-component-in-tag": True,
+                        "tag-separator": "@",
+                        "packages": {},
+                    }
             else:
                 rp_config = {
                     "$schema": "https://raw.githubusercontent.com/googleapis/"
@@ -818,12 +835,21 @@ def extract_skill(
             # Update .release-please-manifest.json (add version entry)
             rp_manifest_path = tmppath / RELEASE_PLEASE_MANIFEST
             if rp_manifest_path.exists():
-                rp_manifest = json.loads(rp_manifest_path.read_text(encoding="utf-8"))
+                try:
+                    rp_manifest = json.loads(
+                        rp_manifest_path.read_text(encoding="utf-8")
+                    )
+                except json.JSONDecodeError:
+                    if not quiet:
+                        console.print(
+                            "[yellow]⚠️  Invalid JSON in .release-please-manifest.json, using defaults[/yellow]"
+                        )
+                    rp_manifest = {}
             else:
                 rp_manifest = {}
 
             if skill_package_path not in rp_manifest:
-                rp_manifest[skill_package_path] = INITIAL_VERSION
+                rp_manifest[skill_package_path] = skill_version
                 rp_manifest_path.write_text(json.dumps(rp_manifest, indent=2) + "\n")
                 if not quiet:
                     console.print(f"[dim]Registered in {RELEASE_PLEASE_MANIFEST}[/dim]")

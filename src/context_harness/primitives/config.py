@@ -139,9 +139,16 @@ class ProjectHarnessConfig:
         Returns:
             ProjectHarnessConfig instance
         """
+        # Validate that data is a dict
+        if not isinstance(data, dict):
+            return cls()
+
         skills_registry = None
-        if "skillsRegistry" in data:
-            skills_registry = SkillsRegistryConfig.from_dict(data["skillsRegistry"])
+        registry_data = data.get("skillsRegistry") or data.get("skills_registry")
+
+        # Validate that skillsRegistry value is a dict
+        if registry_data is not None and isinstance(registry_data, dict):
+            skills_registry = SkillsRegistryConfig.from_dict(registry_data)
 
         return cls(skills_registry=skills_registry)
 
