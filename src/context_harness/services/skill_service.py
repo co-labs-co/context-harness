@@ -91,6 +91,22 @@ class GitHubClient(Protocol):
         """
         ...
 
+    def enable_workflow_pr_creation(self, repo: str) -> bool:
+        """Enable GitHub Actions to create and approve pull requests.
+
+        Sets ``default_workflow_permissions`` to ``write`` and
+        ``can_approve_pull_request_reviews`` to ``true`` on the repository.
+        This is required for release-please (and other Actions) to open PRs
+        using the default ``GITHUB_TOKEN``.
+
+        Args:
+            repo: Repository in "owner/name" format
+
+        Returns:
+            True if the setting was applied successfully, False otherwise
+        """
+        ...
+
 
 class DefaultGitHubClient:
     """Default GitHub client using gh CLI."""
@@ -223,6 +239,40 @@ class DefaultGitHubClient:
             return result.stdout.strip()
         except (subprocess.CalledProcessError, FileNotFoundError):
             return None
+
+    def enable_workflow_pr_creation(self, repo: str) -> bool:
+        """Enable GitHub Actions to create and approve pull requests.
+
+        Uses the GitHub REST API to set ``default_workflow_permissions`` to
+        ``write`` and ``can_approve_pull_request_reviews`` to ``true``.
+        Without this, release-please cannot open PRs using ``GITHUB_TOKEN``.
+
+        Args:
+            repo: Repository in "owner/name" format
+
+        Returns:
+            True if the setting was applied, False otherwise
+        """
+        try:
+            subprocess.run(
+                [
+                    "gh",
+                    "api",
+                    f"/repos/{repo}/actions/permissions/workflow",
+                    "-X",
+                    "PUT",
+                    "-f",
+                    "default_workflow_permissions=write",
+                    "-F",
+                    "can_approve_pull_request_reviews=true",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            return True
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            return False
 
 
 class SkillService:
@@ -812,6 +862,14 @@ class SkillService:
                 details={"repo": name},
             )
 
+        # 3b. Enable GitHub Actions to create PRs (required for release-please).
+        #     Resolve the full "owner/repo" form so the API call works even
+        #     when the user passed a bare repo name like "my-skills".
+        full_name = name
+        if "/" not in name:
+            full_name = f"{self.github.get_username()}/{name}"
+        self.github.enable_workflow_pr_creation(full_name)
+
         # 4. Clone → Scaffold → Commit → Push (all in a temp directory)
         try:
             with tempfile.TemporaryDirectory() as tmpdir:
@@ -1029,6 +1087,11 @@ flowchart TD
 
 See [QUICKSTART.md](QUICKSTART.md) for adding your first skill.
 
+> **Important:** If you did not create this repo with `ch skill init-repo`,
+> you must enable *"Allow GitHub Actions to create and approve pull requests"*
+> in **Settings → Actions → General** for release-please to work.
+> See [QUICKSTART.md](QUICKSTART.md#repository-setup) for details.
+
 ## Configure as Your Registry
 
 ```bash
@@ -1168,6 +1231,28 @@ This guide walks you through adding a skill to **{repo_name}**.
 - Git installed
 - GitHub CLI (`gh`) installed and authenticated
 - Repository cloned locally
+- **GitHub Actions must be allowed to create pull requests** (see below)
+
+## Repository Setup
+
+> **Note:** If you created this repository with `ch skill init-repo`, these
+> settings are already configured automatically. Skip to [Steps](#steps).
+
+release-please needs permission to open pull requests using `GITHUB_TOKEN`.
+Enable this in your repository settings:
+
+1. Go to **Settings → Actions → General**
+2. Under *Workflow permissions*, select **Read and write permissions**
+3. Check **Allow GitHub Actions to create and approve pull requests**
+4. Click **Save**
+
+Or use the GitHub CLI:
+
+```bash
+gh api repos/OWNER/REPO/actions/permissions/workflow \
+  -X PUT -f default_workflow_permissions=write \
+  -F can_approve_pull_request_reviews=true
+```
 
 ## Steps
 
@@ -1311,6 +1396,14 @@ on:
     branches:
       - main
 
+# IMPORTANT: The repository must also have "Allow GitHub Actions to create
+# and approve pull requests" enabled under Settings > Actions > General.
+# Without this, the GITHUB_TOKEN cannot open release PRs even with the
+# permissions block below.  `ch skill init-repo` enables this automatically;
+# if you created the repo manually, enable it in the settings UI or run:
+#   gh api repos/OWNER/REPO/actions/permissions/workflow \\
+#     -X PUT -f default_workflow_permissions=write \\
+#     -F can_approve_pull_request_reviews=true
 permissions:
   contents: write
   pull-requests: write

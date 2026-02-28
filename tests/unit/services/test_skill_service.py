@@ -96,6 +96,13 @@ This is a test skill.
         )
         return self._create_repo_url
 
+    def enable_workflow_pr_creation(self, repo: str) -> bool:
+        self._enable_workflow_pr_calls: list[str] = getattr(
+            self, "_enable_workflow_pr_calls", []
+        )
+        self._enable_workflow_pr_calls.append(repo)
+        return True
+
 
 def create_test_registry(skills: List[dict]) -> str:
     """Create a test registry JSON string."""
@@ -1611,3 +1618,69 @@ class TestSkillServiceInitRegistryRepo:
             service.init_registry_repo("my-skills", private=False)
 
         assert client._create_repo_calls[0]["private"] is False
+
+    # -- Workflow permissions -------------------------------------------------
+
+    def test_init_repo_enables_workflow_pr_creation_bare_name(self) -> None:
+        """Bare repo name → enable_workflow_pr_creation called with user/repo."""
+        client = MockGitHubClient(
+            has_repo_access=False,
+            create_repo_url="https://github.com/test-user/my-skills",
+            username="test-user",
+        )
+        service = SkillService(github_client=client)
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            service.init_registry_repo("my-skills")
+
+        assert hasattr(client, "_enable_workflow_pr_calls")
+        assert client._enable_workflow_pr_calls == ["test-user/my-skills"]
+
+    def test_init_repo_enables_workflow_pr_creation_org_name(self) -> None:
+        """Org/repo name → enable_workflow_pr_creation called with org/repo."""
+        client = MockGitHubClient(
+            has_repo_access=False,
+            create_repo_url="https://github.com/my-org/team-skills",
+        )
+        service = SkillService(github_client=client)
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            service.init_registry_repo("my-org/team-skills")
+
+        assert hasattr(client, "_enable_workflow_pr_calls")
+        assert client._enable_workflow_pr_calls == ["my-org/team-skills"]
+
+    # -- Scaffold content: workflow permissions docs -------------------------
+
+    def test_scaffold_release_yml_contains_permissions_comment(
+        self, tmp_path: Path
+    ) -> None:
+        """release.yml contains comment about enabling workflow PR creation."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        content = (tmp_path / ".github" / "workflows" / "release.yml").read_text()
+        assert "Allow GitHub Actions to create" in content
+        assert "Settings > Actions > General" in content
+        assert "gh api repos/OWNER/REPO/actions/permissions/workflow" in content
+
+    def test_scaffold_quickstart_contains_setup_section(self, tmp_path: Path) -> None:
+        """QUICKSTART.md documents the required repository setup step."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        content = (tmp_path / "QUICKSTART.md").read_text()
+        assert "Repository Setup" in content
+        assert "Allow GitHub Actions to create and approve pull requests" in content
+        assert "can_approve_pull_request_reviews" in content
+
+    def test_scaffold_readme_contains_setup_note(self, tmp_path: Path) -> None:
+        """README.md mentions the workflow permissions requirement."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        readme = (tmp_path / "README.md").read_text()
+        assert "Settings" in readme
+        assert "Actions" in readme
