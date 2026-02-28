@@ -720,14 +720,31 @@ def extract_skill(
             tmppath = Path(tmpdir)
 
             # Clone the skills repo (shallow)
-            skills_repo = get_current_skills_repo()
+            skills_repo, repo_source = resolve_skills_repo_with_loading()
             if not quiet:
+                console.print(
+                    f"[dim]DEBUG resolve: repo={skills_repo} "
+                    f"source={repo_source} "
+                    f"cwd={Path.cwd()}[/dim]"
+                )
                 console.print("[dim]Cloning skills repository...[/dim]")
             subprocess.run(
                 ["gh", "repo", "clone", skills_repo, tmpdir, "--", "--depth=1"],
                 capture_output=True,
                 check=True,
             )
+
+            # DEBUG: Show what origin actually points to after gh clone
+            if not quiet:
+                _remote_result = subprocess.run(
+                    ["git", "-C", tmpdir, "remote", "-v"],
+                    capture_output=True,
+                    text=True,
+                )
+                console.print(
+                    f"[dim]DEBUG remotes after clone:\n"
+                    f"{_remote_result.stdout.strip()}[/dim]"
+                )
 
             # Create and checkout branch
             subprocess.run(
@@ -805,6 +822,10 @@ def extract_skill(
 
             # Create PR
             if not quiet:
+                console.print(
+                    f"[dim]DEBUG gh pr create --repo {skills_repo} "
+                    f"--head {branch_name}[/dim]"
+                )
                 console.print("[dim]Creating pull request...[/dim]")
             pr_body = f"""## New Skill: {skill_name}
 
