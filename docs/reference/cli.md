@@ -160,6 +160,21 @@ List skills installed in the current project. Searches both `.opencode/skill/` a
 ch skill list-local
 ```
 
+**Example output:**
+
+```
+                         Local Skills
+┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━┓
+┃ Name               ┃ Description                        ┃ Version ┃ Status ┃
+┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━┩
+│ python-cli-click   │ Patterns for building Click CLI ... │ 0.2.0   │ ✓      │
+│ react-forms        │ React form handling with validation │ 0.1.0   │ ✓      │
+└────────────────────┴────────────────────────────────────┴─────────┴────────┘
+```
+
+!!! tip "Version Resolution"
+    If a skill has a `version.txt` file (from a release-please-managed registry), that version takes precedence over the `version:` field in SKILL.md frontmatter.
+
 ### skill info
 
 Show details for a specific skill.
@@ -284,6 +299,22 @@ ch skill outdated
 **Example output:**
 
 ```
+Checking for skill updates...
+
+                              Skill Updates
+┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┓
+┃ Skill              ┃ Installed     ┃ Latest        ┃ Status              ┃
+┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━┩
+│ python-cli-click   │ 0.2.0         │ 0.3.0         │ upgrade available   │
+│ react-forms        │ 0.1.0         │ 0.2.0         │ upgrade available   │
+│ fastapi-crud       │ 1.0.0         │ 1.0.0         │ up to date          │
+│ django-auth        │ 0.3.0         │ 0.3.1         │ upgrade available   │
+└────────────────────┴───────────────┴───────────────┴─────────────────────┘
+```
+
+**Example output:**
+
+```
 ┏━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┓
 ┃ Skill           ┃ Installed     ┃ Latest        ┃ Status              ┃
 ┡━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━┩
@@ -300,9 +331,18 @@ If a skill requires a newer version of ContextHarness than is currently installe
 Upgrade one or all installed skills to the latest registry version.
 
 ```bash
-ch skill upgrade <name>        # Upgrade a specific skill
-ch skill upgrade --all         # Upgrade all outdated skills
+ch skill upgrade <name>          # Upgrade a specific skill
+ch skill upgrade --all           # Upgrade all outdated skills
 ch skill upgrade <name> --force  # Upgrade even if version is incompatible
+```
+
+**Example output:**
+
+```
+$ ch skill upgrade python-cli-click
+Upgrading skill: python-cli-click...
+
+✅ Upgraded python-cli-click from 0.2.0 → 0.3.0
 ```
 
 **Options:**

@@ -53,7 +53,22 @@ ch skill info react-forms
 ch skill list-local
 ```
 
+**Example output:**
+
+```
+                         Local Skills
+┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━┓
+┃ Name               ┃ Description                        ┃ Version ┃ Status ┃
+┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━┩
+│ python-cli-click   │ Patterns for building Click CLI ... │ 0.2.0   │ ✓      │
+│ react-forms        │ React form handling with validation │ 0.1.0   │ ✓      │
+└────────────────────┴────────────────────────────────────┴─────────┴────────┘
+```
+
 This command searches both `.opencode/skill/` and `.claude/skills/` directories.
+
+!!! tip "Version Resolution"
+    If a skill has a `version.txt` file (from a release-please-managed registry), that version is used. Otherwise, the `version:` field in SKILL.md frontmatter is used.
 
 ## Skill Structure
 
@@ -561,6 +576,73 @@ See which of your installed skills have newer versions available:
 
 ```bash
 ch skill outdated
+```
+
+**Example output:**
+
+```
+Checking for skill updates...
+
+                              Skill Updates
+┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┓
+┃ Skill              ┃ Installed     ┃ Latest        ┃ Status              ┃
+┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━┩
+│ python-cli-click   │ 0.2.0         │ 0.3.0         │ upgrade available   │
+│ react-forms        │ 0.1.0         │ 0.2.0         │ upgrade available   │
+│ fastapi-crud       │ 1.0.0         │ 1.0.0         │ up to date          │
+└────────────────────┴───────────────┴───────────────┴─────────────────────┘
+```
+
+### Upgrade Skills
+
+```bash
+# Upgrade a single skill
+ch skill upgrade python-cli-click
+```
+
+**Example output:**
+
+```
+Upgrading skill: python-cli-click...
+
+✅ Upgraded python-cli-click from 0.2.0 → 0.3.0
+```
+
+```bash
+# Upgrade all outdated skills at once
+ch skill upgrade --all
+```
+
+### Full Workflow Example
+
+A typical check → upgrade → verify flow:
+
+```bash
+# 1. See what's outdated
+$ ch skill outdated
+Checking for skill updates...
+
+                              Skill Updates
+┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┓
+┃ Skill              ┃ Installed     ┃ Latest        ┃ Status              ┃
+┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━┩
+│ python-cli-click   │ 0.2.0         │ 0.3.0         │ upgrade available   │
+└────────────────────┴───────────────┴───────────────┴─────────────────────┘
+
+# 2. Upgrade the skill
+$ ch skill upgrade python-cli-click
+Upgrading skill: python-cli-click...
+
+✅ Upgraded python-cli-click from 0.2.0 → 0.3.0
+
+# 3. Verify the upgrade
+$ ch skill list-local
+                         Local Skills
+┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━┓
+┃ Name               ┃ Description                        ┃ Version ┃ Status ┃
+┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━┩
+│ python-cli-click   │ Patterns for building Click CLI ... │ 0.3.0   │ ✓      │
+└────────────────────┴────────────────────────────────────┴─────────┴────────┘
 ```
 
 **Example output:**
