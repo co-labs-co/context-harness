@@ -41,6 +41,9 @@ from context_harness.primitives import (
 
 SKILLS_REGISTRY_PATH = "skills.json"
 SKILLS_DIR = "skill"
+RELEASE_PLEASE_CONFIG = "release-please-config.json"
+RELEASE_PLEASE_MANIFEST = ".release-please-manifest.json"
+INITIAL_VERSION = "0.1.0"
 
 
 class GitHubClient(Protocol):
@@ -2298,6 +2301,52 @@ python scripts/validate_skills.py
 
                 registry_path.write_text(json.dumps(registry, indent=2) + "\n")
 
+                # Create version.txt for release-please (bootstrap version)
+                version_file = skill_dest / "version.txt"
+                if not version_file.exists():
+                    version_file.write_text(f"{INITIAL_VERSION}\n")
+
+                # Strip version from SKILL.md frontmatter (release-please
+                # manages versions via version.txt, not frontmatter)
+                self._strip_frontmatter_version(skill_dest / "SKILL.md")
+
+                # Update release-please-config.json (add package entry)
+                skill_package_path = f"{SKILLS_DIR}/{skill_name}"
+                rp_config_path = tmppath / RELEASE_PLEASE_CONFIG
+                if rp_config_path.exists():
+                    rp_config = json.loads(rp_config_path.read_text(encoding="utf-8"))
+                else:
+                    rp_config = {
+                        "$schema": "https://raw.githubusercontent.com/googleapis/"
+                        "release-please/main/schemas/config.json",
+                        "separate-pull-requests": True,
+                        "include-component-in-tag": True,
+                        "tag-separator": "@",
+                        "packages": {},
+                    }
+
+                if skill_package_path not in rp_config.get("packages", {}):
+                    rp_config.setdefault("packages", {})[skill_package_path] = {
+                        "release-type": "simple",
+                        "component": skill_name,
+                    }
+                    rp_config_path.write_text(json.dumps(rp_config, indent=2) + "\n")
+
+                # Update .release-please-manifest.json (add version entry)
+                rp_manifest_path = tmppath / RELEASE_PLEASE_MANIFEST
+                if rp_manifest_path.exists():
+                    rp_manifest = json.loads(
+                        rp_manifest_path.read_text(encoding="utf-8")
+                    )
+                else:
+                    rp_manifest = {}
+
+                if skill_package_path not in rp_manifest:
+                    rp_manifest[skill_package_path] = INITIAL_VERSION
+                    rp_manifest_path.write_text(
+                        json.dumps(rp_manifest, indent=2) + "\n"
+                    )
+
                 # Commit changes
                 subprocess.run(
                     ["git", "-C", tmpdir, "add", "."],
@@ -2331,13 +2380,25 @@ python scripts/validate_skills.py
 
 ### Files Added
 - `{SKILLS_DIR}/{skill_name}/SKILL.md`
+- `{SKILLS_DIR}/{skill_name}/version.txt`
 """
                 for item in skill_dest.rglob("*"):
-                    if item.is_file() and item.name != "SKILL.md":
+                    if item.is_file() and item.name not in (
+                        "SKILL.md",
+                        "version.txt",
+                    ):
                         rel_path = item.relative_to(skill_dest)
                         pr_body += f"- `{SKILLS_DIR}/{skill_name}/{rel_path}`\n"
 
-                pr_body += "\n---\n_Extracted via ContextHarness skill extractor_\n"
+                pr_body += f"""
+### Registry Files Updated
+- `{SKILLS_REGISTRY_PATH}`
+- `{RELEASE_PLEASE_CONFIG}`
+- `{RELEASE_PLEASE_MANIFEST}`
+
+---
+_Extracted via ContextHarness skill extractor_
+"""
 
                 pr_result = subprocess.run(
                     [
@@ -2423,3 +2484,34 @@ python scripts/validate_skills.py
             truncated = truncated[:last_space]
 
         return truncated + "..."
+
+    @staticmethod
+    def _strip_frontmatter_version(skill_md_path: Path) -> None:
+        """Remove the version field from SKILL.md frontmatter.
+
+        In a skills registry, version is managed by release-please via
+        version.txt, not by the SKILL.md frontmatter.
+
+        Args:
+            skill_md_path: Path to the SKILL.md file
+        """
+        if not skill_md_path.exists():
+            return
+
+        content = skill_md_path.read_text(encoding="utf-8")
+
+        if not content.startswith("---"):
+            return
+
+        end_idx = content.find("---", 3)
+        if end_idx == -1:
+            return
+
+        frontmatter_text = content[3:end_idx]
+        body = content[end_idx:]
+
+        lines = frontmatter_text.split("\n")
+        filtered = [line for line in lines if not line.strip().startswith("version:")]
+        new_frontmatter = "\n".join(filtered)
+
+        skill_md_path.write_text(f"---{new_frontmatter}{body}", encoding="utf-8")
