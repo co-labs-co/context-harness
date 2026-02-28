@@ -915,6 +915,87 @@ This is not valid YAML: [unclosed bracket
         # Should still be marked as valid since _parse_skill_frontmatter has fallback
         # The YAML parser will fail but fallback to simple parsing
 
+    def test_list_local_skills_version_from_version_txt(self, tmp_path):
+        """Test that version.txt takes precedence over frontmatter version."""
+        skill_dir = tmp_path / ".opencode" / "skill" / "versioned-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            """---
+name: versioned-skill
+description: Skill with version.txt
+version: 1.0.0
+---
+# Versioned Skill
+""",
+            encoding="utf-8",
+        )
+        # version.txt should override frontmatter version
+        (skill_dir / "version.txt").write_text("2.5.0", encoding="utf-8")
+
+        skills = list_local_skills(source_path=str(tmp_path), quiet=True)
+
+        assert len(skills) == 1
+        assert skills[0].version == "2.5.0"
+
+    def test_list_local_skills_version_txt_without_frontmatter_version(self, tmp_path):
+        """Test version.txt works when frontmatter has no version field."""
+        skill_dir = tmp_path / ".opencode" / "skill" / "release-please-skill"
+        skill_dir.mkdir(parents=True)
+        # Simulates release-please-managed skill: frontmatter has no version
+        (skill_dir / "SKILL.md").write_text(
+            """---
+name: release-please-skill
+description: Skill managed by release-please
+---
+# Release Please Skill
+""",
+            encoding="utf-8",
+        )
+        (skill_dir / "version.txt").write_text("0.3.0\n", encoding="utf-8")
+
+        skills = list_local_skills(source_path=str(tmp_path), quiet=True)
+
+        assert len(skills) == 1
+        assert skills[0].version == "0.3.0"
+
+    def test_list_local_skills_version_txt_with_whitespace(self, tmp_path):
+        """Test version.txt is stripped of whitespace."""
+        skill_dir = tmp_path / ".opencode" / "skill" / "whitespace-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            """---
+name: whitespace-skill
+description: Version.txt has trailing newline
+---
+""",
+            encoding="utf-8",
+        )
+        (skill_dir / "version.txt").write_text("  1.2.3  \n", encoding="utf-8")
+
+        skills = list_local_skills(source_path=str(tmp_path), quiet=True)
+
+        assert len(skills) == 1
+        assert skills[0].version == "1.2.3"
+
+    def test_list_local_skills_no_version_txt_uses_frontmatter(self, tmp_path):
+        """Test that frontmatter version is used when version.txt is absent."""
+        skill_dir = tmp_path / ".opencode" / "skill" / "fm-version-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            """---
+name: fm-version-skill
+description: Skill without version.txt
+version: 3.1.0
+---
+""",
+            encoding="utf-8",
+        )
+
+        skills = list_local_skills(source_path=str(tmp_path), quiet=True)
+
+        assert len(skills) == 1
+        assert skills[0].version == "3.1.0"
+
 
 class TestListLocalSkillsCLI:
     """Tests for skill list-local CLI command."""
@@ -1259,3 +1340,56 @@ class TestExtractReleasePleaseFiles:
         rp_manifest = json.loads(created_files[".release-please-manifest.json"])
         assert rp_manifest["skill/existing-skill"] == "1.2.3"
         assert rp_manifest["skill/test-skill"] == "0.1.0"
+
+
+class TestCheckUpdatesSkillsRepo:
+    """Tests that check_updates uses the configured skills repo."""
+
+    @patch("context_harness.skills.get_current_skills_repo")
+    @patch(
+        "context_harness.services.skill_service.SkillService.__init__",
+        return_value=None,
+    )
+    @patch("context_harness.services.skill_service.SkillService.list_outdated_skills")
+    def test_check_updates_uses_configured_repo(
+        self, mock_list_outdated, mock_init, mock_get_repo
+    ):
+        """check_updates() should pass get_current_skills_repo() to SkillService."""
+        from context_harness.skills import check_updates
+        from context_harness.primitives import Success
+        from context_harness.primitives.skill import VersionComparison, VersionStatus
+
+        mock_get_repo.return_value = "my-org/my-skills"
+        mock_list_outdated.return_value = Success(value=[])
+
+        check_updates(quiet=True)
+
+        mock_get_repo.assert_called_once()
+        mock_init.assert_called_once_with(skills_repo="my-org/my-skills")
+
+
+class TestUpgradeSkillSkillsRepo:
+    """Tests that upgrade_skill uses the configured skills repo."""
+
+    @patch("context_harness.skills.get_current_skills_repo")
+    @patch(
+        "context_harness.services.skill_service.SkillService.__init__",
+        return_value=None,
+    )
+    @patch("context_harness.services.skill_service.SkillService.upgrade_skill")
+    def test_upgrade_skill_uses_configured_repo(
+        self, mock_upgrade, mock_init, mock_get_repo
+    ):
+        """upgrade_skill() should pass get_current_skills_repo() to SkillService."""
+        from context_harness.skills import upgrade_skill
+        from context_harness.primitives import Success
+
+        mock_get_repo.return_value = "my-org/my-skills"
+        mock_result = MagicMock(spec=Success)
+        mock_result.message = "Upgraded test-skill to 2.0.0"
+        mock_upgrade.return_value = mock_result
+
+        upgrade_skill(skill_name="test-skill", quiet=True)
+
+        mock_get_repo.assert_called_once()
+        mock_init.assert_called_once_with(skills_repo="my-org/my-skills")

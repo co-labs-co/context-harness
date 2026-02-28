@@ -446,11 +446,21 @@ class SkillService:
                 # Parse frontmatter
                 try:
                     metadata = self._parse_skill_frontmatter(skill_dir)
+
+                    # Prefer version.txt (release-please) over frontmatter version
+                    version = metadata.version
+                    version_txt = skill_dir / "version.txt"
+                    if version_txt.exists():
+                        try:
+                            version = version_txt.read_text(encoding="utf-8").strip()
+                        except Exception:
+                            pass  # Fall back to frontmatter version
+
                     all_skills.append(
                         Skill(
                             name=skill_name,
                             description=metadata.description,
-                            version=metadata.version,
+                            version=version,
                             author=metadata.author or "unknown",
                             tags=metadata.tags,
                             location=str(skill_md),

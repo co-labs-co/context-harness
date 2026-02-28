@@ -1033,6 +1033,14 @@ def list_local_skills(
             description = frontmatter.get("description", "No description")
             version = frontmatter.get("version")
 
+            # Prefer version.txt (release-please) over frontmatter version
+            version_txt = skill_dir / "version.txt"
+            if version_txt.exists():
+                try:
+                    version = version_txt.read_text(encoding="utf-8").strip()
+                except Exception:
+                    pass  # Fall back to frontmatter version
+
             skills.append(
                 LocalSkillInfo(
                     name=skill_name,
@@ -1175,7 +1183,7 @@ def check_updates(
     from context_harness.services.skill_service import SkillService
     from context_harness.primitives import Success, Failure
 
-    service = SkillService()
+    service = SkillService(skills_repo=get_current_skills_repo())
     project_path = _Path(source_path).resolve()
 
     if skill_name is not None:
@@ -1244,7 +1252,7 @@ def upgrade_skill(
     from context_harness.services.skill_service import SkillService
     from context_harness.primitives import Success, Failure, ErrorCode
 
-    service = SkillService()
+    service = SkillService(skills_repo=get_current_skills_repo())
     project_path = _Path(source_path).resolve()
 
     if not quiet:

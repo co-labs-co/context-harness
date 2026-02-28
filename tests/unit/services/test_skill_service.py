@@ -313,6 +313,87 @@ version: 1.0.0
         assert "skill-b" in names
         assert "skill-c" in names
 
+    def test_list_local_version_from_version_txt(self, tmp_path: Path) -> None:
+        """Test that version.txt takes precedence over frontmatter version."""
+        skill_dir = tmp_path / ".opencode" / "skill" / "versioned-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("""---
+name: versioned-skill
+description: Skill with version.txt
+version: 1.0.0
+---
+""")
+        # version.txt should override frontmatter version
+        (skill_dir / "version.txt").write_text("2.5.0")
+
+        service = SkillService(github_client=MockGitHubClient())
+
+        result = service.list_local(tmp_path)
+
+        assert isinstance(result, Success)
+        assert len(result.value) == 1
+        assert result.value[0].version == "2.5.0"
+
+    def test_list_local_version_txt_without_frontmatter_version(
+        self, tmp_path: Path
+    ) -> None:
+        """Test version.txt works when frontmatter has no version field (release-please model)."""
+        skill_dir = tmp_path / ".opencode" / "skill" / "rp-skill"
+        skill_dir.mkdir(parents=True)
+        # Simulates release-please-managed skill: frontmatter has no version
+        (skill_dir / "SKILL.md").write_text("""---
+name: rp-skill
+description: Managed by release-please
+---
+""")
+        (skill_dir / "version.txt").write_text("0.3.0\n")
+
+        service = SkillService(github_client=MockGitHubClient())
+
+        result = service.list_local(tmp_path)
+
+        assert isinstance(result, Success)
+        assert len(result.value) == 1
+        assert result.value[0].version == "0.3.0"
+
+    def test_list_local_no_version_txt_uses_frontmatter(self, tmp_path: Path) -> None:
+        """Test that frontmatter version is used when version.txt is absent."""
+        skill_dir = tmp_path / ".opencode" / "skill" / "fm-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("""---
+name: fm-skill
+description: Has frontmatter version only
+version: 3.1.0
+---
+""")
+
+        service = SkillService(github_client=MockGitHubClient())
+
+        result = service.list_local(tmp_path)
+
+        assert isinstance(result, Success)
+        assert len(result.value) == 1
+        assert result.value[0].version == "3.1.0"
+
+    def test_list_local_version_txt_whitespace_stripped(self, tmp_path: Path) -> None:
+        """Test version.txt content is stripped of whitespace."""
+        skill_dir = tmp_path / ".opencode" / "skill" / "ws-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("""---
+name: ws-skill
+description: Whitespace test
+---
+""")
+        (skill_dir / "version.txt").write_text("  1.2.3  \n")
+
+        service = SkillService(github_client=MockGitHubClient())
+
+        result = service.list_local(tmp_path)
+
+        assert isinstance(result, Success)
+        assert len(result.value) == 1
+        assert result.value[0].version == "1.2.3"
+
 
 class TestSkillServiceGetInfo:
     """Tests for SkillService.get_info()."""
