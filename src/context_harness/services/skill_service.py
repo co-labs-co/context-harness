@@ -41,6 +41,9 @@ from context_harness.primitives import (
 
 SKILLS_REGISTRY_PATH = "skills.json"
 SKILLS_DIR = "skill"
+RELEASE_PLEASE_CONFIG = "release-please-config.json"
+RELEASE_PLEASE_MANIFEST = ".release-please-manifest.json"
+INITIAL_VERSION = "0.1.0"
 
 
 class GitHubClient(Protocol):
@@ -85,6 +88,22 @@ class GitHubClient(Protocol):
 
         Returns:
             HTTPS URL of the created repository, or None on failure
+        """
+        ...
+
+    def enable_workflow_pr_creation(self, repo: str) -> bool:
+        """Enable GitHub Actions to create and approve pull requests.
+
+        Sets ``default_workflow_permissions`` to ``write`` and
+        ``can_approve_pull_request_reviews`` to ``true`` on the repository.
+        This is required for release-please (and other Actions) to open PRs
+        using the default ``GITHUB_TOKEN``.
+
+        Args:
+            repo: Repository in "owner/name" format
+
+        Returns:
+            True if the setting was applied successfully, False otherwise
         """
         ...
 
@@ -220,6 +239,40 @@ class DefaultGitHubClient:
             return result.stdout.strip()
         except (subprocess.CalledProcessError, FileNotFoundError):
             return None
+
+    def enable_workflow_pr_creation(self, repo: str) -> bool:
+        """Enable GitHub Actions to create and approve pull requests.
+
+        Uses the GitHub REST API to set ``default_workflow_permissions`` to
+        ``write`` and ``can_approve_pull_request_reviews`` to ``true``.
+        Without this, release-please cannot open PRs using ``GITHUB_TOKEN``.
+
+        Args:
+            repo: Repository in "owner/name" format
+
+        Returns:
+            True if the setting was applied, False otherwise
+        """
+        try:
+            subprocess.run(
+                [
+                    "gh",
+                    "api",
+                    f"/repos/{repo}/actions/permissions/workflow",
+                    "-X",
+                    "PUT",
+                    "-f",
+                    "default_workflow_permissions=write",
+                    "-F",
+                    "can_approve_pull_request_reviews=true",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            return True
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            return False
 
 
 class SkillService:
@@ -393,11 +446,21 @@ class SkillService:
                 # Parse frontmatter
                 try:
                     metadata = self._parse_skill_frontmatter(skill_dir)
+
+                    # Prefer version.txt (release-please) over frontmatter version
+                    version = metadata.version
+                    version_txt = skill_dir / "version.txt"
+                    if version_txt.exists():
+                        try:
+                            version = version_txt.read_text(encoding="utf-8").strip()
+                        except Exception:
+                            pass  # Fall back to frontmatter version
+
                     all_skills.append(
                         Skill(
                             name=skill_name,
                             description=metadata.description,
-                            version=metadata.version,
+                            version=version,
                             author=metadata.author or "unknown",
                             tags=metadata.tags,
                             location=str(skill_md),
@@ -809,6 +872,22 @@ class SkillService:
                 details={"repo": name},
             )
 
+        # 3b. Enable GitHub Actions to create PRs (required for release-please).
+        #     Resolve the full "owner/repo" form so the API call works even
+        #     when the user passed a bare repo name like "my-skills".
+        full_name = name
+        if "/" not in name:
+            full_name = f"{self.github.get_username()}/{name}"
+        workflow_enabled = self.github.enable_workflow_pr_creation(full_name)
+        workflow_warning = None
+        if not workflow_enabled:
+            workflow_warning = (
+                "Could not enable GitHub Actions workflow PR creation. "
+                "Release-please may not be able to open PRs automatically. "
+                "To fix manually: Repository Settings → Actions → General → "
+                "Enable 'Allow GitHub Actions to create and approve pull requests'"
+            )
+
         # 4. Clone → Scaffold → Commit → Push (all in a temp directory)
         try:
             with tempfile.TemporaryDirectory() as tmpdir:
@@ -865,13 +944,17 @@ class SkillService:
 
         visibility = RepoVisibility.PRIVATE if private else RepoVisibility.PUBLIC
 
+        success_message = f"Skills registry '{name}' created successfully"
+        if workflow_warning:
+            success_message += f" (Warning: {workflow_warning})"
+
         return Success(
             value=RegistryRepo(
                 name=name,
                 url=repo_url,
                 visibility=visibility,
             ),
-            message=f"Skills registry '{name}' created successfully",
+            message=success_message,
         )
 
     def _write_registry_scaffold(self, repo_path: Path, repo_name: str) -> None:
@@ -1015,7 +1098,7 @@ flowchart TD
     E --> |"Bumps version.txt & CHANGELOG.md"| F["Release PR merged"]
     F --> G["Tag: my-skill@v0.2.0 + GitHub Release"]
     G --> H["sync-registry rebuilds skills.json"]
-    H --> I["CLI: context-harness skill outdated"]
+    H --> I["CLI: ch skill outdated"]
 
     style A fill:#f9f,stroke:#333
     style G fill:#9f9,stroke:#333
@@ -1026,14 +1109,19 @@ flowchart TD
 
 See [QUICKSTART.md](QUICKSTART.md) for adding your first skill.
 
+> **Important:** If you did not create this repo with `ch skill init-repo`,
+> you must enable *"Allow GitHub Actions to create and approve pull requests"*
+> in **Settings → Actions → General** for release-please to work.
+> See [QUICKSTART.md](QUICKSTART.md#repository-setup) for details.
+
 ## Configure as Your Registry
 
 ```bash
 # Set for current project
-context-harness config set skills-repo {repo_name}
+ch config set skills-repo {repo_name}
 
 # Set for all projects (user-level)
-context-harness config set skills-repo {repo_name} --global
+ch config set skills-repo {repo_name} --user
 ```
 
 ## Commit Convention
@@ -1165,6 +1253,28 @@ This guide walks you through adding a skill to **{repo_name}**.
 - Git installed
 - GitHub CLI (`gh`) installed and authenticated
 - Repository cloned locally
+- **GitHub Actions must be allowed to create pull requests** (see below)
+
+## Repository Setup
+
+> **Note:** If you created this repository with `ch skill init-repo`, these
+> settings are already configured automatically. Skip to [Steps](#steps).
+
+release-please needs permission to open pull requests using `GITHUB_TOKEN`.
+Enable this in your repository settings:
+
+1. Go to **Settings → Actions → General**
+2. Under *Workflow permissions*, select **Read and write permissions**
+3. Check **Allow GitHub Actions to create and approve pull requests**
+4. Click **Save**
+
+Or use the GitHub CLI:
+
+```bash
+gh api repos/OWNER/REPO/actions/permissions/workflow \
+  -X PUT -f default_workflow_permissions=write \
+  -F can_approve_pull_request_reviews=true
+```
 
 ## Steps
 
@@ -1223,16 +1333,16 @@ git push origin main
 1. **release-please** creates a release PR bumping `version.txt`
 2. Merge the release PR → tag `my-first-skill@v0.1.0` is created
 3. **sync-registry** rebuilds `skills.json` automatically
-4. Users can now install: `context-harness skill install my-first-skill`
+4. Users can now install: `ch skill install my-first-skill`
 
 ## Install Your Skill
 
 ```bash
 # Configure this registry (one time)
-context-harness config set skills-repo {repo_name}
+ch config set skills-repo {repo_name}
 
 # Install
-context-harness skill install my-first-skill
+ch skill install my-first-skill
 ```
 """
         (repo_path / "QUICKSTART.md").write_text(content, encoding="utf-8")
@@ -1308,6 +1418,14 @@ on:
     branches:
       - main
 
+# IMPORTANT: The repository must also have "Allow GitHub Actions to create
+# and approve pull requests" enabled under Settings > Actions > General.
+# Without this, the GITHUB_TOKEN cannot open release PRs even with the
+# permissions block below.  `ch skill init-repo` enables this automatically;
+# if you created the repo manually, enable it in the settings UI or run:
+#   gh api repos/OWNER/REPO/actions/permissions/workflow \\
+#     -X PUT -f default_workflow_permissions=write \\
+#     -F can_approve_pull_request_reviews=true
 permissions:
   contents: write
   pull-requests: write
@@ -1740,7 +1858,7 @@ description: >-
 
 Operational guide for authoring, versioning, and releasing skills within a
 ContextHarness skills registry repository (created via
-`context-harness skill init-repo`).
+`ch skill init-repo`).
 
 ## Golden Rules
 
@@ -1854,7 +1972,7 @@ After a releasable commit merges to main:
    - GitHub Release with changelog
 6. sync-registry.yml triggers on version.txt change
 7. Rebuilds skills.json automatically
-8. Users detect update: context-harness skill outdated
+8. Users detect update: ch skill outdated
 ```
 
 ## Commit Convention Quick Reference
@@ -2280,12 +2398,15 @@ python scripts/validate_skills.py
                         existing_idx = i
                         break
 
+                # Use version from metadata if available, otherwise use INITIAL_VERSION
+                skill_version = metadata.version or INITIAL_VERSION
+
                 skill_entry = {
                     "name": skill_name,
                     "description": self._truncate_description(
                         metadata.description, 200
                     ),
-                    "version": metadata.version,
+                    "version": skill_version,
                     "author": self.github.get_username(),
                     "tags": metadata.tags,
                     "path": f"{SKILLS_DIR}/{skill_name}",
@@ -2297,6 +2418,69 @@ python scripts/validate_skills.py
                     registry["skills"].append(skill_entry)
 
                 registry_path.write_text(json.dumps(registry, indent=2) + "\n")
+
+                # Create version.txt for release-please (bootstrap version)
+                version_file = skill_dest / "version.txt"
+                if not version_file.exists():
+                    version_file.write_text(f"{skill_version}\n")
+
+                # Strip version from SKILL.md frontmatter (release-please
+                # manages versions via version.txt, not frontmatter)
+                self._strip_frontmatter_version(skill_dest / "SKILL.md")
+
+                # Update release-please-config.json (add package entry)
+                skill_package_path = f"{SKILLS_DIR}/{skill_name}"
+                rp_config_path = tmppath / RELEASE_PLEASE_CONFIG
+                if rp_config_path.exists():
+                    try:
+                        rp_config = json.loads(
+                            rp_config_path.read_text(encoding="utf-8")
+                        )
+                    except json.JSONDecodeError:
+                        # Invalid JSON, use defaults (no quiet flag in service layer)
+                        rp_config = {
+                            "$schema": "https://raw.githubusercontent.com/googleapis/"
+                            "release-please/main/schemas/config.json",
+                            "separate-pull-requests": True,
+                            "include-component-in-tag": True,
+                            "tag-separator": "@",
+                            "packages": {},
+                        }
+                else:
+                    rp_config = {
+                        "$schema": "https://raw.githubusercontent.com/googleapis/"
+                        "release-please/main/schemas/config.json",
+                        "separate-pull-requests": True,
+                        "include-component-in-tag": True,
+                        "tag-separator": "@",
+                        "packages": {},
+                    }
+
+                if skill_package_path not in rp_config.get("packages", {}):
+                    rp_config.setdefault("packages", {})[skill_package_path] = {
+                        "release-type": "simple",
+                        "component": skill_name,
+                    }
+                    rp_config_path.write_text(json.dumps(rp_config, indent=2) + "\n")
+
+                # Update .release-please-manifest.json (add version entry)
+                rp_manifest_path = tmppath / RELEASE_PLEASE_MANIFEST
+                if rp_manifest_path.exists():
+                    try:
+                        rp_manifest = json.loads(
+                            rp_manifest_path.read_text(encoding="utf-8")
+                        )
+                    except json.JSONDecodeError:
+                        # Invalid JSON, use defaults
+                        rp_manifest = {}
+                else:
+                    rp_manifest = {}
+
+                if skill_package_path not in rp_manifest:
+                    rp_manifest[skill_package_path] = skill_version
+                    rp_manifest_path.write_text(
+                        json.dumps(rp_manifest, indent=2) + "\n"
+                    )
 
                 # Commit changes
                 subprocess.run(
@@ -2331,13 +2515,25 @@ python scripts/validate_skills.py
 
 ### Files Added
 - `{SKILLS_DIR}/{skill_name}/SKILL.md`
+- `{SKILLS_DIR}/{skill_name}/version.txt`
 """
                 for item in skill_dest.rglob("*"):
-                    if item.is_file() and item.name != "SKILL.md":
+                    if item.is_file() and item.name not in (
+                        "SKILL.md",
+                        "version.txt",
+                    ):
                         rel_path = item.relative_to(skill_dest)
                         pr_body += f"- `{SKILLS_DIR}/{skill_name}/{rel_path}`\n"
 
-                pr_body += "\n---\n_Extracted via ContextHarness skill extractor_\n"
+                pr_body += f"""
+### Registry Files Updated
+- `{SKILLS_REGISTRY_PATH}`
+- `{RELEASE_PLEASE_CONFIG}`
+- `{RELEASE_PLEASE_MANIFEST}`
+
+---
+_Extracted via ContextHarness skill extractor_
+"""
 
                 pr_result = subprocess.run(
                     [
@@ -2423,3 +2619,34 @@ python scripts/validate_skills.py
             truncated = truncated[:last_space]
 
         return truncated + "..."
+
+    @staticmethod
+    def _strip_frontmatter_version(skill_md_path: Path) -> None:
+        """Remove the version field from SKILL.md frontmatter.
+
+        In a skills registry, version is managed by release-please via
+        version.txt, not by the SKILL.md frontmatter.
+
+        Args:
+            skill_md_path: Path to the SKILL.md file
+        """
+        if not skill_md_path.exists():
+            return
+
+        content = skill_md_path.read_text(encoding="utf-8")
+
+        if not content.startswith("---"):
+            return
+
+        end_idx = content.find("---", 3)
+        if end_idx == -1:
+            return
+
+        frontmatter_text = content[3:end_idx]
+        body = content[end_idx:]
+
+        lines = frontmatter_text.split("\n")
+        filtered = [line for line in lines if not line.strip().startswith("version:")]
+        new_frontmatter = "\n".join(filtered)
+
+        skill_md_path.write_text(f"---{new_frontmatter}{body}", encoding="utf-8")

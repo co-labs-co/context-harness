@@ -1,6 +1,6 @@
 """Skill commands for ContextHarness CLI.
 
-Handles the `context-harness skill` command group for skill management.
+Handles the `ch skill` command group for skill management.
 """
 
 from __future__ import annotations
@@ -60,11 +60,11 @@ def skill_list(tags: Tuple[str, ...]) -> None:
 
     Examples:
 
-        context-harness skill list
+        ch skill list
 
-        context-harness skill list --tags react
+        ch skill list --tags react
 
-        context-harness skill list --tags frontend --tags forms
+        ch skill list --tags frontend --tags forms
     """
     print_header("Skills")
 
@@ -93,9 +93,9 @@ def skill_list_local(source: str) -> None:
 
     Examples:
 
-        context-harness skill list-local
+        ch skill list-local
 
-        context-harness skill list-local --source ./my-project
+        ch skill list-local --source ./my-project
     """
     print_header("Local Skills")
     list_local_skills(source_path=source)
@@ -110,9 +110,9 @@ def skill_info_cmd(skill_name: str) -> None:
 
     Examples:
 
-        context-harness skill info react-forms
+        ch skill info react-forms
 
-        context-harness skill info django-auth
+        ch skill info django-auth
     """
     console.print()
     skill_data = get_skill_info(skill_name)
@@ -149,13 +149,13 @@ def skill_install_cmd(skill_name: Optional[str], target: str, force: bool) -> No
 
     Examples:
 
-        context-harness skill install
+        ch skill install
 
-        context-harness skill install react-forms
+        ch skill install react-forms
 
-        context-harness skill install django-auth --target ./my-project
+        ch skill install django-auth --target ./my-project
 
-        context-harness skill install react-forms --force
+        ch skill install react-forms --force
     """
     print_header("Skill Installer")
 
@@ -180,7 +180,7 @@ def skill_install_cmd(skill_name: Optional[str], target: str, force: bool) -> No
     elif result == SkillResult.NOT_FOUND:
         console.print()
         print_error(f"Skill '{skill_name}' not found.")
-        print_info("Use 'context-harness skill list' to see available skills.")
+        print_info("Use 'ch skill list' to see available skills.")
         raise SystemExit(1)
     elif result in (SkillResult.AUTH_ERROR, SkillResult.ERROR):
         console.print()
@@ -208,11 +208,11 @@ def skill_extract_cmd(skill_name: Optional[str], source: str) -> None:
 
     Examples:
 
-        context-harness skill extract
+        ch skill extract
 
-        context-harness skill extract my-custom-skill
+        ch skill extract my-custom-skill
 
-        context-harness skill extract react-auth --source ./my-project
+        ch skill extract react-auth --source ./my-project
     """
     print_header("Skill Extractor")
 
@@ -263,9 +263,9 @@ def skill_outdated_cmd(source: str) -> None:
 
     Examples:
 
-        context-harness skill outdated
+        ch skill outdated
 
-        context-harness skill outdated --source ./my-project
+        ch skill outdated --source ./my-project
     """
     print_header("Skill Updates")
 
@@ -280,7 +280,7 @@ def skill_outdated_cmd(source: str) -> None:
         console.print()
         print_info(
             f"Found {len(comparisons)} skill(s) with updates available. "
-            "Run 'context-harness skill upgrade <name>' to upgrade."
+            "Run 'ch skill upgrade <name>' to upgrade."
         )
 
 
@@ -318,18 +318,18 @@ def skill_upgrade_cmd(
 
     Examples:
 
-        context-harness skill upgrade react-forms
+        ch skill upgrade react-forms
 
-        context-harness skill upgrade --all
+        ch skill upgrade --all
 
-        context-harness skill upgrade react-forms --force
+        ch skill upgrade react-forms --force
     """
     print_header("Skill Upgrade")
 
     if not skill_name and not upgrade_all:
         console.print()
         print_error("Specify a skill name or use --all to upgrade all outdated skills.")
-        print_info("Use 'context-harness skill outdated' to see what's available.")
+        print_info("Use 'ch skill outdated' to see what's available.")
         raise SystemExit(1)
 
     if upgrade_all:
@@ -380,9 +380,7 @@ def skill_upgrade_cmd(
         elif result == SkillResult.NOT_FOUND:
             console.print()
             print_error(f"Skill '{skill_name}' not found locally.")
-            print_info(
-                "Use 'context-harness skill list-local' to see installed skills."
-            )
+            print_info("Use 'ch skill list-local' to see installed skills.")
             raise SystemExit(1)
         elif result == SkillResult.AUTH_ERROR:
             console.print()
@@ -416,7 +414,7 @@ def skill_upgrade_cmd(
 @click.option(
     "--configure-project",
     is_flag=True,
-    help="Set as default skills-repo in project config (opencode.json).",
+    help="Set as default skills-repo in project config (.context-harness/config.json).",
 )
 def skill_init_repo_cmd(
     name: str,
@@ -438,13 +436,13 @@ def skill_init_repo_cmd(
 
     Examples:
 
-        context-harness skill init-repo my-skills
+        ch skill init-repo my-skills
 
-        context-harness skill init-repo my-org/team-skills --public
+        ch skill init-repo my-org/team-skills --public
 
-        context-harness skill init-repo my-skills --configure-user
+        ch skill init-repo my-skills --configure-user
 
-        context-harness skill init-repo my-org/skills -d "Team AI skills"
+        ch skill init-repo my-org/skills -d "Team AI skills"
     """
     print_header("Skill Registry Initializer")
 
@@ -488,10 +486,10 @@ def skill_init_repo_cmd(
             console.print()
             console.print("[dim]To use this as your default skills-repo:[/dim]")
             console.print(
-                f"[dim]  context-harness config set skills-repo {config_name}        # this project[/dim]"
+                f"[dim]  ch config set skills-repo {config_name}        # this project[/dim]"
             )
             console.print(
-                f"[dim]  context-harness config set skills-repo {config_name} --user  # all projects[/dim]"
+                f"[dim]  ch config set skills-repo {config_name} --user  # all projects[/dim]"
             )
 
     elif result == SkillResult.ALREADY_EXISTS:
@@ -543,41 +541,26 @@ def _configure_skills_repo_user(repo_name: str) -> None:
 
 
 def _configure_skills_repo_project(repo_name: str) -> None:
-    """Configure the skills-repo in project config.
+    """Configure the skills-repo in project config (.context-harness/config.json).
 
     Args:
         repo_name: Repository name (owner/repo format)
     """
     try:
-        from pathlib import Path
-
         from context_harness.primitives import Failure
         from context_harness.primitives.config import (
-            OpenCodeConfig,
+            ProjectHarnessConfig,
             SkillsRegistryConfig,
         )
-        from context_harness.services.config_service import ConfigService
+        from context_harness.services.project_harness_config_service import (
+            ProjectHarnessConfigService,
+        )
 
-        service = ConfigService()
+        service = ProjectHarnessConfigService()
 
-        # Load or create config
-        result = service.load_or_create()
-        if isinstance(result, Failure):
-            print_warning(f"Could not load project config: {result.error}")
-            return
-
-        config = result.value
-
-        # Create new config with updated skills registry
-        new_config = OpenCodeConfig(
-            schema_version=config.schema_version,
-            mcp=config.mcp,
-            agents=config.agents,
-            commands=config.commands,
-            skills=config.skills,
+        # Create new config with the skills registry set
+        new_config = ProjectHarnessConfig(
             skills_registry=SkillsRegistryConfig(default=repo_name),
-            project_context=config.project_context,
-            raw_data=config.raw_data,
         )
 
         save_result = service.save(new_config)

@@ -53,7 +53,22 @@ ch skill info react-forms
 ch skill list-local
 ```
 
+**Example output:**
+
+```
+                         Local Skills
+┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━┓
+┃ Name               ┃ Description                        ┃ Version ┃ Status ┃
+┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━┩
+│ python-cli-click   │ Patterns for building Click CLI ... │ 0.2.0   │ ✓      │
+│ react-forms        │ React form handling with validation │ 0.1.0   │ ✓      │
+└────────────────────┴────────────────────────────────────┴─────────┴────────┘
+```
+
 This command searches both `.opencode/skill/` and `.claude/skills/` directories.
+
+!!! tip "Version Resolution"
+    If a skill has a `version.txt` file (from a release-please-managed registry), that version is used. Otherwise, the `version:` field in SKILL.md frontmatter is used.
 
 ## Skill Structure
 
@@ -259,7 +274,7 @@ Once created, you can start adding skills to the repository. See [Adding Skills 
 | Flag | Effect |
 |------|--------|
 | `--configure-user` | Sets the new repo as your default `skills-repo` in `~/.context-harness/config.json` — applies to **all projects** on your machine |
-| `--configure-project` | Sets the new repo as the project's `skills-repo` in `opencode.json` — applies to **this project only** |
+| `--configure-project` | Sets the new repo as the project's `skills-repo` in `.context-harness/config.json` — applies to **this project only** |
 
 If you don't use either flag, the command prints manual `config set` instructions for both scopes.
 
@@ -271,7 +286,7 @@ If you don't use either flag, the command prints manual `config set` instruction
 === "OpenCode"
 
     ```bash
-    # Project-level (in opencode.json)
+    # Project-level (in .context-harness/config.json)
     ch config set skills-repo my-org/my-skills-repo
     
     # User-level (in ~/.context-harness/config.json)
@@ -566,22 +581,68 @@ ch skill outdated
 **Example output:**
 
 ```
-┏━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┓
-┃ Skill           ┃ Installed     ┃ Latest        ┃ Status              ┃
-┡━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━┩
-│ react-forms     │ 0.1.0         │ 0.2.0         │ upgrade available   │
-│ fastapi-crud    │ 1.0.0         │ 1.0.0         │ up to date          │
-└─────────────────┴───────────────┴───────────────┴─────────────────────┘
+Checking for skill updates...
+
+                              Skill Updates
+┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┓
+┃ Skill              ┃ Installed     ┃ Latest        ┃ Status              ┃
+┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━┩
+│ python-cli-click   │ 0.2.0         │ 0.3.0         │ upgrade available   │
+│ react-forms        │ 0.1.0         │ 0.2.0         │ upgrade available   │
+│ fastapi-crud       │ 1.0.0         │ 1.0.0         │ up to date          │
+└────────────────────┴───────────────┴───────────────┴─────────────────────┘
 ```
 
 ### Upgrade Skills
 
 ```bash
 # Upgrade a single skill
-ch skill upgrade react-forms
+ch skill upgrade python-cli-click
+```
 
+**Example output:**
+
+```
+Upgrading skill: python-cli-click...
+
+✅ Upgraded python-cli-click from 0.2.0 → 0.3.0
+```
+
+```bash
 # Upgrade all outdated skills at once
 ch skill upgrade --all
+```
+
+### Full Workflow Example
+
+A typical check → upgrade → verify flow:
+
+```bash
+# 1. See what's outdated
+$ ch skill outdated
+Checking for skill updates...
+
+                              Skill Updates
+┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┓
+┃ Skill              ┃ Installed     ┃ Latest        ┃ Status              ┃
+┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━┩
+│ python-cli-click   │ 0.2.0         │ 0.3.0         │ upgrade available   │
+└────────────────────┴───────────────┴───────────────┴─────────────────────┘
+
+# 2. Upgrade the skill
+$ ch skill upgrade python-cli-click
+Upgrading skill: python-cli-click...
+
+✅ Upgraded python-cli-click from 0.2.0 → 0.3.0
+
+# 3. Verify the upgrade
+$ ch skill list-local
+                         Local Skills
+┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━┓
+┃ Name               ┃ Description                        ┃ Version ┃ Status ┃
+┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━┩
+│ python-cli-click   │ Patterns for building Click CLI ... │ 0.3.0   │ ✓      │
+└────────────────────┴────────────────────────────────────┴─────────┴────────┘
 ```
 
 ### Compatibility
@@ -607,6 +668,6 @@ Skills repository is resolved in this order:
 | Priority | Source | Location |
 |----------|--------|----------|
 | 1 (Highest) | Environment Variable | `CONTEXT_HARNESS_SKILLS_REPO` |
-| 2 | Project Config | `opencode.json` → `skillsRegistry.default` |
+| 2 | Project Config | `.context-harness/config.json` → `skillsRegistry.default` |
 | 3 | User Config | `~/.context-harness/config.json` |
 | 4 (Lowest) | Default | Official skills repository |

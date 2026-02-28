@@ -117,6 +117,56 @@ class UserConfig:
 
 
 @dataclass(frozen=True)
+class ProjectHarnessConfig:
+    """Project-level ContextHarness configuration (.context-harness/config.json).
+
+    This configuration is stored in the project's .context-harness directory
+    and takes precedence over user-level config but not environment variables.
+
+    Attributes:
+        skills_registry: Skills registry configuration
+    """
+
+    skills_registry: Optional[SkillsRegistryConfig] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ProjectHarnessConfig":
+        """Create from dictionary.
+
+        Args:
+            data: Dictionary from parsing config.json
+
+        Returns:
+            ProjectHarnessConfig instance
+        """
+        # Validate that data is a dict
+        if not isinstance(data, dict):
+            return cls()
+
+        skills_registry = None
+        registry_data = data.get("skillsRegistry") or data.get("skills_registry")
+
+        # Validate that skillsRegistry value is a dict
+        if registry_data is not None and isinstance(registry_data, dict):
+            skills_registry = SkillsRegistryConfig.from_dict(registry_data)
+
+        return cls(skills_registry=skills_registry)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization.
+
+        Returns:
+            Dictionary representation
+        """
+        result: Dict[str, Any] = {}
+        if self.skills_registry:
+            registry_dict = self.skills_registry.to_dict()
+            if registry_dict:
+                result["skillsRegistry"] = registry_dict
+        return result
+
+
+@dataclass(frozen=True)
 class AgentConfig:
     """Configuration for an agent in opencode.json.
 
@@ -159,7 +209,6 @@ class OpenCodeConfig:
         agents: Agent configurations keyed by agent name
         commands: Custom command configurations keyed by command name
         skills: Skill configurations
-        skills_registry: Skills registry configuration
         project_context: Path to project context file
         raw_data: The original parsed JSON data for fields not explicitly modeled
     """
@@ -169,7 +218,6 @@ class OpenCodeConfig:
     agents: Dict[str, AgentConfig] = field(default_factory=dict)
     commands: Dict[str, CommandConfig] = field(default_factory=dict)
     skills: Dict[str, Any] = field(default_factory=dict)
-    skills_registry: Optional[SkillsRegistryConfig] = None
     project_context: Optional[str] = None
     raw_data: Dict[str, Any] = field(default_factory=dict)
 
@@ -209,17 +257,12 @@ class OpenCodeConfig:
                     prompt=config.get("prompt"),
                 )
 
-        skills_registry = None
-        if "skillsRegistry" in data:
-            skills_registry = SkillsRegistryConfig.from_dict(data["skillsRegistry"])
-
         return cls(
             schema_version=data.get("$schema", "1.0"),
             mcp=mcp_servers,
             agents=agents,
             commands=commands,
             skills=data.get("skills", {}),
-            skills_registry=skills_registry,
             project_context=data.get("projectContext"),
             raw_data=data,
         )
@@ -265,11 +308,6 @@ class OpenCodeConfig:
         if self.skills:
             result["skills"] = self.skills
 
-        if self.skills_registry:
-            registry_dict = self.skills_registry.to_dict()
-            if registry_dict:
-                result["skillsRegistry"] = registry_dict
-
         if self.project_context:
             result["projectContext"] = self.project_context
 
@@ -298,6 +336,7 @@ class ProjectConfig:
         mcp_json_path: Path to .mcp.json (Claude Code)
         agents_md_path: Path to AGENTS.md (OpenCode)
         claude_md_path: Path to CLAUDE.md (Claude Code)
+        harness_config_path: Path to .context-harness/config.json (project-level config)
     """
 
     project_root: Path
@@ -314,6 +353,7 @@ class ProjectConfig:
     mcp_json_path: Path
     agents_md_path: Path
     claude_md_path: Path
+    harness_config_path: Path
 
     @classmethod
     def from_project_root(cls, project_root: Path) -> ProjectConfig:
@@ -344,6 +384,7 @@ class ProjectConfig:
             mcp_json_path=project_root / ".mcp.json",
             agents_md_path=project_root / "AGENTS.md",
             claude_md_path=project_root / "CLAUDE.md",
+            harness_config_path=context_harness_dir / "config.json",
         )
 
     @classmethod

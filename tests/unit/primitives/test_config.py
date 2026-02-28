@@ -216,6 +216,7 @@ class TestProjectConfig:
         assert config.mcp_json_path == root / ".mcp.json"
         assert config.agents_md_path == root / "AGENTS.md"
         assert config.claude_md_path == root / "CLAUDE.md"
+        assert config.harness_config_path == root / ".context-harness" / "config.json"
 
     def test_session_path(self):
         """Test getting session directory path."""

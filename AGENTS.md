@@ -28,6 +28,7 @@ context-harness/
 │   ├── services/               # Business logic layer
 │   │   ├── __init__.py
 │   │   ├── config_service.py   # Configuration management
+│   │   ├── project_harness_config_service.py  # Project-level .context-harness/config.json
 │   │   └── skill_service.py    # Skill operations (install, upgrade, init-repo)
 │   ├── interfaces/             # CLI/SDK entry points
 │   │   └── cli/
@@ -297,21 +298,21 @@ Operational guide for creating, versioning, and releasing skills in a ContextHar
 # Development
 uv sync --dev                     # Install dependencies
 uv run pytest                     # Run tests
-uv run context-harness --help     # CLI help
+uv run ch --help                  # CLI help
 
 # Installation (for users)
-uvx --from "git+https://github.com/co-labs-co/context-harness.git" context-harness init
+uvx --from "git+https://github.com/co-labs-co/context-harness.git" ch init
 
 # MCP configuration
-context-harness mcp add context7  # Add Context7 MCP server
-context-harness mcp list          # List configured servers
+ch mcp add context7               # Add Context7 MCP server
+ch mcp list                       # List configured servers
 
 # Skill management
-context-harness skill list        # List available skills
-context-harness skill install     # Interactive skill picker
-context-harness skill outdated    # Check for updates
-context-harness skill upgrade --all  # Upgrade all outdated
-context-harness skill init-repo my-skills  # Scaffold registry repo
+ch skill list                     # List available skills
+ch skill install                  # Interactive skill picker
+ch skill outdated                 # Check for updates
+ch skill upgrade --all            # Upgrade all outdated
+ch skill init-repo my-skills      # Scaffold registry repo
 
 # Framework commands (after installation)
 /ctx my-feature                   # Start/switch session
@@ -330,8 +331,10 @@ context-harness skill init-repo my-skills  # Scaffold registry repo
 | `src/context_harness/installer.py` | Framework installation logic |
 | `src/context_harness/mcp_config.py` | MCP server configuration |
 | `src/context_harness/services/skill_service.py` | Skill operations (install, upgrade, init-repo) |
+| `src/context_harness/services/project_harness_config_service.py` | Project-level `.context-harness/config.json` management |
 | `src/context_harness/interfaces/cli/skill_cmd.py` | Click commands for skill management |
 | `src/context_harness/primitives/skill.py` | Skill, VersionComparison, RegistryRepo models |
+| `src/context_harness/primitives/config.py` | OpenCodeConfig, ProjectConfig, ProjectHarnessConfig |
 | `src/context_harness/primitives/base.py` | Result[T] = Success \| Failure, ErrorCode |
 | `src/context_harness/templates/` | Bundled framework templates |
 | `pyproject.toml` | Project configuration, dependencies |

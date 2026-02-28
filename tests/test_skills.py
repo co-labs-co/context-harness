@@ -1,7 +1,12 @@
 """Tests for the skills module."""
 
 import json
+import subprocess
+from pathlib import Path
 from unittest.mock import patch, MagicMock
+
+# Capture the real subprocess.run before any @patch decorators replace it
+_real_subprocess_run = subprocess.run
 
 import pytest
 from click.testing import CliRunner
@@ -17,6 +22,7 @@ from context_harness.skills import (
     _parse_skill_frontmatter,
     _truncate_description,
     _fetch_directory_recursive,
+    _strip_frontmatter_version,
 )
 
 
@@ -909,6 +915,87 @@ This is not valid YAML: [unclosed bracket
         # Should still be marked as valid since _parse_skill_frontmatter has fallback
         # The YAML parser will fail but fallback to simple parsing
 
+    def test_list_local_skills_version_from_version_txt(self, tmp_path):
+        """Test that version.txt takes precedence over frontmatter version."""
+        skill_dir = tmp_path / ".opencode" / "skill" / "versioned-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            """---
+name: versioned-skill
+description: Skill with version.txt
+version: 1.0.0
+---
+# Versioned Skill
+""",
+            encoding="utf-8",
+        )
+        # version.txt should override frontmatter version
+        (skill_dir / "version.txt").write_text("2.5.0", encoding="utf-8")
+
+        skills = list_local_skills(source_path=str(tmp_path), quiet=True)
+
+        assert len(skills) == 1
+        assert skills[0].version == "2.5.0"
+
+    def test_list_local_skills_version_txt_without_frontmatter_version(self, tmp_path):
+        """Test version.txt works when frontmatter has no version field."""
+        skill_dir = tmp_path / ".opencode" / "skill" / "release-please-skill"
+        skill_dir.mkdir(parents=True)
+        # Simulates release-please-managed skill: frontmatter has no version
+        (skill_dir / "SKILL.md").write_text(
+            """---
+name: release-please-skill
+description: Skill managed by release-please
+---
+# Release Please Skill
+""",
+            encoding="utf-8",
+        )
+        (skill_dir / "version.txt").write_text("0.3.0\n", encoding="utf-8")
+
+        skills = list_local_skills(source_path=str(tmp_path), quiet=True)
+
+        assert len(skills) == 1
+        assert skills[0].version == "0.3.0"
+
+    def test_list_local_skills_version_txt_with_whitespace(self, tmp_path):
+        """Test version.txt is stripped of whitespace."""
+        skill_dir = tmp_path / ".opencode" / "skill" / "whitespace-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            """---
+name: whitespace-skill
+description: Version.txt has trailing newline
+---
+""",
+            encoding="utf-8",
+        )
+        (skill_dir / "version.txt").write_text("  1.2.3  \n", encoding="utf-8")
+
+        skills = list_local_skills(source_path=str(tmp_path), quiet=True)
+
+        assert len(skills) == 1
+        assert skills[0].version == "1.2.3"
+
+    def test_list_local_skills_no_version_txt_uses_frontmatter(self, tmp_path):
+        """Test that frontmatter version is used when version.txt is absent."""
+        skill_dir = tmp_path / ".opencode" / "skill" / "fm-version-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            """---
+name: fm-version-skill
+description: Skill without version.txt
+version: 3.1.0
+---
+""",
+            encoding="utf-8",
+        )
+
+        skills = list_local_skills(source_path=str(tmp_path), quiet=True)
+
+        assert len(skills) == 1
+        assert skills[0].version == "3.1.0"
+
 
 class TestListLocalSkillsCLI:
     """Tests for skill list-local CLI command."""
@@ -935,3 +1022,374 @@ class TestListLocalSkillsCLI:
         result = runner.invoke(main, ["skill", "list-local", "--source", str(tmp_path)])
         assert result.exit_code == 0
         assert "No skills directory found" in result.output
+
+
+class TestStripFrontmatterVersion:
+    """Tests for _strip_frontmatter_version helper."""
+
+    def test_strips_version_field(self, tmp_path):
+        """Test that version field is removed from frontmatter."""
+        from context_harness.skills import _strip_frontmatter_version
+
+        skill_md = tmp_path / "SKILL.md"
+        skill_md.write_text(
+            "---\nname: my-skill\nversion: 1.0.0\ndescription: A skill\n---\n\n# Body\n",
+            encoding="utf-8",
+        )
+
+        _strip_frontmatter_version(skill_md)
+
+        content = skill_md.read_text(encoding="utf-8")
+        assert "version:" not in content
+        assert "name: my-skill" in content
+        assert "description: A skill" in content
+        assert "# Body" in content
+
+    def test_preserves_file_without_frontmatter(self, tmp_path):
+        """Test that files without frontmatter are left unchanged."""
+        from context_harness.skills import _strip_frontmatter_version
+
+        skill_md = tmp_path / "SKILL.md"
+        original = "# No frontmatter here\nversion: 1.0.0\n"
+        skill_md.write_text(original, encoding="utf-8")
+
+        _strip_frontmatter_version(skill_md)
+
+        assert skill_md.read_text(encoding="utf-8") == original
+
+    def test_preserves_file_without_version(self, tmp_path):
+        """Test that files without version field are left unchanged."""
+        from context_harness.skills import _strip_frontmatter_version
+
+        skill_md = tmp_path / "SKILL.md"
+        skill_md.write_text(
+            "---\nname: my-skill\ndescription: A skill\n---\n\n# Body\n",
+            encoding="utf-8",
+        )
+
+        _strip_frontmatter_version(skill_md)
+
+        content = skill_md.read_text(encoding="utf-8")
+        assert "name: my-skill" in content
+        assert "description: A skill" in content
+
+    def test_handles_missing_file(self, tmp_path):
+        """Test that missing files are handled gracefully."""
+        from context_harness.skills import _strip_frontmatter_version
+
+        _strip_frontmatter_version(tmp_path / "nonexistent.md")
+        # Should not raise
+
+    def test_handles_multiline_description_after_version(self, tmp_path):
+        """Test stripping version when other fields have multi-line values."""
+        from context_harness.skills import _strip_frontmatter_version
+
+        skill_md = tmp_path / "SKILL.md"
+        skill_md.write_text(
+            "---\nname: my-skill\nversion: 2.0.0\ndescription: |\n  A multi-line\n  description\ntags:\n  - python\n---\n\n# Body\n",
+            encoding="utf-8",
+        )
+
+        _strip_frontmatter_version(skill_md)
+
+        content = skill_md.read_text(encoding="utf-8")
+        assert "version:" not in content
+        assert "name: my-skill" in content
+        assert "A multi-line" in content
+        assert "tags:" in content
+
+
+class TestExtractReleasePleaseFiles:
+    """Tests for release-please file generation during skill extraction."""
+
+    @patch("context_harness.skills.check_gh_auth")
+    @patch("context_harness.skills.check_repo_access")
+    @patch("context_harness.skills.subprocess.run")
+    def test_extract_creates_version_txt(
+        self, mock_run, mock_access, mock_auth, sample_skill_dir, tmp_path
+    ):
+        """Test that extract_skill creates version.txt in the skill directory."""
+        from context_harness.skills import extract_skill
+        import tempfile
+
+        mock_auth.return_value = True
+        mock_access.return_value = True
+
+        # Capture the tmpdir used during extraction to inspect files
+        created_files = {}
+
+        def _init_git_repo(clone_dir):
+            """Helper to initialise a bare git repo with one commit."""
+            clone_dir.mkdir(parents=True, exist_ok=True)
+            _real_subprocess_run(
+                ["git", "init", str(clone_dir)], capture_output=True, check=True
+            )
+            _real_subprocess_run(
+                ["git", "-C", str(clone_dir), "config", "user.email", "test@test.com"],
+                capture_output=True,
+                check=True,
+            )
+            _real_subprocess_run(
+                ["git", "-C", str(clone_dir), "config", "user.name", "Test"],
+                capture_output=True,
+                check=True,
+            )
+            (clone_dir / ".gitkeep").write_text("")
+            _real_subprocess_run(
+                ["git", "-C", str(clone_dir), "add", "."],
+                capture_output=True,
+                check=True,
+            )
+            _real_subprocess_run(
+                ["git", "-C", str(clone_dir), "commit", "-m", "init"],
+                capture_output=True,
+                check=True,
+            )
+
+        def smart_mock(args, **kwargs):
+            r = MagicMock()
+            r.returncode = 0
+            r.stdout = ""
+            r.stderr = ""
+            if args[0] == "gh":
+                if args[:2] == ["gh", "pr"]:
+                    r.stdout = "https://github.com/test/skills/pull/1"
+                elif args[:3] == ["gh", "repo", "clone"]:
+                    _init_git_repo(Path(args[4]))
+                return r
+            elif args[0] == "git" and "-C" in args:
+                tmpdir_path = args[2]
+                if "push" in args:
+                    # Capture files before "pushing"
+                    clone_dir = Path(tmpdir_path)
+                    skill_dir = clone_dir / "skill" / "test-skill"
+                    if skill_dir.exists():
+                        for f in skill_dir.rglob("*"):
+                            if f.is_file():
+                                created_files[str(f.relative_to(clone_dir))] = (
+                                    f.read_text(encoding="utf-8")
+                                )
+                    for rp_file in [
+                        "release-please-config.json",
+                        ".release-please-manifest.json",
+                    ]:
+                        rp_path = clone_dir / rp_file
+                        if rp_path.exists():
+                            created_files[rp_file] = rp_path.read_text(encoding="utf-8")
+                    r = MagicMock()
+                    r.returncode = 0
+                    r.stdout = ""
+                    r.stderr = ""
+                    return r
+                else:
+                    return _real_subprocess_run(args, **kwargs)
+            else:
+                return _real_subprocess_run(args, **kwargs)
+
+        mock_run.side_effect = smart_mock
+
+        source_path = sample_skill_dir.parent.parent.parent
+
+        result, pr_url = extract_skill(
+            "test-skill",
+            source_path=str(source_path),
+            quiet=True,
+        )
+
+        assert result == SkillResult.SUCCESS
+
+        # Verify version.txt was created
+        assert "skill/test-skill/version.txt" in created_files
+        assert created_files["skill/test-skill/version.txt"].strip() == "1.0.0"
+
+        # Verify SKILL.md has version stripped from frontmatter
+        assert "skill/test-skill/SKILL.md" in created_files
+        assert "version:" not in created_files["skill/test-skill/SKILL.md"]
+        assert "name: test-skill" in created_files["skill/test-skill/SKILL.md"]
+
+        # Verify release-please-config.json was created
+        assert "release-please-config.json" in created_files
+        rp_config = json.loads(created_files["release-please-config.json"])
+        assert "skill/test-skill" in rp_config["packages"]
+        assert rp_config["packages"]["skill/test-skill"]["release-type"] == "simple"
+        assert rp_config["packages"]["skill/test-skill"]["component"] == "test-skill"
+
+        # Verify .release-please-manifest.json was created
+        assert ".release-please-manifest.json" in created_files
+        rp_manifest = json.loads(created_files[".release-please-manifest.json"])
+        assert rp_manifest["skill/test-skill"] == "1.0.0"
+
+    @patch("context_harness.skills.check_gh_auth")
+    @patch("context_harness.skills.check_repo_access")
+    @patch("context_harness.skills.subprocess.run")
+    def test_extract_merges_existing_release_please_config(
+        self, mock_run, mock_access, mock_auth, sample_skill_dir
+    ):
+        """Test that extract_skill merges into existing release-please config."""
+        from context_harness.skills import extract_skill
+
+        mock_auth.return_value = True
+        mock_access.return_value = True
+
+        created_files = {}
+
+        def smart_mock(args, **kwargs):
+            if args[0] == "gh":
+                r = MagicMock()
+                r.returncode = 0
+                r.stdout = ""
+                r.stderr = ""
+                if args[:2] == ["gh", "pr"]:
+                    r.stdout = "https://github.com/test/skills/pull/1"
+                elif args[:3] == ["gh", "repo", "clone"]:
+                    clone_dir = Path(args[4])
+                    clone_dir.mkdir(parents=True, exist_ok=True)
+                    _real_subprocess_run(
+                        ["git", "init", str(clone_dir)],
+                        capture_output=True,
+                        check=True,
+                    )
+                    _real_subprocess_run(
+                        [
+                            "git",
+                            "-C",
+                            str(clone_dir),
+                            "config",
+                            "user.email",
+                            "t@t.com",
+                        ],
+                        capture_output=True,
+                        check=True,
+                    )
+                    _real_subprocess_run(
+                        ["git", "-C", str(clone_dir), "config", "user.name", "T"],
+                        capture_output=True,
+                        check=True,
+                    )
+                    # Pre-populate with existing release-please files
+                    existing_config = {
+                        "$schema": "https://raw.githubusercontent.com/googleapis/"
+                        "release-please/main/schemas/config.json",
+                        "separate-pull-requests": True,
+                        "include-component-in-tag": True,
+                        "tag-separator": "@",
+                        "packages": {
+                            "skill/existing-skill": {
+                                "release-type": "simple",
+                                "component": "existing-skill",
+                            }
+                        },
+                    }
+                    (clone_dir / "release-please-config.json").write_text(
+                        json.dumps(existing_config, indent=2) + "\n"
+                    )
+                    existing_manifest = {"skill/existing-skill": "1.2.3"}
+                    (clone_dir / ".release-please-manifest.json").write_text(
+                        json.dumps(existing_manifest, indent=2) + "\n"
+                    )
+                    (clone_dir / ".gitkeep").write_text("")
+                    _real_subprocess_run(
+                        ["git", "-C", str(clone_dir), "add", "."],
+                        capture_output=True,
+                        check=True,
+                    )
+                    _real_subprocess_run(
+                        ["git", "-C", str(clone_dir), "commit", "-m", "init"],
+                        capture_output=True,
+                        check=True,
+                    )
+                return r
+            elif args[0] == "git" and "-C" in args and "push" in args:
+                clone_dir = Path(args[2])
+                for rp_file in [
+                    "release-please-config.json",
+                    ".release-please-manifest.json",
+                ]:
+                    rp_path = clone_dir / rp_file
+                    if rp_path.exists():
+                        created_files[rp_file] = rp_path.read_text(encoding="utf-8")
+                r = MagicMock()
+                r.returncode = 0
+                r.stdout = ""
+                r.stderr = ""
+                return r
+            else:
+                return _real_subprocess_run(args, **kwargs)
+
+        mock_run.side_effect = smart_mock
+
+        source_path = sample_skill_dir.parent.parent.parent
+        result, _ = extract_skill(
+            "test-skill",
+            source_path=str(source_path),
+            quiet=True,
+        )
+
+        assert result == SkillResult.SUCCESS
+
+        # Verify existing skill is preserved and new skill is added
+        rp_config = json.loads(created_files["release-please-config.json"])
+        assert "skill/existing-skill" in rp_config["packages"]
+        assert "skill/test-skill" in rp_config["packages"]
+        assert (
+            rp_config["packages"]["skill/existing-skill"]["component"]
+            == "existing-skill"
+        )
+        assert rp_config["packages"]["skill/test-skill"]["component"] == "test-skill"
+
+        rp_manifest = json.loads(created_files[".release-please-manifest.json"])
+        assert rp_manifest["skill/existing-skill"] == "1.2.3"
+        assert rp_manifest["skill/test-skill"] == "1.0.0"
+
+
+class TestCheckUpdatesSkillsRepo:
+    """Tests that check_updates uses the configured skills repo."""
+
+    @patch("context_harness.skills.get_current_skills_repo")
+    @patch(
+        "context_harness.services.skill_service.SkillService.__init__",
+        return_value=None,
+    )
+    @patch("context_harness.services.skill_service.SkillService.list_outdated_skills")
+    def test_check_updates_uses_configured_repo(
+        self, mock_list_outdated, mock_init, mock_get_repo
+    ):
+        """check_updates() should pass get_current_skills_repo() to SkillService."""
+        from context_harness.skills import check_updates
+        from context_harness.primitives import Success
+        from context_harness.primitives.skill import VersionComparison, VersionStatus
+
+        mock_get_repo.return_value = "my-org/my-skills"
+        mock_list_outdated.return_value = Success(value=[])
+
+        check_updates(quiet=True)
+
+        mock_get_repo.assert_called_once()
+        mock_init.assert_called_once_with(skills_repo="my-org/my-skills")
+
+
+class TestUpgradeSkillSkillsRepo:
+    """Tests that upgrade_skill uses the configured skills repo."""
+
+    @patch("context_harness.skills.get_current_skills_repo")
+    @patch(
+        "context_harness.services.skill_service.SkillService.__init__",
+        return_value=None,
+    )
+    @patch("context_harness.services.skill_service.SkillService.upgrade_skill")
+    def test_upgrade_skill_uses_configured_repo(
+        self, mock_upgrade, mock_init, mock_get_repo
+    ):
+        """upgrade_skill() should pass get_current_skills_repo() to SkillService."""
+        from context_harness.skills import upgrade_skill
+        from context_harness.primitives import Success
+
+        mock_get_repo.return_value = "my-org/my-skills"
+        mock_result = MagicMock(spec=Success)
+        mock_result.message = "Upgraded test-skill to 2.0.0"
+        mock_upgrade.return_value = mock_result
+
+        upgrade_skill(skill_name="test-skill", quiet=True)
+
+        mock_get_repo.assert_called_once()
+        mock_init.assert_called_once_with(skills_repo="my-org/my-skills")

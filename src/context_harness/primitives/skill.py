@@ -235,7 +235,7 @@ class RegistryRepo:
     """Information about a skills registry repository.
 
     Represents a GitHub repository that serves as a private or organizational
-    skills registry, created via `context-harness skill init-repo`.
+    skills registry, created via `ch skill init-repo`.
 
     Attributes:
         name: Full repository name (owner/repo or just repo for personal)

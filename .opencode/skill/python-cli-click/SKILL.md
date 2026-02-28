@@ -5,7 +5,6 @@ description: |
   and interactive pickers. Use when creating new CLI commands, adding shell completion,
   implementing interactive selection, or testing CLI functionality. Covers command groups,
   formatters, exit codes, and CliRunner testing.
-version: 1.0.0
 tags:
   - python
   - cli
@@ -134,11 +133,11 @@ def feature_action(target: str, force: bool) -> None:
 
     Examples:
 
-        context-harness feature action
+        ch feature action
 
-        context-harness feature action --target ./my-project
+        ch feature action --target ./my-project
 
-        context-harness feature action --force
+        ch feature action --force
     """
     print_header("Feature Action")
     
@@ -255,7 +254,7 @@ elif result == FeatureResult.ALREADY_EXISTS:
 elif result == FeatureResult.NOT_FOUND:
     console.print()
     print_error(f"'{name}' not found.")
-    print_info("Use 'context-harness feature list' to see available options.")
+    print_info("Use 'ch feature list' to see available options.")
     raise SystemExit(1)
 elif result in (FeatureResult.AUTH_ERROR, FeatureResult.ERROR):
     console.print()
@@ -337,6 +336,7 @@ def test_action_force_overwrites(self, runner, tmp_path):
 
 ```toml
 [project.scripts]
+ch = "context_harness.cli:main"
 context-harness = "context_harness.cli:main"
 
 [project.dependencies]
@@ -354,7 +354,7 @@ questionary = ">=2.1.1"
 ```python
 """[Feature] commands for ContextHarness CLI.
 
-Handles the `context-harness [feature]` command group.
+Handles the `ch [feature]` command group.
 """
 
 from __future__ import annotations
@@ -404,11 +404,11 @@ def [feature]_[action](name: Optional[str], target: str, force: bool) -> None:
 
     Examples:
 
-        context-harness [feature] [action]
+        ch [feature] [action]
 
-        context-harness [feature] [action] my-name
+        ch [feature] [action] my-name
 
-        context-harness [feature] [action] --force
+        ch [feature] [action] --force
     """
     print_header("[Feature] [Action]")
     # Implementation...
@@ -426,4 +426,4 @@ def [feature]_[action](name: Optional[str], target: str, force: bool) -> None:
 
 ---
 
-_Skill: python-cli-click v1.0.0 | Last updated: 2025-12-30_
+_Skill: python-cli-click | Last updated: 2026-02-27_

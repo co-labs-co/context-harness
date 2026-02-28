@@ -160,6 +160,21 @@ List skills installed in the current project. Searches both `.opencode/skill/` a
 ch skill list-local
 ```
 
+**Example output:**
+
+```
+                         Local Skills
+┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━┓
+┃ Name               ┃ Description                        ┃ Version ┃ Status ┃
+┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━┩
+│ python-cli-click   │ Patterns for building Click CLI ... │ 0.2.0   │ ✓      │
+│ react-forms        │ React form handling with validation │ 0.1.0   │ ✓      │
+└────────────────────┴────────────────────────────────────┴─────────┴────────┘
+```
+
+!!! tip "Version Resolution"
+    If a skill has a `version.txt` file (from a release-please-managed registry), that version takes precedence over the `version:` field in SKILL.md frontmatter.
+
 ### skill info
 
 Show details for a specific skill.
@@ -245,10 +260,10 @@ For details on the CI/CD automation and versioning lifecycle, see [Automated Ver
 | `--private` / `--public` | Repository visibility (default: `--private`) |
 | `-d`, `--description` | Repository description |
 | `--configure-user` | Set as default `skills-repo` in user config — applies to all projects (`~/.context-harness/config.json`) |
-| `--configure-project` | Set as default `skills-repo` in project config — applies to this project only (`opencode.json`) |
+| `--configure-project` | Set as default `skills-repo` in project config — applies to this project only (`.context-harness/config.json`) |
 
 !!! tip "User vs Project Configuration"
-    `--configure-user` writes to `~/.context-harness/config.json`, so every project on your machine uses this registry by default. `--configure-project` writes to `opencode.json` in the current directory, so only this project is affected. If neither flag is passed, the command prints `config set` instructions for both options.
+    `--configure-user` writes to `~/.context-harness/config.json`, so every project on your machine uses this registry by default. `--configure-project` writes to `.context-harness/config.json` in the current directory, so only this project is affected. If neither flag is passed, the command prints `config set` instructions for both options.
 
 **Name format:**
 
@@ -284,13 +299,17 @@ ch skill outdated
 **Example output:**
 
 ```
-┏━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┓
-┃ Skill           ┃ Installed     ┃ Latest        ┃ Status              ┃
-┡━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━┩
-│ react-forms     │ 0.1.0         │ 0.2.0         │ upgrade available   │
-│ fastapi-crud    │ 1.0.0         │ 1.0.0         │ up to date          │
-│ django-auth     │ 0.3.0         │ 0.3.1         │ upgrade available   │
-└─────────────────┴───────────────┴───────────────┴─────────────────────┘
+Checking for skill updates...
+
+                              Skill Updates
+┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┓
+┃ Skill              ┃ Installed     ┃ Latest        ┃ Status              ┃
+┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━┩
+│ python-cli-click   │ 0.2.0         │ 0.3.0         │ upgrade available   │
+│ react-forms        │ 0.1.0         │ 0.2.0         │ upgrade available   │
+│ fastapi-crud       │ 1.0.0         │ 1.0.0         │ up to date          │
+│ django-auth        │ 0.3.0         │ 0.3.1         │ upgrade available   │
+└────────────────────┴───────────────┴───────────────┴─────────────────────┘
 ```
 
 If a skill requires a newer version of ContextHarness than is currently installed, it is shown with status `incompatible`.
@@ -300,9 +319,18 @@ If a skill requires a newer version of ContextHarness than is currently installe
 Upgrade one or all installed skills to the latest registry version.
 
 ```bash
-ch skill upgrade <name>        # Upgrade a specific skill
-ch skill upgrade --all         # Upgrade all outdated skills
+ch skill upgrade <name>          # Upgrade a specific skill
+ch skill upgrade --all           # Upgrade all outdated skills
 ch skill upgrade <name> --force  # Upgrade even if version is incompatible
+```
+
+**Example output:**
+
+```
+$ ch skill upgrade python-cli-click
+Upgrading skill: python-cli-click...
+
+✅ Upgraded python-cli-click from 0.2.0 → 0.3.0
 ```
 
 **Options:**
@@ -347,7 +375,7 @@ Set a configuration value.
 === "OpenCode"
 
     ```bash
-    # Project-level (in opencode.json)
+    # Project-level (in .context-harness/config.json)
     ch config set skills-repo <repo>
     
     # User-level (in ~/.context-harness/config.json)

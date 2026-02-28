@@ -482,3 +482,57 @@ class TestSkillInitRepoCommand:
         assert result.exit_code == 0
         mock_init.assert_called_once()
         assert mock_init.call_args.kwargs["name"] == "my-org/team-skills"
+
+    def test_init_repo_configure_both_flags(self) -> None:
+        """Both --configure-user and --configure-project flags update both configs."""
+        runner = CliRunner()
+
+        with (
+            patch(
+                "context_harness.interfaces.cli.skill_cmd.init_repo",
+                return_value=(
+                    SkillResult.SUCCESS,
+                    "https://github.com/test-user/my-skills",
+                ),
+            ),
+            patch(
+                "context_harness.interfaces.cli.skill_cmd._configure_skills_repo_user",
+            ) as mock_user,
+            patch(
+                "context_harness.interfaces.cli.skill_cmd._configure_skills_repo_project",
+            ) as mock_project,
+        ):
+            result = runner.invoke(
+                skill_group,
+                ["init-repo", "my-skills", "--configure-user", "--configure-project"],
+            )
+
+        assert result.exit_code == 0
+        mock_user.assert_called_once_with("test-user/my-skills")
+        mock_project.assert_called_once_with("test-user/my-skills")
+
+    def test_init_repo_configure_flags_skipped_on_failure(self) -> None:
+        """If init_repo fails, config should NOT be updated."""
+        runner = CliRunner()
+
+        with (
+            patch(
+                "context_harness.interfaces.cli.skill_cmd.init_repo",
+                return_value=(SkillResult.ERROR, None),
+            ),
+            patch(
+                "context_harness.interfaces.cli.skill_cmd._configure_skills_repo_user",
+            ) as mock_user,
+            patch(
+                "context_harness.interfaces.cli.skill_cmd._configure_skills_repo_project",
+            ) as mock_project,
+        ):
+            result = runner.invoke(
+                skill_group,
+                ["init-repo", "my-skills", "--configure-user", "--configure-project"],
+            )
+
+        assert result.exit_code == 1
+        # Configuration helpers should NOT have been called
+        mock_user.assert_not_called()
+        mock_project.assert_not_called()

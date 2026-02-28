@@ -13,6 +13,7 @@ import pytest
 from context_harness.primitives import (
     DEFAULT_SKILLS_REPO,
     OpenCodeConfig,
+    ProjectHarnessConfig,
     SKILLS_REPO_ENV_VAR,
     SkillsRegistryConfig,
     Success,
@@ -106,24 +107,24 @@ class TestUserConfig:
         assert dir_path == Path.home() / ".context-harness"
 
 
-class TestOpenCodeConfigSkillsRegistry:
-    """Tests for skills_registry in OpenCodeConfig."""
+class TestProjectHarnessConfig:
+    """Tests for ProjectHarnessConfig primitive."""
 
     def test_default_no_registry(self) -> None:
         """Test default config has no skills registry."""
-        config = OpenCodeConfig()
+        config = ProjectHarnessConfig()
         assert config.skills_registry is None
 
     def test_with_skills_registry(self) -> None:
         """Test config with skills registry."""
         registry = SkillsRegistryConfig(default="my-org/skills")
-        config = OpenCodeConfig(skills_registry=registry)
+        config = ProjectHarnessConfig(skills_registry=registry)
         assert config.skills_registry is not None
         assert config.skills_registry.default == "my-org/skills"
 
     def test_from_dict_with_registry(self) -> None:
         """Test parsing skills registry from dict."""
-        config = OpenCodeConfig.from_dict(
+        config = ProjectHarnessConfig.from_dict(
             {"skillsRegistry": {"default": "custom/repo"}}
         )
         assert config.skills_registry is not None
@@ -131,12 +132,12 @@ class TestOpenCodeConfigSkillsRegistry:
 
     def test_from_dict_without_registry(self) -> None:
         """Test parsing without skills registry."""
-        config = OpenCodeConfig.from_dict({})
+        config = ProjectHarnessConfig.from_dict({})
         assert config.skills_registry is None
 
     def test_to_dict_with_registry(self) -> None:
         """Test serializing skills registry."""
-        config = OpenCodeConfig(
+        config = ProjectHarnessConfig(
             skills_registry=SkillsRegistryConfig(default="custom/repo")
         )
         result = config.to_dict()
@@ -145,6 +146,28 @@ class TestOpenCodeConfigSkillsRegistry:
 
     def test_to_dict_without_registry(self) -> None:
         """Test serializing without skills registry."""
+        config = ProjectHarnessConfig()
+        result = config.to_dict()
+        assert "skillsRegistry" not in result
+
+
+class TestOpenCodeConfigNoSkillsRegistry:
+    """Tests that OpenCodeConfig no longer has skills_registry."""
+
+    def test_no_skills_registry_field(self) -> None:
+        """Test OpenCodeConfig has no skills_registry field."""
+        config = OpenCodeConfig()
+        assert not hasattr(config, "skills_registry")
+
+    def test_from_dict_ignores_skills_registry(self) -> None:
+        """Test from_dict ignores skillsRegistry key (no longer parsed)."""
+        config = OpenCodeConfig.from_dict(
+            {"skillsRegistry": {"default": "custom/repo"}}
+        )
+        assert not hasattr(config, "skills_registry")
+
+    def test_to_dict_no_skills_registry(self) -> None:
+        """Test to_dict does not include skillsRegistry."""
         config = OpenCodeConfig()
         result = config.to_dict()
         assert "skillsRegistry" not in result
@@ -162,7 +185,7 @@ class TestResolveSkillsRepo:
     def test_env_var_highest_priority(self) -> None:
         """Test environment variable has highest priority."""
         with patch.dict(os.environ, {SKILLS_REPO_ENV_VAR: "env/repo"}):
-            project_config = OpenCodeConfig(
+            project_config = ProjectHarnessConfig(
                 skills_registry=SkillsRegistryConfig(default="project/repo")
             )
             user_config = UserConfig(
@@ -174,7 +197,7 @@ class TestResolveSkillsRepo:
 
     def test_project_config_over_user(self) -> None:
         """Test project config takes precedence over user config."""
-        project_config = OpenCodeConfig(
+        project_config = ProjectHarnessConfig(
             skills_registry=SkillsRegistryConfig(default="project/repo")
         )
         user_config = UserConfig(
@@ -195,7 +218,7 @@ class TestResolveSkillsRepo:
 
     def test_project_config_without_registry(self) -> None:
         """Test project config without registry falls through."""
-        project_config = OpenCodeConfig()  # No skills_registry
+        project_config = ProjectHarnessConfig()  # No skills_registry
         user_config = UserConfig(
             skills_registry=SkillsRegistryConfig(default="user/repo")
         )
@@ -235,9 +258,11 @@ class TestResolveSkillsRepoWithLoading:
                 assert source == "default"
 
     def test_loads_project_config(self, clean_env: None, tmp_path: Path) -> None:
-        """Test loads project config from opencode.json."""
-        # Create opencode.json with skills registry
-        config_file = tmp_path / "opencode.json"
+        """Test loads project config from .context-harness/config.json."""
+        # Create .context-harness/config.json with skills registry
+        config_dir = tmp_path / ".context-harness"
+        config_dir.mkdir()
+        config_file = config_dir / "config.json"
         config_file.write_text(
             json.dumps({"skillsRegistry": {"default": "project/loaded"}})
         )
@@ -300,8 +325,10 @@ class TestGetSkillsRepoInfo:
         """Test includes all configuration values."""
         # Set env var
         with patch.dict(os.environ, {SKILLS_REPO_ENV_VAR: "env/repo"}):
-            # Create project config
-            config_file = tmp_path / "opencode.json"
+            # Create project config (.context-harness/config.json)
+            config_dir = tmp_path / ".context-harness"
+            config_dir.mkdir()
+            config_file = config_dir / "config.json"
             config_file.write_text(
                 json.dumps({"skillsRegistry": {"default": "project/repo"}})
             )

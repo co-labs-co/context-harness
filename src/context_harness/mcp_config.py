@@ -314,7 +314,7 @@ def add_mcp_server(
                 if not quiet:
                     console.print(
                         f"[yellow]Note: No OAuth credentials found. "
-                        f"Run 'context-harness mcp auth {server_name}' to authenticate.[/yellow]"
+                        f"Run 'ch mcp auth {server_name}' to authenticate.[/yellow]"
                     )
         except ImportError:
             # OAuth module not available - proceed without token
