@@ -234,8 +234,6 @@ ContextHarness agents are **model-agnostic**. They do not specify a model, allow
 
 ContextHarness supports multiple MCP servers that extend agent capabilities. The research and documentation subagents use these servers for documentation lookup, web search, and security scanning.
 
-For detailed configuration of all supported servers, see the [MCP Servers Reference](mcp-servers.md).
-
 ### Quick Setup
 
 ```bash
@@ -280,7 +278,42 @@ The research and documentation subagents require [Context7 MCP](https://github.c
     }
     ```
 
-For API key setup and higher rate limits, see [Context7 details](mcp-servers.md#context7).
+### Context7 with API Key
+
+For higher rate limits, add an API key. Sign up at [context7.com](https://context7.com).
+
+=== "OpenCode"
+
+    ```json
+    {
+      "mcp": {
+        "context7": {
+          "type": "remote",
+          "url": "https://mcp.context7.com/mcp",
+          "headers": {
+            "CONTEXT7_API_KEY": "YOUR_API_KEY"
+          },
+          "enabled": true
+        }
+      }
+    }
+    ```
+
+=== "Claude Code"
+
+    ```json
+    {
+      "mcpServers": {
+        "context7": {
+          "command": "npx",
+          "args": ["-y", "@upstash/context7-mcp"],
+          "env": {
+            "CONTEXT7_API_KEY": "YOUR_API_KEY"
+          }
+        }
+      }
+    }
+    ```
 
 ### Snyk (Security Scanning)
 
@@ -314,7 +347,7 @@ For API key setup and higher rate limits, see [Context7 details](mcp-servers.md#
     ```
 
 !!! note "Snyk Authentication"
-    Snyk requires separate authentication. Run `npx snyk auth` to authenticate before using the MCP server. See [Snyk details](mcp-servers.md#snyk) for tool profiles and available scanning tools.
+    Snyk requires separate authentication. Run `npx snyk auth` to authenticate before using the MCP server.
 
 ## Customization
 
