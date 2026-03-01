@@ -67,8 +67,8 @@ Manually save your progress:
 /compact
 ```
 
-!!! tip "Automatic Compaction"
-    ContextHarness automatically compacts every 2nd user interaction, so you don't always need to run this manually.
+!!! tip "When to Compact"
+    Use `/compact` regularly during long sessions — especially after significant progress, key decisions, or before the context window fills up.
 
 ## 5. Create a Pull Request
 

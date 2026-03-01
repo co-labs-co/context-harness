@@ -445,7 +445,7 @@ IF no significant changes since last compaction:
 
 ### Role in ContextHarness
 - Core advisory subagent for context preservation
-- Invoked automatically every 2nd user interaction
+- Invoked by the primary agent when compaction is needed
 - Provides structured guidance for SESSION.md updates
 - Never modifies files directly
 

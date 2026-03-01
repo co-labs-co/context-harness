@@ -35,7 +35,7 @@ ContextHarness uses a single-executor model with advisory subagents. It supports
 1. **Single Executor**: Only the primary agent writes code, modifies files, and runs commands
 2. **Advisory Subagents**: Subagents provide guidance but never execute
 3. **Persistent Context**: SESSION.md maintains state across conversations
-4. **Incremental Compaction**: Context is saved every 2nd user interaction
+4. **Compaction**: Use `/compact` to preserve context before it's lost to context window limits
 5. **Dual-Tool Support**: Works with both OpenCode and Claude Code simultaneously
 
 ## Directory Structure
@@ -230,11 +230,22 @@ ContextHarness agents are **model-agnostic**. They do not specify a model, allow
 4. **Last used model** (from previous session)
 5. **Internal priority** (first available model)
 
-## Context7 MCP Setup
+## MCP Server Setup
+
+ContextHarness supports multiple MCP servers that extend agent capabilities. The research and documentation subagents use these servers for documentation lookup, web search, and security scanning.
+
+### Quick Setup
+
+```bash
+ch mcp add context7          # Documentation lookup (used by @research-subagent)
+ch mcp add exa               # AI-powered web search
+ch mcp add snyk              # Security scanning (code, dependencies, IaC)
+ch mcp add atlassian         # Jira/Confluence integration (requires OAuth)
+```
+
+### Context7 (Recommended)
 
 The research and documentation subagents require [Context7 MCP](https://github.com/upstash/context7) for accurate documentation lookup.
-
-### Basic Setup
 
 === "OpenCode"
 
@@ -267,9 +278,9 @@ The research and documentation subagents require [Context7 MCP](https://github.c
     }
     ```
 
-### With API Key
+### Context7 with API Key
 
-For higher rate limits:
+For higher rate limits, add an API key. Sign up at [context7.com](https://context7.com).
 
 === "OpenCode"
 
@@ -304,7 +315,39 @@ For higher rate limits:
     }
     ```
 
-Sign up for a free API key at [context7.com](https://context7.com).
+### Snyk (Security Scanning)
+
+[Snyk MCP](https://docs.snyk.io/integrations/snyk-studio-agentic-integrations/getting-started-with-snyk-studio) provides security scanning for code, open-source dependencies, containers, and IaC. It runs as a local MCP server via `npx`.
+
+=== "OpenCode"
+
+    ```json
+    {
+      "mcp": {
+        "snyk": {
+          "type": "local",
+          "command": "npx",
+          "args": ["-y", "snyk@latest", "mcp", "-t", "stdio"]
+        }
+      }
+    }
+    ```
+
+=== "Claude Code"
+
+    ```json
+    {
+      "mcpServers": {
+        "snyk": {
+          "command": "npx",
+          "args": ["-y", "snyk@latest", "mcp", "-t", "stdio"]
+        }
+      }
+    }
+    ```
+
+!!! note "Snyk Authentication"
+    Snyk requires separate authentication. Run `npx snyk auth` to authenticate before using the MCP server.
 
 ## Customization
 
