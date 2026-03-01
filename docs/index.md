@@ -56,10 +56,10 @@ That's it. Your context persists across sessions.
 ## Key Features
 
 - **Session Management**: Named sessions (feature branches, ticket IDs) with persistent context
-- **Automatic Compaction**: Context is saved every 2nd user interaction
+- **Compaction**: Preserve context with `/compact` before it's lost to context window limits
 - **GitHub Integration**: Automatic branch creation, issue tracking, PR creation
 - **Continuous Documentation**: [Agentic workflow](user-guide/agentic-workflows.md) keeps docs in sync with code changes automatically
-- **Subagent System**: Research and documentation lookup via Context7 MCP
+- **Subagent System**: Research and documentation lookup via Context7 MCP, Exa web search, and Snyk security scanning
 - **Skill System**: Install, upgrade, and manage pre-built patterns and workflows — with custom registry support
 
 ## How It Differs from Other Approaches
