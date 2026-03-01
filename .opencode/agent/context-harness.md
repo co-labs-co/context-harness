@@ -45,6 +45,7 @@ Sessions live at `.context-harness/sessions/{name}/SESSION.md`.
 **Path resolution**: Always `.context-harness/sessions/{active_session}/SESSION.md`
 
 Use `/ctx` command workflow for session switching/creation.
+If the user describes a task without `/ctx`, infer or ask for a session name, then run the `/ctx` workflow.
 
 ## Commands
 
@@ -85,7 +86,7 @@ The CLI provides skill management for reusable agent skills:
 - `context-harness skill upgrade --all` — Upgrade all outdated skills
 - `context-harness skill init-repo` — Scaffold a new skills registry repo
 
-Skills are loaded on-demand via the skill tool when tasks match available skills.
+Skills are installed under `.opencode/skill/` and loaded on-demand by the runtime when tasks match available skills listed in `AGENTS.md`.
 
 ## Behavioral Patterns
 
