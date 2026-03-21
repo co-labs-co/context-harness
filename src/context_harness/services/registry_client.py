@@ -399,8 +399,10 @@ class HttpRegistryClient:
     def fetch_directory(self, path: str, dest: Path) -> bool:
         """Fetch a directory from HTTP endpoint.
 
-        For HTTP registries, we first try to fetch a tarball/zip if available.
-        Otherwise, we rely on a manifest listing or fetch known files.
+        For HTTP registries, this implementation relies on per-file fetches.
+        It first attempts to use an optional directory listing (e.g.,
+        a JSON manifest describing files and subdirectories); if no listing is
+        available, it falls back to fetching a small set of common files.
 
         Note: This implementation assumes the registry serves individual files.
         For better performance, registries should provide archive endpoints.
@@ -430,6 +432,9 @@ class HttpRegistryClient:
 
         # Fetch files
         for filename in files_to_fetch:
+            # Validate filename to prevent path traversal
+            if not self._is_safe_path_component(filename):
+                continue  # Skip potentially malicious filenames
             file_path = f"{path}/{filename}"
             content = self._fetch_file(file_path)
             if content:
@@ -437,14 +442,42 @@ class HttpRegistryClient:
 
         # Fetch directories (like references/, scripts/, assets/)
         for dirname in dirs_to_fetch:
+            # Validate dirname to prevent path traversal
+            if not self._is_safe_path_component(dirname):
+                continue  # Skip potentially malicious dirnames
             dir_path = f"{path}/{dirname}"
             dir_dest = dest / dirname
+            # Ensure resolved path stays within dest
+            try:
+                dir_dest.resolve().relative_to(dest.resolve())
+            except ValueError:
+                continue  # Path traversal attempt, skip
             if not self.fetch_directory(dir_path, dir_dest):
                 # Continue even if subdirectory fetch fails
                 pass
 
         # Check if we got at least the SKILL.md
         return (dest / "SKILL.md").exists()
+
+    def _is_safe_path_component(self, component: str) -> bool:
+        """Check if a path component is safe (no path traversal).
+
+        Args:
+            component: A filename or directory name
+
+        Returns:
+            True if the component is safe, False otherwise
+        """
+        if not component:
+            return False
+        # Reject absolute paths, parent references, and path separators
+        if component.startswith("/") or component.startswith("\\"):
+            return False
+        if ".." in component:
+            return False
+        if "/" in component or "\\" in component:
+            return False
+        return True
 
     def _fetch_file(self, path: str) -> Optional[bytes]:
         """Fetch a file from the HTTP endpoint."""

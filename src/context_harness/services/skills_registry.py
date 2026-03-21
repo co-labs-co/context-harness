@@ -14,12 +14,11 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple
 
 from context_harness.primitives import (
     DEFAULT_SKILLS_REPO,
     OpenCodeConfig,
-    RegistryAuthConfig,
     Result,
     SKILLS_REPO_ENV_VAR,
     SKILLS_REGISTRY_TOKEN_ENV_VAR,
@@ -31,10 +30,7 @@ from context_harness.primitives import (
 )
 from context_harness.services.registry_client import (
     AuthType,
-    GitHubRegistryClient,
-    HttpRegistryClient,
     RegistryAuth,
-    RegistryClient,
     RegistryConfig,
     RegistryType,
     create_registry_client,
@@ -49,10 +45,11 @@ def resolve_registry_config(
 
     Priority (highest to lowest):
     1. CONTEXT_HARNESS_REGISTRY_URL environment variable (HTTP registry)
-    2. CONTEXT_HARNESS_SKILLS_REPO environment variable (GitHub)
-    3. Project config (opencode.json skillsRegistry)
-    4. User config (~/.context-harness/config.json skillsRegistry)
-    5. Default (co-labs-co/context-harness-skills)
+    2. CONTEXT_HARNESS_REGISTRY_TYPE environment variable (type override)
+    3. CONTEXT_HARNESS_SKILLS_REPO environment variable (GitHub)
+    4. Project config (opencode.json skillsRegistry)
+    5. User config (~/.context-harness/config.json skillsRegistry)
+    6. Default (co-labs-co/context-harness-skills)
 
     Args:
         project_config: Optional project configuration (opencode.json)
@@ -74,7 +71,18 @@ def resolve_registry_config(
             "environment",
         )
 
-    # 2. Check for GitHub repo environment variable
+    # 2. Check for registry type override
+    env_type = _resolve_registry_type_from_env()
+    if env_type == RegistryType.HTTP:
+        # If type is explicitly HTTP but no URL, fall through to config resolution
+        pass
+    elif env_type == RegistryType.GITHUB:
+        # If type is explicitly GitHub, use the repo env var or default
+        env_repo = os.environ.get(SKILLS_REPO_ENV_VAR)
+        if env_repo:
+            return (RegistryConfig.github(env_repo), "environment")
+
+    # 3. Check for GitHub repo environment variable
     env_repo = os.environ.get(SKILLS_REPO_ENV_VAR)
     if env_repo:
         return (
@@ -82,17 +90,17 @@ def resolve_registry_config(
             "environment",
         )
 
-    # 3. Project config
+    # 4. Project config
     if project_config and project_config.skills_registry:
         config = _config_from_skills_registry(project_config.skills_registry)
         return (config, "project")
 
-    # 4. User config
+    # 5. User config
     if user_config and user_config.skills_registry:
         config = _config_from_skills_registry(user_config.skills_registry)
         return (config, "user")
 
-    # 5. Default
+    # 6. Default
     return (RegistryConfig.github(DEFAULT_SKILLS_REPO), "default")
 
 
@@ -109,13 +117,35 @@ def _resolve_auth_from_env() -> Optional[RegistryAuth]:
     )
 
 
+def _resolve_registry_type_from_env() -> Optional[RegistryType]:
+    """Resolve registry type from CONTEXT_HARNESS_REGISTRY_TYPE env var."""
+    env_type = os.environ.get(SKILLS_REGISTRY_TYPE_ENV_VAR)
+    if not env_type:
+        return None
+
+    # Normalize to lowercase for case-insensitive matching
+    normalized = env_type.strip().lower()
+    if normalized == "http":
+        return RegistryType.HTTP
+    elif normalized == "github":
+        return RegistryType.GITHUB
+    return None
+
+
 def _config_from_skills_registry(config: SkillsRegistryConfig) -> RegistryConfig:
     """Convert SkillsRegistryConfig to RegistryConfig."""
     if config.is_http and config.url:
         auth = None
         if config.auth:
+            # Normalize auth type to be case-insensitive
+            auth_type = AuthType.NONE
+            if config.auth.type:
+                normalized_type = config.auth.type.strip().lower()
+                auth_type_map = {e.value.lower(): e for e in AuthType}
+                auth_type = auth_type_map.get(normalized_type, AuthType.NONE)
+
             auth = RegistryAuth(
-                type=AuthType(config.auth.type) if config.auth.type in [e.value for e in AuthType] else AuthType.NONE,
+                type=auth_type,
                 token_env=config.auth.token_env,
                 header_name=config.auth.header_name,
                 username_env=config.auth.username_env,
