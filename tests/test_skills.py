@@ -435,7 +435,7 @@ class TestFetchDirectoryRecursive:
 
         dest = tmp_path / "skill"
         success = _fetch_directory_recursive(
-            "test/repo", "skill/test", dest, quiet=True
+            "skill/test", dest, quiet=True
         )
 
         assert success is True
@@ -482,7 +482,7 @@ class TestFetchDirectoryRecursive:
 
         dest = tmp_path / "skill"
         success = _fetch_directory_recursive(
-            "test/repo", "skill/test", dest, quiet=True
+            "skill/test", dest, quiet=True
         )
 
         assert success is True
@@ -540,7 +540,7 @@ class TestFetchDirectoryRecursive:
 
         dest = tmp_path / "skill"
         success = _fetch_directory_recursive(
-            "test/repo", "skill/test", dest, quiet=True
+            "skill/test", dest, quiet=True
         )
 
         assert success is True
@@ -559,7 +559,7 @@ class TestFetchDirectoryRecursive:
 
         dest = tmp_path / "skill"
         success = _fetch_directory_recursive(
-            "test/repo", "skill/test", dest, quiet=True
+            "skill/test", dest, quiet=True
         )
 
         assert success is False
@@ -574,7 +574,7 @@ class TestFetchDirectoryRecursive:
 
         dest = tmp_path / "skill"
         success = _fetch_directory_recursive(
-            "test/repo", "skill/test", dest, quiet=True
+            "skill/test", dest, quiet=True
         )
 
         assert success is False
@@ -605,7 +605,7 @@ class TestFetchDirectoryRecursive:
         assert not dest.exists()
 
         success = _fetch_directory_recursive(
-            "test/repo", "skill/test", dest, quiet=True
+            "skill/test", dest, quiet=True
         )
 
         assert success is True
@@ -644,7 +644,7 @@ class TestFetchDirectoryRecursive:
 
         dest = tmp_path / "skill"
         success = _fetch_directory_recursive(
-            "test/repo", "skill/test", dest, quiet=True
+            "skill/test", dest, quiet=True
         )
 
         assert success is False
