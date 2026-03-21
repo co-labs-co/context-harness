@@ -56,7 +56,11 @@ from context_harness.primitives.config import (
     DEFAULT_SKILLS_REPO,
     OpenCodeConfig,
     ProjectConfig,
+    RegistryAuthConfig,
     SKILLS_REPO_ENV_VAR,
+    SKILLS_REGISTRY_TOKEN_ENV_VAR,
+    SKILLS_REGISTRY_TYPE_ENV_VAR,
+    SKILLS_REGISTRY_URL_ENV_VAR,
     SkillsRegistryConfig,
     UserConfig,
 )
@@ -138,7 +142,11 @@ __all__ = [
     "DEFAULT_SKILLS_REPO",
     "OpenCodeConfig",
     "ProjectConfig",
+    "RegistryAuthConfig",
     "SKILLS_REPO_ENV_VAR",
+    "SKILLS_REGISTRY_TOKEN_ENV_VAR",
+    "SKILLS_REGISTRY_TYPE_ENV_VAR",
+    "SKILLS_REGISTRY_URL_ENV_VAR",
     "SkillsRegistryConfig",
     "UserConfig",
     # Message types

@@ -4,6 +4,8 @@ This module provides functionality to:
 - List available skills from the central skills repository
 - Install skills from the central repository
 - Extract local skills and create PRs to the central repository
+
+Supports both GitHub and HTTP-based skill registries.
 """
 
 from __future__ import annotations
@@ -27,7 +29,11 @@ from context_harness.primitives.tool_detector import (
     ToolTarget,
 )
 from context_harness.primitives.skill import VersionComparison, VersionStatus
-from context_harness.services.skills_registry import resolve_skills_repo_with_loading
+from context_harness.services.skills_registry import (
+    resolve_registry_config_with_loading,
+    get_registry_client,
+    get_registry_info,
+)
 
 console = Console()
 
@@ -39,16 +45,27 @@ def get_current_skills_repo() -> str:
     """Get the currently configured skills repository.
 
     Uses the layered configuration resolution:
-    1. CONTEXT_HARNESS_SKILLS_REPO environment variable
-    2. Project config (opencode.json skillsRegistry.default)
-    3. User config (~/.context-harness/config.json)
-    4. Default (co-labs-co/context-harness-skills)
+    1. CONTEXT_HARNESS_REGISTRY_URL environment variable (HTTP)
+    2. CONTEXT_HARNESS_SKILLS_REPO environment variable (GitHub)
+    3. Project config (opencode.json skillsRegistry)
+    4. User config (~/.context-harness/config.json)
+    5. Default (co-labs-co/context-harness-skills)
 
     Returns:
-        The skills repository in owner/repo format
+        The skills repository URL or owner/repo format
     """
-    repo, _ = resolve_skills_repo_with_loading()
-    return repo
+    config, _ = resolve_registry_config_with_loading()
+    return config.url
+
+
+def get_current_registry_type() -> str:
+    """Get the current registry type.
+
+    Returns:
+        "github" or "http"
+    """
+    config, _ = resolve_registry_config_with_loading()
+    return config.type.value
 
 
 class SkillResult(Enum):
@@ -75,7 +92,10 @@ class SkillInfo:
 
 
 def check_gh_auth(quiet: bool = False) -> bool:
-    """Verify GitHub CLI is authenticated.
+    """Verify registry authentication.
+
+    For GitHub registries, checks if GitHub CLI is authenticated.
+    For HTTP registries, checks if auth is configured.
 
     Args:
         quiet: If True, suppress output messages
@@ -83,46 +103,38 @@ def check_gh_auth(quiet: bool = False) -> bool:
     Returns:
         True if authenticated, False otherwise
     """
-    try:
-        result = subprocess.run(
-            ["gh", "auth", "status"],
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0:
-            if not quiet:
+    client = get_registry_client()
+    if not client.check_auth():
+        if not quiet:
+            registry_type = get_current_registry_type()
+            if registry_type == "github":
                 console.print("[red]Error: GitHub CLI is not authenticated.[/red]")
                 console.print("[dim]Run 'gh auth login' to authenticate.[/dim]")
-            return False
-        return True
-    except FileNotFoundError:
-        if not quiet:
-            console.print("[red]Error: GitHub CLI (gh) is not installed.[/red]")
-            console.print("[dim]Install it from https://cli.github.com[/dim]")
+            else:
+                console.print("[red]Error: Registry authentication failed.[/red]")
+                console.print("[dim]Check your CONTEXT_HARNESS_REGISTRY_TOKEN environment variable.[/dim]")
         return False
+    return True
 
 
 def check_repo_access(repo: Optional[str] = None, quiet: bool = False) -> bool:
-    """Check if user has access to the skills repository.
+    """Check if the registry is accessible.
 
     Args:
         repo: Repository in owner/name format (uses configured repo if None)
+              Note: This parameter is deprecated and ignored for HTTP registries
         quiet: If True, suppress output messages
 
     Returns:
-        True if user has access, False otherwise
+        True if accessible, False otherwise
     """
-    if repo is None:
-        repo = get_current_skills_repo()
-    result = subprocess.run(
-        ["gh", "api", f"/repos/{repo}", "--silent"],
-        capture_output=True,
-    )
-    if result.returncode != 0:
+    client = get_registry_client()
+    if not client.check_access():
         if not quiet:
-            console.print(f"[red]Error: Cannot access repository '{repo}'[/red]")
+            registry_url = get_current_skills_repo()
+            console.print(f"[red]Error: Cannot access registry '{registry_url}'[/red]")
             console.print(
-                "[dim]Make sure you have access to the private skills repository.[/dim]"
+                "[dim]Make sure you have access to the registry.[/dim]"
             )
         return False
     return True
@@ -130,6 +142,8 @@ def check_repo_access(repo: Optional[str] = None, quiet: bool = False) -> bool:
 
 def get_skills_registry(quiet: bool = False) -> Optional[Dict[str, Any]]:
     """Fetch the skills registry from the central repository.
+
+    Supports both GitHub and HTTP registries.
 
     Args:
         quiet: If True, suppress output messages
@@ -143,31 +157,17 @@ def get_skills_registry(quiet: bool = False) -> Optional[Dict[str, Any]]:
     if not check_repo_access(quiet=quiet):
         return None
 
-    skills_repo = get_current_skills_repo()
+    client = get_registry_client()
     try:
-        result = subprocess.run(
-            [
-                "gh",
-                "api",
-                f"/repos/{skills_repo}/contents/{SKILLS_REGISTRY_PATH}",
-                "-H",
-                "Accept: application/vnd.github.raw+json",
-            ],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        return json.loads(result.stdout)
-    except subprocess.CalledProcessError as e:
-        if not quiet:
-            if "404" in str(e.stderr):
+        manifest = client.fetch_manifest()
+        if manifest is None:
+            if not quiet:
                 console.print(
                     "[yellow]Skills registry not found. "
                     "The repository may be empty.[/yellow]"
                 )
-            else:
-                console.print(f"[red]Error fetching skills registry: {e.stderr}[/red]")
-        return None
+            return None
+        return json.loads(manifest)
     except json.JSONDecodeError as e:
         if not quiet:
             console.print(f"[red]Error parsing skills registry: {e}[/red]")
@@ -273,69 +273,29 @@ def get_skill_info(skill_name: str, quiet: bool = False) -> Optional[SkillInfo]:
 
 
 def _fetch_directory_recursive(
-    repo: str, path: str, dest: Path, quiet: bool = False
+    path: str, dest: Path, quiet: bool = False
 ) -> bool:
-    """Recursively fetch a directory from GitHub.
+    """Recursively fetch a directory from the registry.
+
+    Supports both GitHub and HTTP registries.
 
     Args:
-        repo: Repository in owner/name format
-        path: Path in the repository
+        path: Path in the registry
         dest: Local destination path
         quiet: If True, suppress output messages
 
     Returns:
         True if successful, False otherwise
     """
+    client = get_registry_client()
     try:
-        result = subprocess.run(
-            ["gh", "api", f"/repos/{repo}/contents/{path}"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        contents = json.loads(result.stdout)
-
-        # Handle case where API returns a single file instead of directory
-        if isinstance(contents, dict):
-            contents = [contents]
-
-        dest.mkdir(parents=True, exist_ok=True)
-
-        for item in contents:
-            item_name = item["name"]
-            item_path = dest / item_name
-
-            if item["type"] == "file":
-                # Fetch file content
-                file_result = subprocess.run(
-                    [
-                        "gh",
-                        "api",
-                        item["url"],
-                        "-H",
-                        "Accept: application/vnd.github.raw+json",
-                    ],
-                    capture_output=True,
-                    check=True,
-                )
-                item_path.write_bytes(file_result.stdout)
-                if not quiet:
-                    console.print(f"  [dim]Downloaded: {item_name}[/dim]")
-
-            elif item["type"] == "dir":
-                # Recursively fetch subdirectory
-                if not _fetch_directory_recursive(repo, item["path"], item_path, quiet):
-                    return False
-
-        return True
-
-    except subprocess.CalledProcessError as e:
+        success = client.fetch_directory(path, dest)
+        if success and not quiet:
+            console.print(f"  [dim]Downloaded: {path}[/dim]")
+        return success
+    except Exception as e:
         if not quiet:
-            console.print(f"[red]Error fetching {path}: {e.stderr}[/red]")
-        return False
-    except json.JSONDecodeError as e:
-        if not quiet:
-            console.print(f"[red]Error parsing response: {e}[/red]")
+            console.print(f"[red]Error fetching {path}: {e}[/red]")
         return False
 
 
@@ -347,6 +307,8 @@ def install_skill(
     tool_target: Optional[ToolTarget] = None,
 ) -> SkillResult:
     """Install a skill from the central repository.
+
+    Supports both GitHub and HTTP registries.
 
     Args:
         skill_name: Name of the skill to install
@@ -414,12 +376,11 @@ def install_skill(
         console.print(f"[cyan]Installing skill: {skill_name}...[/cyan]")
 
     # Install to all target directories
-    skills_repo = get_current_skills_repo()
     for i, skill_dest in enumerate(install_dirs):
         # Ensure parent directory exists
         skill_dest.parent.mkdir(parents=True, exist_ok=True)
 
-        if not _fetch_directory_recursive(skills_repo, skill.path, skill_dest, quiet):
+        if not _fetch_directory_recursive(skill.path, skill_dest, quiet):
             # Cleanup any partially created skill directory
             if skill_dest.exists():
                 shutil.rmtree(skill_dest)

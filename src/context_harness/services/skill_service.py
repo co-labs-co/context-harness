@@ -15,7 +15,7 @@ import subprocess
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Protocol
+from typing import TYPE_CHECKING, List, Optional, Protocol
 
 import yaml
 from packaging.version import InvalidVersion, Version
@@ -37,6 +37,9 @@ from context_harness.primitives import (
     VersionComparison,
     VersionStatus,
 )
+
+if TYPE_CHECKING:
+    from context_harness.services.registry_client import RegistryClient
 
 
 SKILLS_REGISTRY_PATH = "skills.json"
@@ -222,6 +225,36 @@ class DefaultGitHubClient:
             return None
 
 
+class _GitHubClientAdapter:
+    """Adapter to wrap GitHubClient in RegistryClient interface.
+
+    This provides backward compatibility for code that still uses
+    the GitHubClient interface directly.
+    """
+
+    def __init__(self, client: "GitHubClient", repo: str):
+        self._client = client
+        self._repo = repo
+
+    def check_auth(self) -> bool:
+        return self._client.check_auth()
+
+    def check_access(self) -> bool:
+        return self._client.check_repo_access(self._repo)
+
+    def fetch_manifest(self) -> Optional[str]:
+        return self._client.fetch_file(self._repo, SKILLS_REGISTRY_PATH)
+
+    def fetch_file(self, path: str) -> Optional[bytes]:
+        content = self._client.fetch_file(self._repo, path)
+        if content:
+            return content.encode("utf-8") if isinstance(content, str) else content
+        return None
+
+    def fetch_directory(self, path: str, dest: Path) -> bool:
+        return self._client.fetch_directory(self._repo, path, dest)
+
+
 class SkillService:
     """Service for managing skills.
 
@@ -231,6 +264,8 @@ class SkillService:
     - Installing skills
     - Extracting skills to PRs
     - Validating skill structure
+
+    Supports both GitHub and HTTP registries.
 
     Example:
         service = SkillService()
@@ -247,15 +282,35 @@ class SkillService:
 
     def __init__(
         self,
-        github_client: Optional[GitHubClient] = None,
+        github_client: Optional["GitHubClient"] = None,
+        registry_client: Optional["RegistryClient"] = None,
         skills_repo: str = DEFAULT_SKILLS_REPO,
     ):
         """Initialize the skill service.
 
         Args:
-            github_client: GitHub client for API operations
-            skills_repo: Skills repository (owner/repo format)
+            github_client: GitHub client for API operations (deprecated, use registry_client)
+            registry_client: Registry client for registry operations
+            skills_repo: Skills repository (owner/repo format for GitHub)
         """
+        # Support both old and new interfaces
+        if registry_client is not None:
+            self._registry = registry_client
+            self._is_github = False
+        elif github_client is not None:
+            # Wrap old GitHubClient in adapter
+            self._registry = _GitHubClientAdapter(github_client, skills_repo)
+            self._is_github = True
+        else:
+            # Default to GitHub client
+            from context_harness.services.registry_client import (
+                GitHubRegistryClient,
+            )
+
+            self._registry = GitHubRegistryClient(skills_repo)
+            self._is_github = True
+
+        # Keep for backward compatibility with extract/init-repo
         self.github = github_client or DefaultGitHubClient()
         self.skills_repo = skills_repo
 
@@ -271,23 +326,21 @@ class SkillService:
         Returns:
             Result containing list of Skill primitives
         """
-        if not self.github.check_auth():
+        if not self._registry.check_auth():
             return Failure(
-                error="GitHub CLI is not authenticated. Run 'gh auth login'.",
+                error="Registry authentication failed. For GitHub, run 'gh auth login'. For HTTP, check your token.",
                 code=ErrorCode.AUTH_REQUIRED,
             )
 
-        if not self.github.check_repo_access(self.skills_repo):
+        if not self._registry.check_access():
             return Failure(
-                error=f"Cannot access repository '{self.skills_repo}'",
+                error=f"Cannot access registry '{self.skills_repo}'",
                 code=ErrorCode.PERMISSION_DENIED,
                 details={"repo": self.skills_repo},
             )
 
         # Fetch registry
-        registry_content = self.github.fetch_file(
-            self.skills_repo, SKILLS_REGISTRY_PATH
-        )
+        registry_content = self._registry.fetch_manifest()
         if registry_content is None:
             return Failure(
                 error="Skills registry not found",
@@ -516,8 +569,8 @@ class SkillService:
             skills_dir.mkdir(parents=True, exist_ok=True)
 
             # Fetch skill files
-            if skill.path and not self.github.fetch_directory(
-                self.skills_repo, skill.path, skill_dest
+            if skill.path and not self._registry.fetch_directory(
+                skill.path, skill_dest
             ):
                 return Failure(
                     error=f"Failed to install skill '{skill_name}'",
