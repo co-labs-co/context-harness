@@ -2786,17 +2786,21 @@ server {
             if (listing) {
                 // Use listing as source of truth
                 for (const item of (listing.files || [])) {
-                    if (!files.find(f => f.path === item.path)) {
+                    // Handle both string format ("SKILL.md") and object format ({path: "SKILL.md"})
+                    const filePath = typeof item === 'string' ? item : (item.path || item.name);
+                    if (!filePath) continue;
+                    if (!files.find(f => f.path === filePath)) {
                         files.push({
-                            path: item.path,
-                            name: item.name || item.path.split('/').pop(),
-                            icon: getFileIcon(item.path),
+                            path: filePath,
+                            name: typeof item === 'string' ? item : (item.name || filePath.split('/').pop()),
+                            icon: getFileIcon(filePath),
                             type: 'file'
                         });
                     }
                 }
                 for (const item of (listing.directories || [])) {
-                    const dirName = typeof item === 'string' ? item : item.name;
+                    const dirName = typeof item === 'string' ? item : (item.name || item.path);
+                    if (!dirName) continue;
                     const dirFiles = (listing.directory_files || {})[dirName] || [];
                     files.push({
                         path: dirName,
