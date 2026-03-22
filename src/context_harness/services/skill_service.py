@@ -2906,49 +2906,88 @@ server {
         }
 
         function renderMarkdown(text) {
-            // Simple markdown parser
-            let html = text;
+            const codeBlocks = [];
+            const inlineCodes = [];
 
-            // Escape HTML first
+            // 1. Extract code blocks FIRST (protect from all other processing)
+            let html = text.replace(/```(\\w*)\\n([\\s\\S]*?)```/g, (match, lang, code) => {
+                const idx = codeBlocks.length;
+                // Escape HTML in code block now
+                const escaped = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                codeBlocks.push(`<pre><code class="language-${lang || 'text'}">${escaped}</code></pre>`);
+                return `\\n\\n__CODEBLOCK_${idx}__\\n\\n`;
+            });
+
+            // 2. Extract inline code (protect from other processing)
+            html = html.replace(/`([^`]+)`/g, (match, code) => {
+                const idx = inlineCodes.length;
+                const escaped = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                inlineCodes.push(`<code>${escaped}</code>`);
+                return `__INLINECODE_${idx}__`;
+            });
+
+            // 3. Escape HTML in remaining text
             html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-            // Code blocks
-            html = html.replace(/```(\\w*)\\n([\\s\\S]*?)```/g, '<pre><code>$2</code></pre>');
-
-            // Inline code
-            html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-
-            // Headers
+            // 4. Headers (must be at start of line)
             html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
             html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
             html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
 
-            // Bold and italic
+            // 5. Bold and italic
             html = html.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>');
-            html = html.replace(/\\*([^*]+)\\*/g, '<em>$1</em>');
+            html = html.replace(/\\*([^*\\n]+)\\*/g, '<em>$1</em>');
 
-            // Links
-            html = html.replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, '<a href="$2">$1</a>');
+            // 6. Links
+            html = html.replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
 
-            // Lists
+            // 7. Blockquotes
+            html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
+            html = html.replace(/(<blockquote>.*<\\/blockquote>\\n?)+/g, (match) => {
+                return match.replace(/<\\/blockquote>\\n?<blockquote>/g, '<br>');
+            });
+
+            // 8. Horizontal rules
+            html = html.replace(/^---$/gm, '<hr>');
+
+            // 9. Unordered lists
             html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
             html = html.replace(/(<li>.*<\\/li>\\n?)+/g, '<ul>$&</ul>');
 
-            // Numbered lists
+            // 10. Ordered lists
             html = html.replace(/^\\d+\\. (.+)$/gm, '<li>$1</li>');
+            // Wrap consecutive <li> from ordered lists in <ol>
+            html = html.replace(/(<li>.*<\\/li>\\n?)+/g, (match) => {
+                if (match.includes('<ul>')) return match;
+                return `<ol>${match}</ol>`;
+            });
 
-            // Paragraphs
-            html = html.replace(/\\n\\n/g, '</p><p>');
+            // 11. Paragraphs (double newlines)
+            html = html.replace(/\\n\\n+/g, '</p><p>');
             html = '<p>' + html + '</p>';
 
-            // Clean up empty paragraphs
+            // 12. Clean up - remove empty paragraphs and unwrap block elements
             html = html.replace(/<p>\\s*<\\/p>/g, '');
+            html = html.replace(/<p>\\s*(__CODEBLOCK_\\d+__)\\s*<\\/p>/g, '$1');
             html = html.replace(/<p>(<h[123]>)/g, '$1');
             html = html.replace(/(<\\/h[123]>)<\\/p>/g, '$1');
-            html = html.replace(/<p>(<pre>)/g, '$1');
-            html = html.replace(/(<\\/pre>)<\\/p>/g, '$1');
             html = html.replace(/<p>(<ul>)/g, '$1');
             html = html.replace(/(<\\/ul>)<\\/p>/g, '$1');
+            html = html.replace(/<p>(<ol>)/g, '$1');
+            html = html.replace(/(<\\/ol>)<\\/p>/g, '$1');
+            html = html.replace(/<p>(<blockquote>)/g, '$1');
+            html = html.replace(/(<\\/blockquote>)<\\/p>/g, '$1');
+            html = html.replace(/<p>(<hr>)/g, '$1');
+            html = html.replace(/(<hr>)<\\/p>/g, '$1');
+
+            // 13. Restore inline code
+            html = html.replace(/__INLINECODE_(\\d+)__/g, (match, idx) => inlineCodes[idx]);
+
+            // 14. Restore code blocks (after all other processing)
+            html = html.replace(/__CODEBLOCK_(\\d+)__/g, (match, idx) => codeBlocks[idx]);
+
+            // 15. Convert remaining single newlines to <br> (inside paragraphs only)
+            html = html.replace(/<p>([^<]*)\\n([^<]*)<\\/p>/g, '<p>$1<br>$2</p>');
 
             return html;
         }
