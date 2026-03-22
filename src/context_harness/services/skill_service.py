@@ -2571,14 +2571,32 @@ server {
                         </div>
                     </div>
 
-                    <!-- Install command -->
-                    <div class="mt-6 p-4 bg-[var(--card)] border rounded-[var(--radius)]">
-                        <h3 class="text-sm font-medium mb-2 text-[var(--muted-foreground)]">Install Command</h3>
-                        <div class="flex items-center gap-2">
-                            <code id="install-cmd" class="flex-1 px-3 py-2 bg-[var(--background)] rounded font-mono text-sm"></code>
-                            <button onclick="copyInstall()" class="px-3 py-2 text-xs font-medium bg-[var(--primary)] text-[var(--primary-foreground)] rounded hover:opacity-90 transition-opacity">
-                                Copy
-                            </button>
+                    <!-- Getting Started -->
+                    <div class="mt-6 space-y-4">
+                        <!-- Setup -->
+                        <div class="p-4 bg-[var(--card)] border rounded-[var(--radius)]">
+                            <h3 class="text-sm font-medium mb-3 text-[var(--muted-foreground)]">Getting Started</h3>
+                            <div class="space-y-3 text-sm">
+                                <p class="text-[var(--muted-foreground)]">First, configure ContextHarness to use this registry:</p>
+                                <div class="flex items-center gap-2">
+                                    <code id="setup-cmd" class="flex-1 px-3 py-2 bg-[var(--background)] rounded font-mono text-xs"></code>
+                                    <button onclick="copySetup()" class="px-2.5 py-2 text-xs font-medium bg-[var(--primary)] text-[var(--primary-foreground)] rounded hover:opacity-90 transition-opacity">
+                                        Copy
+                                    </button>
+                                </div>
+                                <p class="text-xs text-[var(--muted-foreground)]">Add this to your shell profile or run before installing skills.</p>
+                            </div>
+                        </div>
+
+                        <!-- Install command -->
+                        <div class="p-4 bg-[var(--card)] border rounded-[var(--radius)]">
+                            <h3 class="text-sm font-medium mb-2 text-[var(--muted-foreground)]">Install Skill</h3>
+                            <div class="flex items-center gap-2">
+                                <code id="install-cmd" class="flex-1 px-3 py-2 bg-[var(--background)] rounded font-mono text-sm"></code>
+                                <button onclick="copyInstall()" class="px-3 py-2 text-xs font-medium bg-[var(--primary)] text-[var(--primary-foreground)] rounded hover:opacity-90 transition-opacity">
+                                    Copy
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -2623,6 +2641,7 @@ server {
                 renderHeader();
                 document.getElementById('skill-content').classList.remove('hidden');
                 document.getElementById('install-cmd').textContent = `ch skill install ${skillName}`;
+                document.getElementById('setup-cmd').textContent = `export CONTEXT_HARNESS_REGISTRY_URL="${window.location.origin}"`;
 
                 // Discover and render file tree
                 await discoverFiles();
@@ -2863,6 +2882,21 @@ server {
 
         function copyInstall() {
             const cmd = `ch skill install ${skillName}`;
+            navigator.clipboard.writeText(cmd).then(() => {
+                showToast();
+            }).catch(() => {
+                const ta = document.createElement('textarea');
+                ta.value = cmd;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                showToast();
+            });
+        }
+
+        function copySetup() {
+            const cmd = document.getElementById('setup-cmd').textContent;
             navigator.clipboard.writeText(cmd).then(() => {
                 showToast();
             }).catch(() => {
