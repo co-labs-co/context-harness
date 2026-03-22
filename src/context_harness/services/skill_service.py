@@ -2584,7 +2584,6 @@ server {
                                         Copy
                                     </button>
                                 </div>
-                                <p class="text-xs text-[var(--muted-foreground)]">Add this to your shell profile or run before installing skills.</p>
                             </div>
                         </div>
 
@@ -2597,6 +2596,7 @@ server {
                                     Copy
                                 </button>
                             </div>
+                            <p class="text-xs text-[var(--muted-foreground)] mt-2">Or install directly without configuring: <code id="install-direct-cmd" class="px-1.5 py-0.5 bg-[var(--background)] rounded font-mono text-xs"></code></p>
                         </div>
                     </div>
                 </div>
@@ -2641,7 +2641,8 @@ server {
                 renderHeader();
                 document.getElementById('skill-content').classList.remove('hidden');
                 document.getElementById('install-cmd').textContent = `ch skill install ${skillName}`;
-                document.getElementById('setup-cmd').textContent = `export CONTEXT_HARNESS_REGISTRY_URL="${window.location.origin}"`;
+                document.getElementById('setup-cmd').textContent = `ch skill use-registry ${window.location.origin}`;
+                document.getElementById('install-direct-cmd').textContent = `ch skill install ${skillName} --registry ${window.location.origin}`;
 
                 // Discover and render file tree
                 await discoverFiles();
