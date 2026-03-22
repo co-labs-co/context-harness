@@ -2242,455 +2242,189 @@ server {
     def _write_scaffold_index_html(self, repo_path: Path) -> None:
         """Write index.html - static frontend for browsing skills.
 
-        A clean, modern UI that fetches skills.json and displays available
-        skills with search, filtering, and copy-paste installation commands.
+        A clean shadcn-inspired UI using Tailwind CSS with the project theme.
         """
         content = """\
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Skills Registry</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Noto+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
+        :root {
+            --background: oklch(0.1450 0 0);
+            --foreground: oklch(0.9850 0 0);
+            --card: oklch(0.2050 0 0);
+            --card-foreground: oklch(0.9850 0 0);
+            --primary: oklch(0.9220 0 0);
+            --primary-foreground: oklch(0.2050 0 0);
+            --secondary: oklch(0.2690 0 0);
+            --secondary-foreground: oklch(0.9850 0 0);
+            --muted: oklch(0.2690 0 0);
+            --muted-foreground: oklch(0.7080 0 0);
+            --accent: oklch(0.3710 0 0);
+            --accent-foreground: oklch(0.9850 0 0);
+            --border: oklch(0.2750 0 0);
+            --input: oklch(0.3250 0 0);
+            --ring: oklch(0.5560 0 0);
+            --radius: 0.625rem;
         }
 
-        :root {
-            --bg: #0f172a;
-            --bg-card: #1e293b;
-            --fg: #f1f5f9;
-            --muted: #94a3b8;
-            --accent: #38bdf8;
-            --accent-hover: #0ea5e9;
-            --border: #334155;
-            --success: #22c55e;
-            --tag-bg: #1e3a5f;
+        * {
+            border-color: var(--border);
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: var(--bg);
-            color: var(--fg);
-            min-height: 100vh;
-            line-height: 1.6;
+            font-family: 'Noto Sans Mono', ui-sans-serif, system-ui, sans-serif;
+            background: var(--background);
+            color: var(--foreground);
         }
 
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 2rem;
-        }
-
-        header {
-            text-align: center;
-            margin-bottom: 3rem;
-            padding-bottom: 2rem;
-            border-bottom: 1px solid var(--border);
-        }
-
-        h1 {
-            font-size: 2.5rem;
-            font-weight: 700;
-            margin-bottom: 0.5rem;
-            background: linear-gradient(135deg, var(--accent), #a78bfa);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .subtitle {
-            color: var(--muted);
-            font-size: 1.1rem;
-        }
-
-        .search-container {
-            margin-bottom: 2rem;
-        }
-
-        .search-input {
-            width: 100%;
-            padding: 1rem 1.5rem;
-            font-size: 1rem;
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            color: var(--fg);
-            outline: none;
-            transition: border-color 0.2s;
-        }
-
-        .search-input:focus {
-            border-color: var(--accent);
-        }
-
-        .search-input::placeholder {
-            color: var(--muted);
-        }
-
-        .stats {
-            display: flex;
-            gap: 2rem;
-            justify-content: center;
-            margin-bottom: 2rem;
-            flex-wrap: wrap;
-        }
-
-        .stat {
-            text-align: center;
-        }
-
-        .stat-value {
-            font-size: 2rem;
-            font-weight: 700;
-            color: var(--accent);
-        }
-
-        .stat-label {
-            color: var(--muted);
-            font-size: 0.875rem;
-        }
-
-        .skills-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-            gap: 1.5rem;
-        }
-
-        .skill-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 1.5rem;
-            transition: transform 0.2s, border-color 0.2s;
-        }
-
-        .skill-card:hover {
-            transform: translateY(-2px);
-            border-color: var(--accent);
-        }
-
-        .skill-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 0.75rem;
-        }
-
-        .skill-name {
-            font-size: 1.25rem;
-            font-weight: 600;
-            color: var(--fg);
-        }
-
-        .skill-version {
-            font-size: 0.75rem;
-            padding: 0.25rem 0.5rem;
-            background: var(--tag-bg);
-            border-radius: 6px;
-            color: var(--accent);
-            font-family: monospace;
-        }
-
-        .skill-description {
-            color: var(--muted);
-            font-size: 0.9rem;
-            margin-bottom: 1rem;
-            display: -webkit-box;
-            -webkit-line-clamp: 3;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-        }
-
-        .skill-tags {
-            display: flex;
-            gap: 0.5rem;
-            flex-wrap: wrap;
-            margin-bottom: 1rem;
-        }
-
-        .tag {
-            font-size: 0.75rem;
-            padding: 0.25rem 0.75rem;
-            background: rgba(56, 189, 248, 0.1);
-            border-radius: 20px;
-            color: var(--accent);
-        }
-
-        .skill-footer {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding-top: 1rem;
-            border-top: 1px solid var(--border);
-        }
-
-        .skill-author {
-            font-size: 0.8rem;
-            color: var(--muted);
-        }
-
-        .install-btn {
-            padding: 0.5rem 1rem;
-            font-size: 0.8rem;
-            background: var(--accent);
-            color: var(--bg);
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 500;
-            transition: background 0.2s;
-        }
-
-        .install-btn:hover {
-            background: var(--accent-hover);
-        }
-
-        .install-btn.copied {
-            background: var(--success);
-        }
-
-        .empty-state {
-            text-align: center;
-            padding: 4rem 2rem;
-            color: var(--muted);
-        }
-
-        .empty-state h2 {
-            margin-bottom: 0.5rem;
-            color: var(--fg);
-        }
-
-        .toast {
-            position: fixed;
-            bottom: 2rem;
-            right: 2rem;
-            padding: 1rem 1.5rem;
-            background: var(--success);
-            color: var(--bg);
-            border-radius: 8px;
-            font-weight: 500;
-            opacity: 0;
-            transform: translateY(10px);
-            transition: opacity 0.3s, transform 0.3s;
-            z-index: 1000;
-        }
-
-        .toast.show {
-            opacity: 1;
-            transform: translateY(0);
-        }
-
-        footer {
-            text-align: center;
-            padding: 2rem;
-            margin-top: 3rem;
-            border-top: 1px solid var(--border);
-            color: var(--muted);
-            font-size: 0.875rem;
-        }
-
-        footer a {
-            color: var(--accent);
-            text-decoration: none;
-        }
-
-        @media (max-width: 768px) {
-            .container {
-                padding: 1rem;
-            }
-
-            h1 {
-                font-size: 1.75rem;
-            }
-
-            .skills-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .stats {
-                gap: 1rem;
-            }
+        .font-mono {
+            font-family: 'Fira Code', ui-monospace, monospace;
         }
     </style>
 </head>
-<body>
-    <div class="container">
-        <header>
-            <h1>Skills Registry</h1>
-            <p class="subtitle">Extend your AI assistant with specialized capabilities</p>
+<body class="min-h-screen">
+    <div class="max-w-5xl mx-auto px-6 py-12">
+        <!-- Header -->
+        <header class="mb-12">
+            <h1 class="text-3xl font-semibold tracking-tight mb-2">Skills Registry</h1>
+            <p class="text-[var(--muted-foreground)]">Extend your AI assistant with specialized capabilities</p>
         </header>
 
-        <div class="stats" id="stats">
-            <div class="stat">
-                <div class="stat-value" id="skill-count">-</div>
-                <div class="stat-label">Skills</div>
-            </div>
-            <div class="stat">
-                <div class="stat-value" id="tag-count">-</div>
-                <div class="stat-label">Categories</div>
-            </div>
-        </div>
-
-        <div class="search-container">
+        <!-- Search -->
+        <div class="mb-8">
             <input
                 type="text"
-                class="search-input"
                 id="search"
-                placeholder="Search skills by name, description, or tag..."
+                placeholder="Search skills..."
+                class="w-full px-4 py-2.5 bg-[var(--card)] border rounded-[var(--radius)] text-sm outline-none focus:ring-2 focus:ring-[var(--ring)] transition-shadow"
             >
         </div>
 
-        <div class="skills-grid" id="skills-grid">
-            <!-- Skills loaded dynamically -->
+        <!-- Skills List -->
+        <div id="skills-list" class="space-y-3">
+            <div class="text-center py-12 text-[var(--muted-foreground)]">
+                Loading...
+            </div>
         </div>
 
-        <div class="empty-state" id="empty-state" style="display: none;">
-            <h2>No skills found</h2>
-            <p>Try adjusting your search or check back later.</p>
-        </div>
-
-        <footer>
-            <p>Powered by <a href="https://github.com/co-labs-co/context-harness" target="_blank">ContextHarness</a></p>
+        <!-- Footer -->
+        <footer class="mt-16 pt-8 border-t text-center text-sm text-[var(--muted-foreground)]">
+            <a href="https://github.com/co-labs-co/context-harness" class="hover:text-[var(--foreground)] transition-colors">ContextHarness</a>
         </footer>
     </div>
 
-    <div class="toast" id="toast">Copied to clipboard!</div>
+    <!-- Toast -->
+    <div id="toast" class="fixed bottom-6 right-6 px-4 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-[var(--radius)] text-sm font-medium opacity-0 translate-y-2 transition-all duration-200 pointer-events-none">
+        Copied to clipboard
+    </div>
 
     <script>
         let skills = [];
 
-        // Fetch skills from registry
         async function loadSkills() {
             try {
-                const response = await fetch('./skills.json');
+                const res = await fetch('./skills.json');
                 const data = await response.json();
                 skills = data.skills || [];
-                renderSkills(skills);
-                updateStats();
-            } catch (error) {
-                console.error('Failed to load skills:', error);
-                document.getElementById('skills-grid').innerHTML = `
-                    <div class="empty-state">
-                        <h2>Failed to load skills</h2>
-                        <p>Make sure the registry is properly configured.</p>
+                render();
+            } catch (e) {
+                document.getElementById('skills-list').innerHTML = `
+                    <div class="text-center py-12 text-[var(--muted-foreground)]">
+                        Failed to load skills
                     </div>
                 `;
             }
         }
 
-        // Render skills to the grid
-        function renderSkills(skillsToRender) {
-            const grid = document.getElementById('skills-grid');
-            const emptyState = document.getElementById('empty-state');
+        function render(list = skills) {
+            const container = document.getElementById('skills-list');
 
-            if (skillsToRender.length === 0) {
-                grid.innerHTML = '';
-                emptyState.style.display = 'block';
+            if (!list.length) {
+                container.innerHTML = `
+                    <div class="text-center py-12 text-[var(--muted-foreground)]">
+                        No skills found
+                    </div>
+                `;
                 return;
             }
 
-            emptyState.style.display = 'none';
-            grid.innerHTML = skillsToRender.map(skill => `
-                <div class="skill-card">
-                    <div class="skill-header">
-                        <h3 class="skill-name">${escapeHtml(skill.name)}</h3>
-                        <span class="skill-version">v${escapeHtml(skill.version || '0.0.0')}</span>
-                    </div>
-                    <p class="skill-description">${escapeHtml(skill.description || 'No description available')}</p>
-                    ${skill.tags && skill.tags.length > 0 ? `
-                        <div class="skill-tags">
-                            ${skill.tags.slice(0, 4).map(tag => `<span class="tag">${escapeHtml(tag)}</span>`).join('')}
+            container.innerHTML = list.map(s => `
+                <div class="group p-4 bg-[var(--card)] border rounded-[var(--radius)] hover:border-[var(--ring)] transition-colors">
+                    <div class="flex items-start justify-between gap-4">
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2 mb-1">
+                                <h3 class="font-medium">${esc(s.name)}</h3>
+                                <span class="font-mono text-xs px-1.5 py-0.5 bg-[var(--secondary)] text-[var(--secondary-foreground)] rounded">
+                                    v${esc(s.version || '0.0.0')}
+                                </span>
+                            </div>
+                            <p class="text-sm text-[var(--muted-foreground)] line-clamp-2 mb-2">
+                                ${esc(s.description || 'No description')}
+                            </p>
+                            ${s.tags?.length ? `
+                                <div class="flex flex-wrap gap-1.5">
+                                    ${s.tags.slice(0, 3).map(t => `
+                                        <span class="text-xs px-2 py-0.5 bg-[var(--muted)] text-[var(--muted-foreground)] rounded-full">
+                                            ${esc(t)}
+                                        </span>
+                                    `).join('')}
+                                </div>
+                            ` : ''}
                         </div>
-                    ` : ''}
-                    <div class="skill-footer">
-                        <span class="skill-author">by ${escapeHtml(skill.author || 'unknown')}</span>
-                        <button class="install-btn" onclick="copyInstall('${escapeHtml(skill.name)}')">
-                            Copy Install
+                        <button
+                            onclick="copyInstall('${esc(s.name)}')"
+                            class="shrink-0 px-3 py-1.5 text-xs font-medium bg-[var(--primary)] text-[var(--primary-foreground)] rounded-[var(--radius)] hover:opacity-90 transition-opacity"
+                        >
+                            Copy
                         </button>
                     </div>
                 </div>
             `).join('');
         }
 
-        // Update stats display
-        function updateStats() {
-            document.getElementById('skill-count').textContent = skills.length;
-
-            const allTags = new Set();
-            skills.forEach(skill => {
-                (skill.tags || []).forEach(tag => allTags.add(tag));
-            });
-            document.getElementById('tag-count').textContent = allTags.size;
-        }
-
-        // Search/filter skills
-        function filterSkills(query) {
-            if (!query) {
-                renderSkills(skills);
-                return;
-            }
-
-            const q = query.toLowerCase();
-            const filtered = skills.filter(skill => {
-                return (
-                    (skill.name || '').toLowerCase().includes(q) ||
-                    (skill.description || '').toLowerCase().includes(q) ||
-                    (skill.tags || []).some(tag => tag.toLowerCase().includes(q)) ||
-                    (skill.author || '').toLowerCase().includes(q)
-                );
-            });
-
-            renderSkills(filtered);
-        }
-
-        // Copy install command to clipboard
-        function copyInstall(skillName) {
-            const cmd = `ch skill install ${skillName}`;
+        function copyInstall(name) {
+            const cmd = `ch skill install ${name}`;
             navigator.clipboard.writeText(cmd).then(() => {
-                showToast();
+                const toast = document.getElementById('toast');
+                toast.classList.remove('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.classList.add('opacity-0', 'translate-y-2'), 1500);
             }).catch(() => {
-                // Fallback for older browsers
-                const textarea = document.createElement('textarea');
-                textarea.value = cmd;
-                document.body.appendChild(textarea);
-                textarea.select();
+                const ta = document.createElement('textarea');
+                ta.value = cmd;
+                document.body.appendChild(ta);
+                ta.select();
                 document.execCommand('copy');
-                document.body.removeChild(textarea);
-                showToast();
+                document.body.removeChild(ta);
             });
         }
 
-        // Show toast notification
-        function showToast() {
-            const toast = document.getElementById('toast');
-            toast.classList.add('show');
-            setTimeout(() => toast.classList.remove('show'), 2000);
+        function esc(str) {
+            const el = document.createElement('div');
+            el.textContent = str;
+            return el.innerHTML;
         }
 
-        // Escape HTML to prevent XSS
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
-        // Debounce helper
-        function debounce(fn, delay) {
-            let timeout;
-            return function(...args) {
-                clearTimeout(timeout);
-                timeout = setTimeout(() => fn.apply(this, args), delay);
-            };
-        }
-
-        // Initialize
-        document.getElementById('search').addEventListener('input', debounce((e) => {
-            filterSkills(e.target.value);
-        }, 200));
+        let debounceTimer;
+        document.getElementById('search').addEventListener('input', (e) => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                const q = e.target.value.toLowerCase();
+                if (!q) return render();
+                render(skills.filter(s =>
+                    s.name?.toLowerCase().includes(q) ||
+                    s.description?.toLowerCase().includes(q) ||
+                    s.tags?.some(t => t.toLowerCase().includes(q))
+                ));
+            }, 150);
+        });
 
         loadSkills();
     </script>
