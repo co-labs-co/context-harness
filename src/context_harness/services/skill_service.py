@@ -993,8 +993,26 @@ class SkillService:
     # -- Scaffold file writers -----------------------------------------------
 
     def _write_scaffold_skills_json(self, repo_path: Path) -> None:
-        """Write skills.json — empty registry manifest."""
-        registry = {"schema_version": "1.0", "skills": []}
+        """Write skills.json — registry manifest with scaffolded skills."""
+        registry = {
+            "schema_version": "1.0",
+            "skills": [
+                {
+                    "name": "example-skill",
+                    "description": "An example skill to demonstrate the registry structure",
+                    "version": "0.1.0",
+                    "author": "your-name",
+                    "tags": ["example", "getting-started"],
+                },
+                {
+                    "name": "skill-release",
+                    "description": "Guide for creating, versioning, and releasing skills in a ContextHarness skills registry repository.",
+                    "version": "0.1.0",
+                    "author": None,
+                    "tags": [],
+                },
+            ],
+        }
         (repo_path / "skills.json").write_text(
             json.dumps(registry, indent=2) + "\n", encoding="utf-8"
         )
