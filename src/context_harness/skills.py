@@ -706,6 +706,17 @@ def extract_skill(
             if not quiet:
                 console.print(f"[dim]Copied skill to {SKILLS_DIR}/{skill_name}/[/dim]")
 
+            # Ensure version.txt exists (required for CI validation)
+            version_file = skill_dest / "version.txt"
+            if not version_file.exists():
+                initial_version = frontmatter.get("version", "0.1.0")
+                version_file.write_text(initial_version + "\n", encoding="utf-8")
+                if not quiet:
+                    console.print(f"[dim]Created version.txt with {initial_version}[/dim]")
+
+            # Update release-please config to register the new skill
+            _update_release_please_config(tmppath, skill_name, frontmatter.get("version", "0.1.0"))
+
             # Update or create skills.json registry
             registry_path = tmppath / SKILLS_REGISTRY_PATH
             if registry_path.exists():
@@ -1003,6 +1014,60 @@ def _truncate_description(text: str, max_length: int) -> str:
         truncated = truncated[:last_space]
 
     return truncated + "..."
+
+
+def _update_release_please_config(repo_path: Path, skill_name: str, version: str) -> None:
+    """Update release-please config files to register a new skill.
+
+    Args:
+        repo_path: Path to the skills repo root
+        skill_name: Name of the skill being added
+        version: Initial version for the skill
+    """
+    skill_path = f"skill/{skill_name}"
+
+    # Update release-please-config.json
+    config_path = repo_path / "release-please-config.json"
+    if config_path.exists():
+        try:
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            config = {}
+    else:
+        config = {
+            "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+            "separate-pull-requests": True,
+            "include-component-in-tag": True,
+            "tag-separator": "@",
+            "packages": {},
+        }
+
+    # Ensure packages exists
+    if "packages" not in config:
+        config["packages"] = {}
+
+    # Add the skill if not already present
+    if skill_path not in config["packages"]:
+        config["packages"][skill_path] = {
+            "release-type": "simple",
+            "component": skill_name,
+        }
+        config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+
+    # Update .release-please-manifest.json
+    manifest_path = repo_path / ".release-please-manifest.json"
+    if manifest_path.exists():
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            manifest = {}
+    else:
+        manifest = {}
+
+    # Add the skill version if not already present
+    if skill_path not in manifest:
+        manifest[skill_path] = version
+        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
 
 def _get_github_username() -> str:
