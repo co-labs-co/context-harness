@@ -2133,6 +2133,7 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # Copy web frontend
 COPY index.html /usr/share/nginx/html/
+COPY skill.html /usr/share/nginx/html/
 
 # Copy registry files
 COPY skills.json /usr/share/nginx/html/
