@@ -1521,6 +1521,7 @@ jobs:
 
 Parses SKILL.md frontmatter and version.txt for each skill,
 then writes the consolidated skills.json registry manifest.
+Also generates .listing.json for each skill for frontend file discovery.
 
 Usage:
     python scripts/sync-registry.py
@@ -1531,6 +1532,37 @@ import json
 from pathlib import Path
 
 import frontmatter
+
+
+def build_listing(skill_dir: Path) -> dict:
+    """Build .listing.json for a skill directory."""
+    listing = {
+        "files": [],
+        "directories": [],
+        "directory_files": {},
+    }
+
+    skip_names = {".listing.json", ".gitkeep", ".DS_Store", "__pycache__"}
+
+    for item in skill_dir.iterdir():
+        if item.name in skip_names:
+            continue
+
+        if item.is_file():
+            listing["files"].append(item.name)
+        elif item.is_dir():
+            listing["directories"].append(item.name)
+            dir_files = []
+            for subitem in item.iterdir():
+                if subitem.name not in skip_names and subitem.is_file():
+                    dir_files.append(subitem.name)
+            if dir_files:
+                listing["directory_files"][item.name] = sorted(dir_files)
+
+    listing["files"] = sorted(listing["files"])
+    listing["directories"] = sorted(listing["directories"])
+
+    return listing
 
 
 def build_registry() -> dict:
@@ -1576,6 +1608,12 @@ def build_registry() -> dict:
                 ),
                 "content_hash": content_hash,
             }
+        )
+
+        # Generate .listing.json for frontend file discovery
+        listing = build_listing(skill_dir)
+        (skill_dir / ".listing.json").write_text(
+            json.dumps(listing, indent=2) + "\\n", encoding="utf-8"
         )
 
     return {"schema_version": "1.0", "skills": skills}
@@ -1793,6 +1831,45 @@ Use this skill when you need an example of the skill format.
         # version.txt — bootstrapped at 0.1.0 (required by release-please)
         (repo_path / "skill" / "example-skill" / "version.txt").write_text(
             "0.1.0\n", encoding="utf-8"
+        )
+
+        # .listing.json for frontend file discovery
+        self._write_scaffold_skill_listing(repo_path / "skill" / "example-skill")
+
+    def _write_scaffold_skill_listing(self, skill_path: Path) -> None:
+        """Write .listing.json for a skill directory.
+
+        Args:
+            skill_path: Path to the skill directory (e.g., skill/example-skill/)
+        """
+        listing: dict[str, Any] = {
+            "files": [],
+            "directories": [],
+            "directory_files": {},
+        }
+
+        skip_names = {".listing.json", ".gitkeep", ".DS_Store", "__pycache__"}
+
+        for item in skill_path.iterdir():
+            if item.name in skip_names:
+                continue
+
+            if item.is_file():
+                listing["files"].append(item.name)
+            elif item.is_dir():
+                listing["directories"].append(item.name)
+                dir_files = []
+                for subitem in item.iterdir():
+                    if subitem.name not in skip_names and subitem.is_file():
+                        dir_files.append(subitem.name)
+                if dir_files:
+                    listing["directory_files"][item.name] = sorted(dir_files)
+
+        listing["files"] = sorted(listing["files"])
+        listing["directories"] = sorted(listing["directories"])
+
+        (skill_path / ".listing.json").write_text(
+            json.dumps(listing, indent=2) + "\n", encoding="utf-8"
         )
 
     def _write_scaffold_skill_release(self, repo_path: Path) -> None:
@@ -2670,21 +2747,23 @@ server {
             const basePath = `skill/${skillName}`;
             const files = [];
 
-            // Known file patterns to check
+            // Known files at root level
             const knownFiles = [
                 { path: 'SKILL.md', icon: '📄', name: 'SKILL.md' },
                 { path: 'version.txt', icon: '📄', name: 'version.txt' },
                 { path: 'CHANGELOG.md', icon: '📄', name: 'CHANGELOG.md' },
             ];
 
-            // Known directories with common files
+            // Known directories with their expected file extensions
             const knownDirs = [
-                { dir: 'references', extensions: ['.md'] },
-                { dir: 'scripts', extensions: ['.sh', '.py', '.js'] },
-                { dir: 'examples', extensions: ['.md', '.txt', '.json'] },
+                { dir: 'references', extensions: ['.md', '.txt'] },
+                { dir: 'scripts', extensions: ['.sh', '.py', '.js', '.ts'] },
+                { dir: 'examples', extensions: ['.md', '.txt', '.json', '.yaml', '.yml'] },
+                { dir: 'templates', extensions: ['.md', '.txt', '.json', '.yaml', '.yml'] },
+                { dir: 'assets', extensions: ['.png', '.jpg', '.svg', '.gif'] },
             ];
 
-            // Check known files
+            // Check known files at root
             for (const file of knownFiles) {
                 const exists = await checkFileExists(`${basePath}/${file.path}`);
                 if (exists) {
@@ -2692,50 +2771,58 @@ server {
                 }
             }
 
-            // Check known directories
-            for (const dir of knownDirs) {
-                const dirExists = await checkFileExists(`${basePath}/${dir.dir}/.gitkeep`) ||
-                                  await checkFileExists(`${basePath}/${dir.dir}/README.md`);
-                if (dirExists) {
-                    files.push({
-                        path: dir.dir,
-                        name: dir.dir,
-                        icon: '📁',
-                        type: 'dir',
-                        files: await discoverDirFiles(`${basePath}/${dir.dir}`, dir.extensions)
-                    });
-                }
-            }
-
-            // Try to fetch .listing.json if it exists
+            // Try to fetch .listing.json first (most reliable)
+            let listing = null;
             try {
                 const listingRes = await fetch(`${basePath}/.listing.json`);
                 if (listingRes.ok) {
-                    const listing = await listingRes.json();
-                    // Merge listing into files (skip duplicates)
-                    for (const item of (listing.files || [])) {
-                        if (!files.find(f => f.path === item.path)) {
-                            files.push({
-                                path: item.path,
-                                name: item.name || item.path.split('/').pop(),
-                                icon: item.type === 'dir' ? '📁' : getFileIcon(item.path),
-                                type: item.type || 'file'
-                            });
-                        }
-                    }
-                    for (const item of (listing.directories || [])) {
-                        if (!files.find(f => f.path === item)) {
-                            files.push({
-                                path: item,
-                                name: item.split('/').pop(),
-                                icon: '📁',
-                                type: 'dir',
-                                files: []
-                            });
-                        }
-                    }
+                    listing = await listingRes.json();
                 }
             } catch (e) {}
+
+            if (listing) {
+                // Use listing as source of truth
+                for (const item of (listing.files || [])) {
+                    if (!files.find(f => f.path === item.path)) {
+                        files.push({
+                            path: item.path,
+                            name: item.name || item.path.split('/').pop(),
+                            icon: getFileIcon(item.path),
+                            type: 'file'
+                        });
+                    }
+                }
+                for (const item of (listing.directories || [])) {
+                    const dirName = typeof item === 'string' ? item : item.name;
+                    const dirFiles = (listing.directory_files || {})[dirName] || [];
+                    files.push({
+                        path: dirName,
+                        name: dirName,
+                        icon: '📁',
+                        type: 'dir',
+                        files: dirFiles.map(f => ({
+                            path: `${dirName}/${f}`,
+                            name: f,
+                            icon: getFileIcon(f),
+                            type: 'file'
+                        }))
+                    });
+                }
+            } else {
+                // Probe known directories
+                for (const dir of knownDirs) {
+                    const dirFiles = await probeDirectory(`${basePath}/${dir.dir}`, dir.extensions);
+                    if (dirFiles.length > 0) {
+                        files.push({
+                            path: dir.dir,
+                            name: dir.dir,
+                            icon: '📁',
+                            type: 'dir',
+                            files: dirFiles
+                        });
+                    }
+                }
+            }
 
             renderFileTree(files);
 
@@ -2746,13 +2833,20 @@ server {
             }
         }
 
-        async function discoverDirFiles(dirPath, extensions) {
+        async function probeDirectory(dirPath, extensions) {
             const files = [];
-            // Try common file names
-            const commonNames = ['README', 'index', 'main', 'guide'];
-            for (const name of commonNames) {
+            // Common file name patterns to probe
+            const patterns = [
+                'README', 'readme', 'index', 'main', 'guide', 'intro',
+                'getting-started', 'setup', 'config', 'example',
+                'output-patterns', 'workflows', 'troubleshooting',
+                'init_skill', 'package_skill', 'quick_validate',
+                'utils', 'helpers', 'common'
+            ];
+
+            for (const pattern of patterns) {
                 for (const ext of extensions) {
-                    const filePath = `${name}${ext}`;
+                    const filePath = `${pattern}${ext}`;
                     const exists = await checkFileExists(`${dirPath}/${filePath}`);
                     if (exists) {
                         files.push({
@@ -2764,6 +2858,7 @@ server {
                     }
                 }
             }
+
             return files;
         }
 
@@ -2780,9 +2875,9 @@ server {
             const ext = path.split('.').pop()?.toLowerCase();
             const icons = {
                 'md': '📄', 'txt': '📄', 'json': '📄',
-                'sh': '⚡', 'py': '🐍', 'js': '⚡',
+                'sh': '⚡', 'py': '🐍', 'js': '⚡', 'ts': '⚡',
                 'yaml': '⚙️', 'yml': '⚙️',
-                'png': '🖼️', 'jpg': '🖼️', 'svg': '🖼️',
+                'png': '🖼️', 'jpg': '🖼️', 'svg': '🖼️', 'gif': '🖼️',
             };
             return icons[ext] || '📄';
         }

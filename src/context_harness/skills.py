@@ -714,6 +714,9 @@ def extract_skill(
                 if not quiet:
                     console.print(f"[dim]Created version.txt with {initial_version}[/dim]")
 
+            # Generate .listing.json for frontend file discovery
+            _generate_skill_listing(skill_dest)
+
             # Update release-please config to register the new skill
             _update_release_please_config(tmppath, skill_name, frontmatter.get("version", "0.1.0"))
 
@@ -1014,6 +1017,47 @@ def _truncate_description(text: str, max_length: int) -> str:
         truncated = truncated[:last_space]
 
     return truncated + "..."
+
+
+def _generate_skill_listing(skill_path: Path) -> None:
+    """Generate .listing.json for a skill directory.
+
+    This file helps the frontend discover files without needing to probe.
+
+    Args:
+        skill_path: Path to the skill directory (e.g., skill/my-skill/)
+    """
+    listing: dict[str, Any] = {
+        "files": [],
+        "directories": [],
+        "directory_files": {},
+    }
+
+    # Skip hidden files and the listing file itself
+    skip_names = {".listing.json", ".gitkeep", ".DS_Store", "__pycache__"}
+
+    for item in skill_path.iterdir():
+        if item.name in skip_names:
+            continue
+
+        if item.is_file():
+            listing["files"].append(item.name)
+        elif item.is_dir():
+            listing["directories"].append(item.name)
+            # List files in the directory
+            dir_files = []
+            for subitem in item.iterdir():
+                if subitem.name not in skip_names and subitem.is_file():
+                    dir_files.append(subitem.name)
+            if dir_files:
+                listing["directory_files"][item.name] = sorted(dir_files)
+
+    # Sort for consistent output
+    listing["files"] = sorted(listing["files"])
+    listing["directories"] = sorted(listing["directories"])
+
+    listing_path = skill_path / ".listing.json"
+    listing_path.write_text(json.dumps(listing, indent=2) + "\n", encoding="utf-8")
 
 
 def _update_release_please_config(repo_path: Path, skill_name: str, version: str) -> None:
