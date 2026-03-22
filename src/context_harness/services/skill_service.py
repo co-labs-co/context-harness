@@ -2907,7 +2907,7 @@ server {
                             </div>
                             <div class="pl-4 hidden">
                                 ${f.files?.map(sf => `
-                                    <div class="file-item flex items-center gap-2" onclick="selectFile({path: '${f.dir}/${sf.path}', name: '${sf.name}', icon: '${sf.icon}', type: 'file'})">
+                                    <div class="file-item flex items-center gap-2" onclick="selectFile({path: '${f.path}/${sf.name}', name: '${sf.name}', icon: '${sf.icon}', type: 'file'})">
                                         <span>${sf.icon}</span>
                                         <span>${esc(sf.name)}</span>
                                     </div>
