@@ -2332,7 +2332,8 @@ server {
         async function loadSkills() {
             try {
                 const res = await fetch('./skills.json');
-                const data = await response.json();
+                if (!res.ok) throw new Error('Failed to fetch');
+                const data = await res.json();
                 skills = data.skills || [];
                 render();
             } catch (e) {
