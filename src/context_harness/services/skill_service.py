@@ -978,6 +978,11 @@ class SkillService:
         self._write_scaffold_sync_registry_script(repo_path)
         self._write_scaffold_validate_skills_script(repo_path)
 
+        # --- HTTP serving (Docker/nginx) ---
+        self._write_scaffold_dockerfile(repo_path)
+        self._write_scaffold_docker_compose(repo_path)
+        self._write_scaffold_nginx_conf(repo_path)
+
         # --- Example skill ---
         self._write_scaffold_example_skill(repo_path)
 
@@ -2083,6 +2088,154 @@ python scripts/validate_skills.py
         (repo_path / "skill" / "skill-release" / "version.txt").write_text(
             "0.1.0\n", encoding="utf-8"
         )
+
+    def _write_scaffold_dockerfile(self, repo_path: Path) -> None:
+        """Write Dockerfile for serving the registry via HTTP.
+
+        Uses nginx to serve static files, enabling users without GitHub
+        access to consume skills from this registry.
+        """
+        content = """\
+# Skills Registry HTTP Server
+# Serves the registry via HTTP for users without GitHub access
+#
+# Build: docker build -t skills-registry .
+# Run:   docker run -p 8080:80 skills-registry
+#
+# Usage with ContextHarness:
+#   export CONTEXT_HARNESS_REGISTRY_URL=http://localhost:8080
+#   context-harness skill list
+
+FROM nginx:alpine
+
+# Copy nginx configuration
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Copy registry files
+COPY skills.json /usr/share/nginx/html/
+COPY skill/ /usr/share/nginx/html/skill/
+
+# Add healthcheck
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \\
+    CMD wget --no-verbose --tries=1 --spider http://localhost/skills.json || exit 1
+
+# Expose port 80
+EXPOSE 80
+
+# Labels for container metadata
+LABEL org.opencontainers.image.title="ContextHarness Skills Registry"
+LABEL org.opencontainers.image.description="HTTP server for ContextHarness skills registry"
+LABEL org.opencontainers.image.source="https://github.com/co-labs-co/context-harness"
+"""
+        (repo_path / "Dockerfile").write_text(content, encoding="utf-8")
+
+    def _write_scaffold_docker_compose(self, repo_path: Path) -> None:
+        """Write docker-compose.yml for easy local deployment."""
+        content = """\
+# Skills Registry - Docker Compose
+#
+# Quick start:
+#   docker-compose up -d
+#   export CONTEXT_HARNESS_REGISTRY_URL=http://localhost:8080
+#   context-harness skill list
+#
+# Stop:
+#   docker-compose down
+
+services:
+  skills-registry:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/skills.json"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  # Optional: Add authentication with a reverse proxy
+  # auth-proxy:
+  #   image: nginx:alpine
+  #   ports:
+  #     - "443:443"
+  #   volumes:
+  #     - ./auth-nginx.conf:/etc/nginx/nginx.conf:ro
+  #   depends_on:
+  #     - skills-registry
+"""
+        (repo_path / "docker-compose.yml").write_text(content, encoding="utf-8")
+
+    def _write_scaffold_nginx_conf(self, repo_path: Path) -> None:
+        """Write nginx.conf for serving the registry.
+
+        Configures nginx to serve static files with appropriate headers
+        for CORS and caching.
+        """
+        content = """\
+# Nginx configuration for ContextHarness Skills Registry
+# Serves static files over HTTP with CORS support
+
+server {
+    listen 80;
+    server_name localhost;
+
+    # Serve files from the html directory
+    root /usr/share/nginx/html;
+    index skills.json;
+
+    # Enable gzip compression for JSON and text files
+    gzip on;
+    gzip_types application/json text/markdown text/plain;
+    gzip_min_length 256;
+
+    # CORS headers - allow all origins for public registries
+    # For private registries, restrict Access-Control-Allow-Origin
+    add_header Access-Control-Allow-Origin * always;
+    add_header Access-Control-Allow-Methods "GET, OPTIONS" always;
+    add_header Access-Control-Allow-Headers "Authorization, X-API-Key" always;
+
+    # Cache control - skills don't change frequently
+    location ~* \\.(json|md|txt)$ {
+        expires 5m;
+        add_header Cache-Control "public, max-age=300";
+        add_header Access-Control-Allow-Origin * always;
+    }
+
+    # Skills directory - serve all files
+    location /skill/ {
+        autoindex on;
+        expires 5m;
+        add_header Cache-Control "public, max-age=300";
+        add_header Access-Control-Allow-Origin * always;
+    }
+
+    # Health check endpoint
+    location /health {
+        return 200 'OK';
+        add_header Content-Type text/plain;
+        add_header Access-Control-Allow-Origin * always;
+    }
+
+    # Default: serve skills.json
+    location = / {
+        try_files /skills.json =404;
+    }
+
+    # Handle OPTIONS requests for CORS preflight
+    if ($request_method = OPTIONS) {
+        add_header Access-Control-Allow-Origin * always;
+        add_header Access-Control-Allow-Methods "GET, OPTIONS" always;
+        add_header Access-Control-Allow-Headers "Authorization, X-API-Key" always;
+        add_header Content-Length 0;
+        return 204;
+    }
+}
+"""
+        (repo_path / "nginx.conf").write_text(content, encoding="utf-8")
 
     def _compare_versions(
         self,
