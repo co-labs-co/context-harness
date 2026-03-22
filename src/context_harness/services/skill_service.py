@@ -2186,6 +2186,9 @@ python scripts/validate_skills.py
             "0.1.0\n", encoding="utf-8"
         )
 
+        # .listing.json for frontend file discovery
+        self._write_scaffold_skill_listing(repo_path / "skill" / "skill-release")
+
     def _write_scaffold_dockerfile(self, repo_path: Path) -> None:
         """Write Dockerfile for serving the registry via HTTP.
 
