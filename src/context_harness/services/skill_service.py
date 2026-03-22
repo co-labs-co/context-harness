@@ -2513,51 +2513,6 @@ server {
             font-size: 0.8125rem;
             line-height: 1.6;
         }
-
-        .markdown-content h1 { font-size: 1.5rem; font-weight: 600; margin: 1.5rem 0 1rem; }
-        .markdown-content h2 { font-size: 1.25rem; font-weight: 600; margin: 1.25rem 0 0.75rem; }
-        .markdown-content h3 { font-size: 1.125rem; font-weight: 600; margin: 1rem 0 0.5rem; }
-        .markdown-content p { margin: 0.75rem 0; }
-        .markdown-content ul, .markdown-content ol { margin: 0.75rem 0; padding-left: 1.5rem; }
-        .markdown-content li { margin: 0.25rem 0; }
-        .markdown-content code {
-            background: var(--muted);
-            padding: 0.125rem 0.375rem;
-            border-radius: 0.25rem;
-            font-size: 0.875em;
-        }
-        .markdown-content pre {
-            background: var(--background);
-            padding: 1rem;
-            border-radius: var(--radius);
-            overflow-x: auto;
-            margin: 1rem 0;
-        }
-        .markdown-content pre code {
-            background: none;
-            padding: 0;
-        }
-        .markdown-content blockquote {
-            border-left: 2px solid var(--border);
-            padding-left: 1rem;
-            margin: 1rem 0;
-            color: var(--muted-foreground);
-        }
-        .markdown-content a {
-            color: var(--ring);
-            text-decoration: underline;
-        }
-        .markdown-content table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 1rem 0;
-        }
-        .markdown-content th, .markdown-content td {
-            border: 1px solid var(--border);
-            padding: 0.5rem;
-            text-align: left;
-        }
-        .markdown-content th { background: var(--muted); }
     </style>
 </head>
 <body class="min-h-screen">
@@ -2606,18 +2561,13 @@ server {
                                 <span id="file-icon" class="text-[var(--muted-foreground)]">📄</span>
                                 <span id="file-path" class="font-mono text-sm">Select a file</span>
                             </div>
-                            <div class="flex items-center gap-2">
-                                <button id="view-raw-btn" class="px-2.5 py-1 text-xs bg-[var(--secondary)] text-[var(--secondary-foreground)] rounded hover:opacity-90 transition-opacity" onclick="toggleRawView()">
-                                    Raw
-                                </button>
-                                <button id="copy-btn" class="px-2.5 py-1 text-xs bg-[var(--primary)] text-[var(--primary-foreground)] rounded hover:opacity-90 transition-opacity" onclick="copyFileContent()">
-                                    Copy
-                                </button>
-                            </div>
+                            <button id="copy-btn" class="px-2.5 py-1 text-xs bg-[var(--primary)] text-[var(--primary-foreground)] rounded hover:opacity-90 transition-opacity" onclick="copyFileContent()">
+                                Copy
+                            </button>
                         </div>
                         <!-- File content -->
                         <div id="file-content-wrapper" class="p-4 min-h-[400px] max-h-[70vh] overflow-auto">
-                            <div id="file-content" class="markdown-content">Select a file to view its contents</div>
+                            <div id="file-content" class="file-content">Select a file to view its contents</div>
                         </div>
                     </div>
 
@@ -2646,7 +2596,6 @@ server {
         let skillMeta = null;
         let fileCache = {};
         let currentFile = null;
-        let isRawView = false;
 
         // Get skill name from URL
         const params = new URLSearchParams(window.location.search);
@@ -2889,116 +2838,8 @@ server {
         }
 
         function renderContent(content, path) {
-            const wrapper = document.getElementById('file-content-wrapper');
             const container = document.getElementById('file-content');
-
-            if (isRawView || !path.endsWith('.md')) {
-                // Raw view
-                wrapper.className = 'p-4 min-h-[400px] max-h-[70vh] overflow-auto';
-                container.className = 'file-content';
-                container.textContent = content;
-            } else {
-                // Markdown view
-                wrapper.className = 'p-4 min-h-[400px] max-h-[70vh] overflow-auto';
-                container.className = 'markdown-content';
-                container.innerHTML = renderMarkdown(content);
-            }
-        }
-
-        function renderMarkdown(text) {
-            const codeBlocks = [];
-            const inlineCodes = [];
-
-            // 1. Extract code blocks FIRST (protect from all other processing)
-            let html = text.replace(/```(\\w*)\\n([\\s\\S]*?)```/g, (match, lang, code) => {
-                const idx = codeBlocks.length;
-                // Escape HTML in code block now
-                const escaped = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                codeBlocks.push(`<pre><code class="language-${lang || 'text'}">${escaped}</code></pre>`);
-                return `\\n\\n__CODEBLOCK_${idx}__\\n\\n`;
-            });
-
-            // 2. Extract inline code (protect from other processing)
-            html = html.replace(/`([^`]+)`/g, (match, code) => {
-                const idx = inlineCodes.length;
-                const escaped = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                inlineCodes.push(`<code>${escaped}</code>`);
-                return `__INLINECODE_${idx}__`;
-            });
-
-            // 3. Escape HTML in remaining text
-            html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-            // 4. Headers (must be at start of line)
-            html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
-            html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
-            html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
-
-            // 5. Bold and italic
-            html = html.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>');
-            html = html.replace(/\\*([^*\\n]+)\\*/g, '<em>$1</em>');
-
-            // 6. Links
-            html = html.replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-
-            // 7. Blockquotes
-            html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
-            html = html.replace(/(<blockquote>.*<\\/blockquote>\\n?)+/g, (match) => {
-                return match.replace(/<\\/blockquote>\\n?<blockquote>/g, '<br>');
-            });
-
-            // 8. Horizontal rules
-            html = html.replace(/^---$/gm, '<hr>');
-
-            // 9. Unordered lists
-            html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
-            html = html.replace(/(<li>.*<\\/li>\\n?)+/g, '<ul>$&</ul>');
-
-            // 10. Ordered lists
-            html = html.replace(/^\\d+\\. (.+)$/gm, '<li>$1</li>');
-            // Wrap consecutive <li> from ordered lists in <ol>
-            html = html.replace(/(<li>.*<\\/li>\\n?)+/g, (match) => {
-                if (match.includes('<ul>')) return match;
-                return `<ol>${match}</ol>`;
-            });
-
-            // 11. Paragraphs (double newlines)
-            html = html.replace(/\\n\\n+/g, '</p><p>');
-            html = '<p>' + html + '</p>';
-
-            // 12. Clean up - remove empty paragraphs and unwrap block elements
-            html = html.replace(/<p>\\s*<\\/p>/g, '');
-            html = html.replace(/<p>\\s*(__CODEBLOCK_\\d+__)\\s*<\\/p>/g, '$1');
-            html = html.replace(/<p>(<h[123]>)/g, '$1');
-            html = html.replace(/(<\\/h[123]>)<\\/p>/g, '$1');
-            html = html.replace(/<p>(<ul>)/g, '$1');
-            html = html.replace(/(<\\/ul>)<\\/p>/g, '$1');
-            html = html.replace(/<p>(<ol>)/g, '$1');
-            html = html.replace(/(<\\/ol>)<\\/p>/g, '$1');
-            html = html.replace(/<p>(<blockquote>)/g, '$1');
-            html = html.replace(/(<\\/blockquote>)<\\/p>/g, '$1');
-            html = html.replace(/<p>(<hr>)/g, '$1');
-            html = html.replace(/(<hr>)<\\/p>/g, '$1');
-
-            // 13. Restore inline code
-            html = html.replace(/__INLINECODE_(\\d+)__/g, (match, idx) => inlineCodes[idx]);
-
-            // 14. Restore code blocks (after all other processing)
-            html = html.replace(/__CODEBLOCK_(\\d+)__/g, (match, idx) => codeBlocks[idx]);
-
-            // 15. Convert remaining single newlines to <br> (inside paragraphs only)
-            html = html.replace(/<p>([^<]*)\\n([^<]*)<\\/p>/g, '<p>$1<br>$2</p>');
-
-            return html;
-        }
-
-        function toggleRawView() {
-            isRawView = !isRawView;
-            document.getElementById('view-raw-btn').textContent = isRawView ? 'Markdown' : 'Raw';
-            if (currentFile) {
-                const content = fileCache[`skill/${skillName}/${currentFile.path}`];
-                if (content) renderContent(content, currentFile.path);
-            }
+            container.textContent = content;
         }
 
         async function copyFileContent() {
