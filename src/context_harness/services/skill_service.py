@@ -983,6 +983,7 @@ class SkillService:
         self._write_scaffold_docker_compose(repo_path)
         self._write_scaffold_nginx_conf(repo_path)
         self._write_scaffold_index_html(repo_path)
+        self._write_scaffold_skill_page(repo_path)
 
         # --- Example skill ---
         self._write_scaffold_example_skill(repo_path)
@@ -2376,7 +2377,7 @@ server {
             }
 
             container.innerHTML = list.map(s => `
-                <div class="group p-4 bg-[var(--card)] border rounded-[var(--radius)] hover:border-[var(--ring)] transition-colors">
+                <a href="skill.html?name=${encodeURIComponent(s.name)}" class="block group p-4 bg-[var(--card)] border rounded-[var(--radius)] hover:border-[var(--ring)] transition-colors">
                     <div class="flex items-start justify-between gap-4">
                         <div class="flex-1 min-w-0">
                             <div class="flex items-center gap-2 mb-1">
@@ -2398,14 +2399,11 @@ server {
                                 </div>
                             ` : ''}
                         </div>
-                        <button
-                            onclick="copyInstall('${esc(s.name)}')"
-                            class="shrink-0 px-3 py-1.5 text-xs font-medium bg-[var(--primary)] text-[var(--primary-foreground)] rounded-[var(--radius)] hover:opacity-90 transition-opacity"
-                        >
-                            Copy
-                        </button>
+                        <span class="shrink-0 px-3 py-1.5 text-xs font-medium bg-[var(--primary)] text-[var(--primary-foreground)] rounded-[var(--radius)] hover:opacity-90 transition-opacity">
+                            View
+                        </span>
                     </div>
-                </div>
+                </a>
             `).join('');
         }
 
@@ -2451,6 +2449,569 @@ server {
 </html>
 """
         (repo_path / "index.html").write_text(content, encoding="utf-8")
+
+    def _write_scaffold_skill_page(self, repo_path: Path) -> None:
+        """Write skill.html - individual skill detail page with file explorer."""
+        content = """\
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skill Details</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Noto+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --background: oklch(0.1450 0 0);
+            --foreground: oklch(0.9850 0 0);
+            --card: oklch(0.2050 0 0);
+            --card-foreground: oklch(0.9850 0 0);
+            --primary: oklch(0.9220 0 0);
+            --primary-foreground: oklch(0.2050 0 0);
+            --secondary: oklch(0.2690 0 0);
+            --secondary-foreground: oklch(0.9850 0 0);
+            --muted: oklch(0.2690 0 0);
+            --muted-foreground: oklch(0.7080 0 0);
+            --accent: oklch(0.3710 0 0);
+            --accent-foreground: oklch(0.9850 0 0);
+            --border: oklch(0.2750 0 0);
+            --input: oklch(0.3250 0 0);
+            --ring: oklch(0.5560 0 0);
+            --radius: 0.625rem;
+        }
+
+        * { border-color: var(--border); }
+
+        body {
+            font-family: 'Noto Sans Mono', ui-sans-serif, system-ui, sans-serif;
+            background: var(--background);
+            color: var(--foreground);
+        }
+
+        .font-mono { font-family: 'Fira Code', ui-monospace, monospace; }
+
+        .file-tree { user-select: none; }
+
+        .file-item {
+            cursor: pointer;
+            padding: 0.375rem 0.5rem;
+            border-radius: var(--radius);
+            transition: background 0.15s;
+        }
+
+        .file-item:hover { background: var(--muted); }
+        .file-item.active { background: var(--accent); color: var(--accent-foreground); }
+
+        .file-content {
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-family: 'Fira Code', ui-monospace, monospace;
+            font-size: 0.8125rem;
+            line-height: 1.6;
+        }
+
+        .markdown-content h1 { font-size: 1.5rem; font-weight: 600; margin: 1.5rem 0 1rem; }
+        .markdown-content h2 { font-size: 1.25rem; font-weight: 600; margin: 1.25rem 0 0.75rem; }
+        .markdown-content h3 { font-size: 1.125rem; font-weight: 600; margin: 1rem 0 0.5rem; }
+        .markdown-content p { margin: 0.75rem 0; }
+        .markdown-content ul, .markdown-content ol { margin: 0.75rem 0; padding-left: 1.5rem; }
+        .markdown-content li { margin: 0.25rem 0; }
+        .markdown-content code {
+            background: var(--muted);
+            padding: 0.125rem 0.375rem;
+            border-radius: 0.25rem;
+            font-size: 0.875em;
+        }
+        .markdown-content pre {
+            background: var(--background);
+            padding: 1rem;
+            border-radius: var(--radius);
+            overflow-x: auto;
+            margin: 1rem 0;
+        }
+        .markdown-content pre code {
+            background: none;
+            padding: 0;
+        }
+        .markdown-content blockquote {
+            border-left: 2px solid var(--border);
+            padding-left: 1rem;
+            margin: 1rem 0;
+            color: var(--muted-foreground);
+        }
+        .markdown-content a {
+            color: var(--ring);
+            text-decoration: underline;
+        }
+        .markdown-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+        }
+        .markdown-content th, .markdown-content td {
+            border: 1px solid var(--border);
+            padding: 0.5rem;
+            text-align: left;
+        }
+        .markdown-content th { background: var(--muted); }
+    </style>
+</head>
+<body class="min-h-screen">
+    <div class="max-w-6xl mx-auto px-6 py-8">
+        <!-- Header -->
+        <header class="mb-8">
+            <a href="index.html" class="inline-flex items-center gap-2 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] mb-4 transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                </svg>
+                Back to Skills
+            </a>
+            <div id="skill-header" class="flex items-start justify-between gap-4">
+                <div>
+                    <h1 class="text-2xl font-semibold" id="skill-name">Loading...</h1>
+                    <p class="text-[var(--muted-foreground)] mt-1" id="skill-description"></p>
+                </div>
+                <div id="skill-meta" class="text-right shrink-0"></div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div id="error-state" class="hidden text-center py-16">
+            <p class="text-[var(--muted-foreground)] mb-4">Skill not found</p>
+            <a href="index.html" class="text-[var(--ring)] hover:underline">Return to skills list</a>
+        </div>
+
+        <div id="skill-content" class="hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                <!-- File Tree -->
+                <div class="lg:col-span-1">
+                    <div class="bg-[var(--card)] border rounded-[var(--radius)] p-4 sticky top-4">
+                        <h2 class="text-sm font-medium mb-3 text-[var(--muted-foreground)]">Files</h2>
+                        <div id="file-tree" class="file-tree text-sm space-y-0.5">
+                            <div class="text-[var(--muted-foreground)] py-2">Loading...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- File Content -->
+                <div class="lg:col-span-3">
+                    <div class="bg-[var(--card)] border rounded-[var(--radius)]">
+                        <!-- File toolbar -->
+                        <div class="flex items-center justify-between px-4 py-3 border-b">
+                            <div class="flex items-center gap-2">
+                                <span id="file-icon" class="text-[var(--muted-foreground)]">📄</span>
+                                <span id="file-path" class="font-mono text-sm">Select a file</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button id="view-raw-btn" class="px-2.5 py-1 text-xs bg-[var(--secondary)] text-[var(--secondary-foreground)] rounded hover:opacity-90 transition-opacity" onclick="toggleRawView()">
+                                    Raw
+                                </button>
+                                <button id="copy-btn" class="px-2.5 py-1 text-xs bg-[var(--primary)] text-[var(--primary-foreground)] rounded hover:opacity-90 transition-opacity" onclick="copyFileContent()">
+                                    Copy
+                                </button>
+                            </div>
+                        </div>
+                        <!-- File content -->
+                        <div id="file-content-wrapper" class="p-4 min-h-[400px] max-h-[70vh] overflow-auto">
+                            <div id="file-content" class="markdown-content">Select a file to view its contents</div>
+                        </div>
+                    </div>
+
+                    <!-- Install command -->
+                    <div class="mt-6 p-4 bg-[var(--card)] border rounded-[var(--radius)]">
+                        <h3 class="text-sm font-medium mb-2 text-[var(--muted-foreground)]">Install Command</h3>
+                        <div class="flex items-center gap-2">
+                            <code id="install-cmd" class="flex-1 px-3 py-2 bg-[var(--background)] rounded font-mono text-sm"></code>
+                            <button onclick="copyInstall()" class="px-3 py-2 text-xs font-medium bg-[var(--primary)] text-[var(--primary-foreground)] rounded hover:opacity-90 transition-opacity">
+                                Copy
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="fixed bottom-6 right-6 px-4 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-[var(--radius)] text-sm font-medium opacity-0 translate-y-2 transition-all duration-200 pointer-events-none">
+        Copied to clipboard
+    </div>
+
+    <script>
+        let skillName = '';
+        let skillMeta = null;
+        let fileCache = {};
+        let currentFile = null;
+        let isRawView = false;
+
+        // Get skill name from URL
+        const params = new URLSearchParams(window.location.search);
+        skillName = params.get('name');
+
+        if (!skillName) {
+            document.getElementById('error-state').classList.remove('hidden');
+        } else {
+            loadSkill();
+        }
+
+        async function loadSkill() {
+            try {
+                // Fetch skills.json to get metadata
+                const res = await fetch('./skills.json');
+                if (!res.ok) throw new Error('Failed to fetch skills.json');
+                const data = await res.json();
+                skillMeta = data.skills?.find(s => s.name === skillName);
+
+                if (!skillMeta) {
+                    document.getElementById('error-state').classList.remove('hidden');
+                    return;
+                }
+
+                renderHeader();
+                document.getElementById('skill-content').classList.remove('hidden');
+                document.getElementById('install-cmd').textContent = `ch skill install ${skillName}`;
+
+                // Discover and render file tree
+                await discoverFiles();
+            } catch (e) {
+                console.error('Error loading skill:', e);
+                document.getElementById('error-state').classList.remove('hidden');
+            }
+        }
+
+        function renderHeader() {
+            document.getElementById('skill-name').textContent = skillMeta.name;
+            document.getElementById('skill-description').textContent = skillMeta.description || 'No description';
+
+            let metaHtml = `<span class="font-mono text-xs px-1.5 py-0.5 bg-[var(--secondary)] text-[var(--secondary-foreground)] rounded">v${skillMeta.version || '0.0.0'}</span>`;
+            if (skillMeta.author) {
+                metaHtml += `<div class="text-xs text-[var(--muted-foreground)] mt-2">by ${esc(skillMeta.author)}</div>`;
+            }
+            if (skillMeta.tags?.length) {
+                metaHtml += `<div class="flex flex-wrap gap-1 mt-2 justify-end">${skillMeta.tags.map(t => `<span class="text-xs px-2 py-0.5 bg-[var(--muted)] text-[var(--muted-foreground)] rounded-full">${esc(t)}</span>`).join('')}</div>`;
+            }
+            document.getElementById('skill-meta').innerHTML = metaHtml;
+        }
+
+        async function discoverFiles() {
+            const basePath = `skill/${skillName}`;
+            const files = [];
+
+            // Known file patterns to check
+            const knownFiles = [
+                { path: 'SKILL.md', icon: '📄', name: 'SKILL.md' },
+                { path: 'version.txt', icon: '📄', name: 'version.txt' },
+                { path: 'CHANGELOG.md', icon: '📄', name: 'CHANGELOG.md' },
+            ];
+
+            // Known directories with common files
+            const knownDirs = [
+                { dir: 'references', extensions: ['.md'] },
+                { dir: 'scripts', extensions: ['.sh', '.py', '.js'] },
+                { dir: 'examples', extensions: ['.md', '.txt', '.json'] },
+            ];
+
+            // Check known files
+            for (const file of knownFiles) {
+                const exists = await checkFileExists(`${basePath}/${file.path}`);
+                if (exists) {
+                    files.push({ ...file, type: 'file' });
+                }
+            }
+
+            // Check known directories
+            for (const dir of knownDirs) {
+                const dirExists = await checkFileExists(`${basePath}/${dir.dir}/.gitkeep`) ||
+                                  await checkFileExists(`${basePath}/${dir.dir}/README.md`);
+                if (dirExists) {
+                    files.push({
+                        path: dir.dir,
+                        name: dir.dir,
+                        icon: '📁',
+                        type: 'dir',
+                        files: await discoverDirFiles(`${basePath}/${dir.dir}`, dir.extensions)
+                    });
+                }
+            }
+
+            // Try to fetch .listing.json if it exists
+            try {
+                const listingRes = await fetch(`${basePath}/.listing.json`);
+                if (listingRes.ok) {
+                    const listing = await listingRes.json();
+                    // Merge listing into files (skip duplicates)
+                    for (const item of (listing.files || [])) {
+                        if (!files.find(f => f.path === item.path)) {
+                            files.push({
+                                path: item.path,
+                                name: item.name || item.path.split('/').pop(),
+                                icon: item.type === 'dir' ? '📁' : getFileIcon(item.path),
+                                type: item.type || 'file'
+                            });
+                        }
+                    }
+                    for (const item of (listing.directories || [])) {
+                        if (!files.find(f => f.path === item)) {
+                            files.push({
+                                path: item,
+                                name: item.split('/').pop(),
+                                icon: '📁',
+                                type: 'dir',
+                                files: []
+                            });
+                        }
+                    }
+                }
+            } catch (e) {}
+
+            renderFileTree(files);
+
+            // Auto-select SKILL.md if it exists
+            const skillMd = files.find(f => f.path === 'SKILL.md');
+            if (skillMd) {
+                selectFile(skillMd);
+            }
+        }
+
+        async function discoverDirFiles(dirPath, extensions) {
+            const files = [];
+            // Try common file names
+            const commonNames = ['README', 'index', 'main', 'guide'];
+            for (const name of commonNames) {
+                for (const ext of extensions) {
+                    const filePath = `${name}${ext}`;
+                    const exists = await checkFileExists(`${dirPath}/${filePath}`);
+                    if (exists) {
+                        files.push({
+                            path: filePath,
+                            name: filePath,
+                            icon: getFileIcon(filePath),
+                            type: 'file'
+                        });
+                    }
+                }
+            }
+            return files;
+        }
+
+        async function checkFileExists(path) {
+            try {
+                const res = await fetch(path, { method: 'HEAD' });
+                return res.ok;
+            } catch (e) {
+                return false;
+            }
+        }
+
+        function getFileIcon(path) {
+            const ext = path.split('.').pop()?.toLowerCase();
+            const icons = {
+                'md': '📄', 'txt': '📄', 'json': '📄',
+                'sh': '⚡', 'py': '🐍', 'js': '⚡',
+                'yaml': '⚙️', 'yml': '⚙️',
+                'png': '🖼️', 'jpg': '🖼️', 'svg': '🖼️',
+            };
+            return icons[ext] || '📄';
+        }
+
+        function renderFileTree(files) {
+            const container = document.getElementById('file-tree');
+
+            if (!files.length) {
+                container.innerHTML = '<div class="text-[var(--muted-foreground)] py-2">No files found</div>';
+                return;
+            }
+
+            container.innerHTML = files.map(f => {
+                if (f.type === 'dir') {
+                    return `
+                        <div class="directory">
+                            <div class="file-item flex items-center gap-2" onclick="toggleDir(this)">
+                                <span class="transform transition-transform">${f.icon}</span>
+                                <span>${esc(f.name)}</span>
+                            </div>
+                            <div class="pl-4 hidden">
+                                ${f.files?.map(sf => `
+                                    <div class="file-item flex items-center gap-2" onclick="selectFile({path: '${f.dir}/${sf.path}', name: '${sf.name}', icon: '${sf.icon}', type: 'file'})">
+                                        <span>${sf.icon}</span>
+                                        <span>${esc(sf.name)}</span>
+                                    </div>
+                                `).join('') || ''}
+                            </div>
+                        </div>
+                    `;
+                }
+                return `
+                    <div class="file-item flex items-center gap-2" onclick="selectFile({path: '${esc(f.path)}', name: '${esc(f.name)}', icon: '${f.icon}', type: 'file'})">
+                        <span>${f.icon}</span>
+                        <span>${esc(f.name)}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function toggleDir(el) {
+            const content = el.nextElementSibling;
+            content.classList.toggle('hidden');
+        }
+
+        async function selectFile(file) {
+            currentFile = file;
+
+            // Update active state
+            document.querySelectorAll('.file-item').forEach(el => el.classList.remove('active'));
+            event?.target?.closest('.file-item')?.classList.add('active');
+
+            // Update toolbar
+            document.getElementById('file-icon').textContent = file.icon;
+            document.getElementById('file-path').textContent = file.path;
+
+            // Fetch and display content
+            const basePath = `skill/${skillName}`;
+            const fullPath = `${basePath}/${file.path}`;
+
+            try {
+                if (!fileCache[fullPath]) {
+                    const res = await fetch(fullPath);
+                    if (!res.ok) throw new Error('Failed to fetch');
+                    fileCache[fullPath] = await res.text();
+                }
+
+                const content = fileCache[fullPath];
+                renderContent(content, file.path);
+            } catch (e) {
+                document.getElementById('file-content').innerHTML = '<div class="text-[var(--muted-foreground)]">Failed to load file</div>';
+            }
+        }
+
+        function renderContent(content, path) {
+            const wrapper = document.getElementById('file-content-wrapper');
+            const container = document.getElementById('file-content');
+
+            if (isRawView || !path.endsWith('.md')) {
+                // Raw view
+                wrapper.className = 'p-4 min-h-[400px] max-h-[70vh] overflow-auto';
+                container.className = 'file-content';
+                container.textContent = content;
+            } else {
+                // Markdown view
+                wrapper.className = 'p-4 min-h-[400px] max-h-[70vh] overflow-auto';
+                container.className = 'markdown-content';
+                container.innerHTML = renderMarkdown(content);
+            }
+        }
+
+        function renderMarkdown(text) {
+            // Simple markdown parser
+            let html = text;
+
+            // Escape HTML first
+            html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+            // Code blocks
+            html = html.replace(/```(\\w*)\\n([\\s\\S]*?)```/g, '<pre><code>$2</code></pre>');
+
+            // Inline code
+            html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+            // Headers
+            html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+            html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+            html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+
+            // Bold and italic
+            html = html.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>');
+            html = html.replace(/\\*([^*]+)\\*/g, '<em>$1</em>');
+
+            // Links
+            html = html.replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, '<a href="$2">$1</a>');
+
+            // Lists
+            html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
+            html = html.replace(/(<li>.*<\\/li>\\n?)+/g, '<ul>$&</ul>');
+
+            // Numbered lists
+            html = html.replace(/^\\d+\\. (.+)$/gm, '<li>$1</li>');
+
+            // Paragraphs
+            html = html.replace(/\\n\\n/g, '</p><p>');
+            html = '<p>' + html + '</p>';
+
+            // Clean up empty paragraphs
+            html = html.replace(/<p>\\s*<\\/p>/g, '');
+            html = html.replace(/<p>(<h[123]>)/g, '$1');
+            html = html.replace(/(<\\/h[123]>)<\\/p>/g, '$1');
+            html = html.replace(/<p>(<pre>)/g, '$1');
+            html = html.replace(/(<\\/pre>)<\\/p>/g, '$1');
+            html = html.replace(/<p>(<ul>)/g, '$1');
+            html = html.replace(/(<\\/ul>)<\\/p>/g, '$1');
+
+            return html;
+        }
+
+        function toggleRawView() {
+            isRawView = !isRawView;
+            document.getElementById('view-raw-btn').textContent = isRawView ? 'Markdown' : 'Raw';
+            if (currentFile) {
+                const content = fileCache[`skill/${skillName}/${currentFile.path}`];
+                if (content) renderContent(content, currentFile.path);
+            }
+        }
+
+        async function copyFileContent() {
+            if (!currentFile) return;
+            const content = fileCache[`skill/${skillName}/${currentFile.path}`];
+            if (!content) return;
+
+            try {
+                await navigator.clipboard.writeText(content);
+                showToast();
+            } catch (e) {
+                const ta = document.createElement('textarea');
+                ta.value = content;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                showToast();
+            }
+        }
+
+        function copyInstall() {
+            const cmd = `ch skill install ${skillName}`;
+            navigator.clipboard.writeText(cmd).then(() => {
+                showToast();
+            }).catch(() => {
+                const ta = document.createElement('textarea');
+                ta.value = cmd;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                showToast();
+            });
+        }
+
+        function showToast() {
+            const toast = document.getElementById('toast');
+            toast.classList.remove('opacity-0', 'translate-y-2');
+            setTimeout(() => toast.classList.add('opacity-0', 'translate-y-2'), 1500);
+        }
+
+        function esc(str) {
+            if (!str) return '';
+            const el = document.createElement('div');
+            el.textContent = str;
+            return el.innerHTML;
+        }
+    </script>
+</body>
+</html>
+"""
+        (repo_path / "skill.html").write_text(content, encoding="utf-8")
 
     def _compare_versions(
         self,
