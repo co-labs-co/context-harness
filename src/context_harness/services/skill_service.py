@@ -973,6 +973,7 @@ class SkillService:
         self._write_scaffold_release_workflow(repo_path)
         self._write_scaffold_sync_registry_workflow(repo_path)
         self._write_scaffold_validate_skills_workflow(repo_path)
+        self._write_scaffold_auto_rebase_workflow(repo_path)
 
         # --- Scripts ---
         self._write_scaffold_sync_registry_script(repo_path)
@@ -1137,7 +1138,8 @@ context-harness config set skills-repo {repo_name} --global
 │   └── workflows/
 │       ├── release.yml           # release-please automation
 │       ├── sync-registry.yml     # Rebuilds skills.json post-release
-│       └── validate-skills.yml   # PR validation checks
+│       ├── validate-skills.yml   # PR validation checks
+│       └── auto-rebase.yml       # Auto-rebase PRs when shared files change
 ├── scripts/
 │   ├── sync-registry.py          # Parses skills → skills.json
 │   └── validate_skills.py        # Pydantic-based validation
@@ -1515,6 +1517,79 @@ jobs:
         run: exit 1
 """
         (repo_path / ".github" / "workflows" / "validate-skills.yml").write_text(
+            content, encoding="utf-8"
+        )
+
+    def _write_scaffold_auto_rebase_workflow(self, repo_path: Path) -> None:
+        """Write .github/workflows/auto-rebase.yml for automatic PR rebasing.
+
+        Automatically rebases PRs when main changes to resolve conflicts
+        with shared files (skills.json, release-please-config.json, etc.)
+        that occur when multiple skills are extracted in parallel.
+        """
+        content = """\
+name: Auto Rebase
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "skills.json"
+      - "release-please-config.json"
+      - ".release-please-manifest.json"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  rebase:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get open PRs targeting main
+        id: prs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "prs=$(gh pr list --base main --state open --json number,headRefName --jq '[.[] | "\\(.number):\\(.headRefName)"]' | tr '\\n' ' ')" >> $GITHUB_OUTPUT
+
+      - name: Rebase PRs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for pr_info in ${{ steps.prs.outputs.prs }}; do
+            pr_number=$(echo "$pr_info" | cut -d: -f1)
+            pr_branch=$(echo "$pr_info" | cut -d: -f2)
+
+            echo "Attempting to rebase PR #$pr_number ($pr_branch)"
+
+            # Fetch the PR branch
+            git fetch origin "$pr_branch"
+
+            # Checkout the PR branch
+            git checkout "$pr_branch"
+
+            # Try to rebase onto main
+            if git rebase origin/main; then
+              echo "Rebase successful, pushing..."
+              git push origin "$pr_branch" --force-with-lease
+              echo "✅ PR #$pr_number rebased successfully"
+            else
+              echo "❌ Rebase failed for PR #$pr_number, aborting"
+              git rebase --abort
+            fi
+
+            # Go back to main for next iteration
+            git checkout main
+          done
+"""
+        (repo_path / ".github" / "workflows" / "auto-rebase.yml").write_text(
             content, encoding="utf-8"
         )
 

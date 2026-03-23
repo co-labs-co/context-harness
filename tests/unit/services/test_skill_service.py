@@ -1218,6 +1218,7 @@ class TestSkillServiceInitRegistryRepo:
             ".github/workflows/release.yml",
             ".github/workflows/sync-registry.yml",
             ".github/workflows/validate-skills.yml",
+            ".github/workflows/auto-rebase.yml",
             "scripts/sync-registry.py",
             "scripts/validate_skills.py",
             "skill/example-skill/SKILL.md",
@@ -1404,6 +1405,21 @@ class TestSkillServiceInitRegistryRepo:
         assert "validate_skills.py" in content
         assert "marocchino/sticky-pull-request-comment@v2" in content
         assert "contents: read" in content
+
+    def test_scaffold_auto_rebase_workflow(self, tmp_path: Path) -> None:
+        """auto-rebase.yml automatically rebases PRs when shared files change."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        content = (
+            tmp_path / ".github" / "workflows" / "auto-rebase.yml"
+        ).read_text()
+        assert "Auto Rebase" in content
+        assert "skills.json" in content
+        assert "release-please-config.json" in content
+        assert ".release-please-manifest.json" in content
+        assert "git rebase origin/main" in content
+        assert "force-with-lease" in content
 
     def test_scaffold_sync_registry_script(self, tmp_path: Path) -> None:
         """sync-registry.py parses frontmatter and version.txt."""
