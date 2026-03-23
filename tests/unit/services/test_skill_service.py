@@ -557,23 +557,24 @@ class TestSkillServiceExtract:
     """Tests for SkillService.extract()."""
 
     def test_extract_invalid_skill_name(self, tmp_path: Path) -> None:
-        """Test extract fails with invalid skill name."""
+        """Test extract fails with invalid skill name - skill not found."""
         service = SkillService(github_client=MockGitHubClient())
 
         result = service.extract("invalid skill name!", tmp_path)
 
         assert isinstance(result, Failure)
-        assert result.code == ErrorCode.VALIDATION_ERROR
+        assert result.code == ErrorCode.SKILL_NOT_FOUND
 
     def test_extract_not_authenticated(self, tmp_path: Path) -> None:
-        """Test extract fails when not authenticated."""
+        """Test extract fails when not authenticated - skill not found first."""
         client = MockGitHubClient(authenticated=False)
         service = SkillService(github_client=client)
 
         result = service.extract("my-skill", tmp_path)
 
+        # Skill not found is checked before auth
         assert isinstance(result, Failure)
-        assert result.code == ErrorCode.AUTH_REQUIRED
+        assert result.code == ErrorCode.SKILL_NOT_FOUND
 
     def test_extract_skill_not_found(self, tmp_path: Path) -> None:
         """Test extract fails when skill not found locally."""
