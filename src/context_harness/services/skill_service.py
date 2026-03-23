@@ -1586,6 +1586,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Configure git identity for rebase commits
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
           # Get open PRs and process each one
           gh pr list --base main --state open --json number,headRefName \\
             --jq '.[] | "\\(.number) \\(.headRefName)"' \\
