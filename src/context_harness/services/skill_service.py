@@ -3044,6 +3044,7 @@ http {
         """Write index.html - static frontend for browsing skills.
 
         A clean shadcn-inspired UI using Tailwind CSS with the project theme.
+        Includes sections for AI agent instructions and skill building.
         """
         content = """\
 <!DOCTYPE html>
@@ -3075,29 +3076,114 @@ http {
             --ring: oklch(0.5560 0 0);
             --radius: 0.625rem;
         }
-
-        * {
-            border-color: var(--border);
-        }
-
-        body {
-            font-family: 'Noto Sans Mono', ui-sans-serif, system-ui, sans-serif;
-            background: var(--background);
-            color: var(--foreground);
-        }
-
-        .font-mono {
-            font-family: 'Fira Code', ui-monospace, monospace;
-        }
+        * { border-color: var(--border); }
+        body { font-family: 'Noto Sans Mono', ui-sans-serif, system-ui, sans-serif; background: var(--background); color: var(--foreground); }
+        .font-mono { font-family: 'Fira Code', ui-monospace, monospace; }
+        .collapsible-content { max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out; }
+        .collapsible-content.open { max-height: 2000px; }
+        .chevron { transition: transform 0.2s; }
+        .chevron.open { transform: rotate(180deg); }
     </style>
 </head>
 <body class="min-h-screen">
     <div class="max-w-5xl mx-auto px-6 py-12">
         <!-- Header -->
-        <header class="mb-12">
+        <header class="mb-8">
             <h1 class="text-3xl font-semibold tracking-tight mb-2">Skills Registry</h1>
             <p class="text-[var(--muted-foreground)]">Extend your AI assistant with specialized capabilities</p>
         </header>
+
+        <!-- AI Agent Instructions Section -->
+        <section id="agent-instructions" class="mb-8 p-4 bg-[var(--card)] border rounded-[var(--radius)]">
+            <div class="flex items-center justify-between cursor-pointer" onclick="toggleSection('agent-content')">
+                <div class="flex items-center gap-2">
+                    <span class="text-lg">🤖</span>
+                    <h2 class="text-sm font-medium">For AI Agents</h2>
+                </div>
+                <svg id="agent-chevron" class="w-4 h-4 chevron text-[var(--muted-foreground)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </div>
+            <div id="agent-content" class="collapsible-content">
+                <div class="mt-4 pt-4 border-t text-sm space-y-4">
+                    <p class="text-[var(--muted-foreground)]">
+                        <strong class="text-[var(--foreground)]">Instructions for AI Agents:</strong>
+                        This page lists skills that extend AI coding assistants. Each skill provides specialized knowledge or workflows.
+                    </p>
+                    <div class="p-3 bg-[var(--background)] rounded-[var(--radius)]">
+                        <p class="text-xs text-[var(--muted-foreground)] mb-2">To install a skill, run:</p>
+                        <code class="text-xs">ch skill install &lt;skill-name&gt; --registry &lt;this-registry-url&gt;</code>
+                    </div>
+                    <div class="space-y-2">
+                        <p class="text-xs text-[var(--muted-foreground)]"><strong>Steps:</strong></p>
+                        <ol class="list-decimal list-inside text-xs text-[var(--muted-foreground)] space-y-1">
+                            <li>Review the available skills listed below</li>
+                            <li>Identify the skill the user needs based on their requirements</li>
+                            <li>Click on a skill to view its documentation and install command</li>
+                            <li>Run the install command: <code class="bg-[var(--muted)] px-1 rounded">ch skill install &lt;name&gt;</code></li>
+                        </ol>
+                    </div>
+                    <div class="p-3 bg-[var(--accent)] bg-opacity-20 rounded-[var(--radius)] border border-[var(--accent)]">
+                        <p class="text-xs text-[var(--accent-foreground)]">
+                            <strong>Note:</strong> ContextHarness CLI must be installed. If not available, guide the user to install it first from
+                            <a href="https://github.com/co-labs-co/context-harness" class="underline">GitHub</a>.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Build a Skill Section -->
+        <section id="build-skill" class="mb-8 p-4 bg-[var(--card)] border rounded-[var(--radius)]">
+            <div class="flex items-center justify-between cursor-pointer" onclick="toggleSection('build-content')">
+                <div class="flex items-center gap-2">
+                    <span class="text-lg">🔧</span>
+                    <h2 class="text-sm font-medium">Build a Skill</h2>
+                </div>
+                <svg id="build-chevron" class="w-4 h-4 chevron text-[var(--muted-foreground)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </div>
+            <div id="build-content" class="collapsible-content">
+                <div class="mt-4 pt-4 border-t text-sm space-y-4">
+                    <p class="text-[var(--muted-foreground)]">
+                        Create and contribute skills to extend ContextHarness capabilities for your team.
+                    </p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="p-3 bg-[var(--background)] rounded-[var(--radius)]">
+                            <h3 class="text-xs font-medium mb-2">📁 Skill Structure</h3>
+                            <pre class="text-xs text-[var(--muted-foreground)] overflow-x-auto">skill/my-skill/
+├── SKILL.md       # Instructions
+├── version.txt    # Semantic version
+└── references/    # Optional docs</pre>
+                        </div>
+                        <div class="p-3 bg-[var(--background)] rounded-[var(--radius)]">
+                            <h3 class="text-xs font-medium mb-2">📝 SKILL.md Format</h3>
+                            <pre class="text-xs text-[var(--muted-foreground)] overflow-x-auto">---
+name: my-skill
+description: What it does
+tags: [category]
+---
+
+# Instructions here...</pre>
+                        </div>
+                    </div>
+                    <div class="space-y-2">
+                        <p class="text-xs text-[var(--muted-foreground)]"><strong>Quick Start:</strong></p>
+                        <ol class="list-decimal list-inside text-xs text-[var(--muted-foreground)] space-y-1">
+                            <li>Create a directory in <code class="bg-[var(--muted)] px-1 rounded">skill/my-skill/</code></li>
+                            <li>Add <code class="bg-[var(--muted)] px-1 rounded">SKILL.md</code> with YAML frontmatter</li>
+                            <li>Add <code class="bg-[var(--muted)] px-1 rounded">version.txt</code> with <code class="bg-[var(--muted)] px-1 rounded">0.1.0</code></li>
+                            <li>Commit with <code class="bg-[var(--muted)] px-1 rounded">feat: add my-skill</code></li>
+                        </ol>
+                    </div>
+                    <div class="flex gap-2">
+                        <a href="skill/skill-release/SKILL.md" class="px-3 py-1.5 text-xs bg-[var(--primary)] text-[var(--primary-foreground)] rounded hover:opacity-90 transition-opacity">View Example Skill</a>
+                        <a href="https://github.com/co-labs-co/context-harness" class="px-3 py-1.5 text-xs bg-[var(--secondary)] text-[var(--secondary-foreground)] rounded hover:opacity-90 transition-opacity">Full Documentation</a>
+                    </div>
+                </div>
+            </div>
+        </section>
 
         <!-- Search -->
         <div class="mb-8">
@@ -3129,6 +3215,13 @@ http {
 
     <script>
         let skills = [];
+
+        function toggleSection(id) {
+            var content = document.getElementById(id);
+            var chevron = document.getElementById(id.replace('-content', '-chevron'));
+            content.classList.toggle('open');
+            chevron.classList.toggle('open');
+        }
 
         async function loadSkills() {
             try {
