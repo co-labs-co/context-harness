@@ -701,8 +701,8 @@ def extract_skill(
             skill_dest = tmppath / SKILLS_DIR / skill_name
             skill_dest.parent.mkdir(parents=True, exist_ok=True)
 
-            # Copy skill files
-            shutil.copytree(skill_source, skill_dest)
+            # Copy skill files (overwrite if exists - allows re-extracting)
+            shutil.copytree(skill_source, skill_dest, dirs_exist_ok=True)
             if not quiet:
                 console.print(f"[dim]Copied skill to {SKILLS_DIR}/{skill_name}/[/dim]")
 
