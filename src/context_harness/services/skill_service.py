@@ -1552,42 +1552,39 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Get open PRs targeting main
-        id: prs
+      - name: Rebase open PRs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "prs=$(gh pr list --base main --state open --json number,headRefName --jq '[.[] | "\\(.number):\\(.headRefName)"]' | tr '\\n' ' ')" >> $GITHUB_OUTPUT
+          # Get open PRs and process each one
+          gh pr list --base main --state open --json number,headRefName \\
+            --jq '.[] | "\\(.number) \\(.headRefName)"' \\
+            | while read -r pr_number pr_branch; do
+              if [ -z "$pr_number" ] || [ -z "$pr_branch" ]; then
+                continue
+              fi
 
-      - name: Rebase PRs
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          for pr_info in ${{ steps.prs.outputs.prs }}; do
-            pr_number=$(echo "$pr_info" | cut -d: -f1)
-            pr_branch=$(echo "$pr_info" | cut -d: -f2)
+              echo "Attempting to rebase PR #$pr_number ($pr_branch)"
 
-            echo "Attempting to rebase PR #$pr_number ($pr_branch)"
+              # Fetch the PR branch
+              git fetch origin "$pr_branch" || continue
 
-            # Fetch the PR branch
-            git fetch origin "$pr_branch"
+              # Checkout the PR branch
+              git checkout "$pr_branch" || continue
 
-            # Checkout the PR branch
-            git checkout "$pr_branch"
+              # Try to rebase onto main
+              if git rebase origin/main; then
+                echo "Rebase successful, pushing..."
+                git push origin "$pr_branch" --force-with-lease
+                echo "✅ PR #$pr_number rebased successfully"
+              else
+                echo "❌ Rebase failed for PR #$pr_number, aborting"
+                git rebase --abort
+              fi
 
-            # Try to rebase onto main
-            if git rebase origin/main; then
-              echo "Rebase successful, pushing..."
-              git push origin "$pr_branch" --force-with-lease
-              echo "✅ PR #$pr_number rebased successfully"
-            else
-              echo "❌ Rebase failed for PR #$pr_number, aborting"
-              git rebase --abort
-            fi
-
-            # Go back to main for next iteration
-            git checkout main
-          done
+              # Go back to main for next iteration
+              git checkout main
+            done
 """
         (repo_path / ".github" / "workflows" / "auto-rebase.yml").write_text(
             content, encoding="utf-8"
