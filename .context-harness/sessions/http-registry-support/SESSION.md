@@ -4,12 +4,12 @@
 **Branch**: worktree-twinkling-spinning-ripple
 **PR**: #102
 **Issue**: #101
-**Compaction Cycle**: 2
-**Last Updated**: 2026-03-22
+**Compaction Cycle**: 3
+**Last Updated**: 2026-03-23
 
 ## Summary
 
-Implemented multi-backend registry support for ContextHarness skills system with HTTP registry hosting, web frontend, and CLI commands.
+Implemented multi-backend registry support for ContextHarness skills system with HTTP registry hosting, web frontend, CLI commands, and auto-rebase workflow for parallel skill extraction.
 
 ## Completed Features
 
@@ -37,11 +37,17 @@ ch skill install <name> --registry <url> # One-off install from specific registr
 - Updates release-please configs automatically
 - Generates `.listing.json` for file tree discovery
 
+### 5. Auto-Rebase Workflow (NEW)
+- Automatically rebases PRs when shared files change on main
+- Resolves merge conflicts when multiple skills are extracted in parallel
+- Triggers on: skills.json, release-please-config.json, .release-please-manifest.json
+- Uses `force-with-lease` for safe pushes
+
 ## Key Files Modified
 
 | File | Changes |
 |------|---------|
-| `skill_service.py` | Frontend scaffolding (index.html, skill.html, Docker/nginx, sync-registry.py) |
+| `skill_service.py` | Frontend scaffolding, auto-rebase workflow |
 | `skill_cmd.py` | Added `use-registry` command and `--registry` flag |
 | `skills.py` | extract_skill creates version.txt, updates release-please, generates .listing.json |
 
@@ -53,16 +59,14 @@ ch skill install <name> --registry <url> # One-off install from specific registr
 4. `extract_skill` now creates version.txt
 5. `.listing.json` string format handling in frontend
 6. `${f.dir}` → `${f.path}` in file tree onclick
-
-## In Progress
-
-- Reorganizing frontend files into `web/` folder (Dockerfile updated)
+7. PR title lowercase fix (Git/GitHub → git/github)
+8. Test fix for scaffolded skills.json content
 
 ## Testing Commands
 
 ```bash
 # Run tests
-uv run pytest tests/test_skills.py -v
+uv run pytest tests/ -v
 
 # Build and run Docker registry
 docker-compose build && docker-compose up -d
@@ -71,3 +75,8 @@ docker-compose build && docker-compose up -d
 ch skill use-registry http://localhost:8080
 ch skill list
 ```
+
+## Commits This Session
+
+1. `fix(test): update scaffold test for new skills.json content`
+2. `feat(skill): add auto-rebase workflow to registry scaffold`
