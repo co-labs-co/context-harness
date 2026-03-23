@@ -979,6 +979,7 @@ class SkillService:
         self._write_scaffold_validate_skills_script(repo_path)
 
         # --- HTTP serving (Docker/nginx) ---
+        (repo_path / "nginx").mkdir(exist_ok=True)
         self._write_scaffold_dockerfile(repo_path)
         self._write_scaffold_docker_compose(repo_path)
         self._write_scaffold_nginx_conf(repo_path)
@@ -2213,7 +2214,7 @@ python scripts/validate_skills.py
 FROM nginx:alpine
 
 # Copy nginx configuration
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx/nginx.conf /etc/nginx/conf.d/default.conf
 
 # Copy web frontend
 COPY web/index.html /usr/share/nginx/html/
@@ -2341,7 +2342,7 @@ server {
     }
 }
 """
-        (repo_path / "nginx.conf").write_text(content, encoding="utf-8")
+        (repo_path / "nginx" / "nginx.conf").write_text(content, encoding="utf-8")
 
     def _write_scaffold_index_html(self, repo_path: Path) -> None:
         """Write index.html - static frontend for browsing skills.
