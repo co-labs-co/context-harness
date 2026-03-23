@@ -982,6 +982,10 @@ class SkillService:
         self._write_scaffold_dockerfile(repo_path)
         self._write_scaffold_docker_compose(repo_path)
         self._write_scaffold_nginx_conf(repo_path)
+
+        # Create web directory for frontend files
+        (repo_path / "web").mkdir(exist_ok=True)
+
         self._write_scaffold_index_html(repo_path)
         self._write_scaffold_skill_page(repo_path)
 
@@ -2212,8 +2216,8 @@ FROM nginx:alpine
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # Copy web frontend
-COPY index.html /usr/share/nginx/html/
-COPY skill.html /usr/share/nginx/html/
+COPY web/index.html /usr/share/nginx/html/
+COPY web/skill.html /usr/share/nginx/html/
 
 # Copy registry files
 COPY skills.json /usr/share/nginx/html/
@@ -2529,7 +2533,7 @@ server {
 </body>
 </html>
 """
-        (repo_path / "index.html").write_text(content, encoding="utf-8")
+        (repo_path / "web" / "index.html").write_text(content, encoding="utf-8")
 
     def _write_scaffold_skill_page(self, repo_path: Path) -> None:
         """Write skill.html - individual skill detail page with file explorer."""
@@ -3029,7 +3033,7 @@ server {
 </body>
 </html>
 """
-        (repo_path / "skill.html").write_text(content, encoding="utf-8")
+        (repo_path / "web" / "skill.html").write_text(content, encoding="utf-8")
 
     def _compare_versions(
         self,
