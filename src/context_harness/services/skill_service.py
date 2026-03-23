@@ -3151,7 +3151,7 @@ http {
             }
 
             container.innerHTML = list.map(function(s) {
-                return '<div class="group p-4 bg-[var(--card)] border rounded-[var(--radius)] hover:border-[var(--ring)] transition-colors">' +
+                return '<a href="skill.html?name=' + encodeURIComponent(s.name) + '" class="block group p-4 bg-[var(--card)] border rounded-[var(--radius)] hover:border-[var(--ring)] transition-colors">' +
                     '<div class="flex items-start justify-between gap-4">' +
                     '<div class="flex-1 min-w-0">' +
                     '<div class="flex items-center gap-2 mb-1">' +
@@ -3161,8 +3161,8 @@ http {
                     '<p class="text-sm text-[var(--muted-foreground)] line-clamp-2 mb-2">' + esc(s.description || 'No description') + '</p>' +
                     (s.tags && s.tags.length ? '<div class="flex flex-wrap gap-1.5">' + s.tags.slice(0, 3).map(function(t) { return '<span class="text-xs px-2 py-0.5 bg-[var(--muted)] text-[var(--muted-foreground)] rounded-full">' + esc(t) + '</span>'; }).join('') + '</div>' : '') +
                     '</div>' +
-                    '<button onclick="copyInstall(\\'' + esc(s.name) + '\\')" class="shrink-0 px-3 py-1.5 text-xs font-medium bg-[var(--primary)] text-[var(--primary-foreground)] rounded-[var(--radius)] hover:opacity-90 transition-opacity">Copy</button>' +
-                    '</div></div>';
+                    '<button onclick="event.preventDefault();event.stopPropagation();copyInstall(\\'' + esc(s.name) + '\\')" class="shrink-0 px-3 py-1.5 text-xs font-medium bg-[var(--primary)] text-[var(--primary-foreground)] rounded-[var(--radius)] hover:opacity-90 transition-opacity">Copy</button>' +
+                    '</div></a>';
             }).join('');
         }
 
