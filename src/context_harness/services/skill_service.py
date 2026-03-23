@@ -15,7 +15,7 @@ import subprocess
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Protocol
+from typing import TYPE_CHECKING, List, Optional, Protocol
 
 import yaml
 from packaging.version import InvalidVersion, Version
@@ -37,6 +37,9 @@ from context_harness.primitives import (
     VersionComparison,
     VersionStatus,
 )
+
+if TYPE_CHECKING:
+    from context_harness.services.registry_client import RegistryClient
 
 
 SKILLS_REGISTRY_PATH = "skills.json"
@@ -222,6 +225,36 @@ class DefaultGitHubClient:
             return None
 
 
+class _GitHubClientAdapter:
+    """Adapter to wrap GitHubClient in RegistryClient interface.
+
+    This provides backward compatibility for code that still uses
+    the GitHubClient interface directly.
+    """
+
+    def __init__(self, client: "GitHubClient", repo: str):
+        self._client = client
+        self._repo = repo
+
+    def check_auth(self) -> bool:
+        return self._client.check_auth()
+
+    def check_access(self) -> bool:
+        return self._client.check_repo_access(self._repo)
+
+    def fetch_manifest(self) -> Optional[str]:
+        return self._client.fetch_file(self._repo, SKILLS_REGISTRY_PATH)
+
+    def fetch_file(self, path: str) -> Optional[bytes]:
+        content = self._client.fetch_file(self._repo, path)
+        if content:
+            return content.encode("utf-8") if isinstance(content, str) else content
+        return None
+
+    def fetch_directory(self, path: str, dest: Path) -> bool:
+        return self._client.fetch_directory(self._repo, path, dest)
+
+
 class SkillService:
     """Service for managing skills.
 
@@ -231,6 +264,8 @@ class SkillService:
     - Installing skills
     - Extracting skills to PRs
     - Validating skill structure
+
+    Supports both GitHub and HTTP registries.
 
     Example:
         service = SkillService()
@@ -247,15 +282,35 @@ class SkillService:
 
     def __init__(
         self,
-        github_client: Optional[GitHubClient] = None,
+        github_client: Optional["GitHubClient"] = None,
+        registry_client: Optional["RegistryClient"] = None,
         skills_repo: str = DEFAULT_SKILLS_REPO,
     ):
         """Initialize the skill service.
 
         Args:
-            github_client: GitHub client for API operations
-            skills_repo: Skills repository (owner/repo format)
+            github_client: GitHub client for API operations (deprecated, use registry_client)
+            registry_client: Registry client for registry operations
+            skills_repo: Skills repository (owner/repo format for GitHub)
         """
+        # Support both old and new interfaces
+        if registry_client is not None:
+            self._registry = registry_client
+            self._is_github = False
+        elif github_client is not None:
+            # Wrap old GitHubClient in adapter
+            self._registry = _GitHubClientAdapter(github_client, skills_repo)
+            self._is_github = True
+        else:
+            # Default to GitHub client
+            from context_harness.services.registry_client import (
+                GitHubRegistryClient,
+            )
+
+            self._registry = GitHubRegistryClient(skills_repo)
+            self._is_github = True
+
+        # Keep for backward compatibility with extract/init-repo
         self.github = github_client or DefaultGitHubClient()
         self.skills_repo = skills_repo
 
@@ -271,23 +326,21 @@ class SkillService:
         Returns:
             Result containing list of Skill primitives
         """
-        if not self.github.check_auth():
+        if not self._registry.check_auth():
             return Failure(
-                error="GitHub CLI is not authenticated. Run 'gh auth login'.",
+                error="Registry authentication failed. For GitHub, run 'gh auth login'. For HTTP, check your token.",
                 code=ErrorCode.AUTH_REQUIRED,
             )
 
-        if not self.github.check_repo_access(self.skills_repo):
+        if not self._registry.check_access():
             return Failure(
-                error=f"Cannot access repository '{self.skills_repo}'",
+                error=f"Cannot access registry '{self.skills_repo}'",
                 code=ErrorCode.PERMISSION_DENIED,
                 details={"repo": self.skills_repo},
             )
 
         # Fetch registry
-        registry_content = self.github.fetch_file(
-            self.skills_repo, SKILLS_REGISTRY_PATH
-        )
+        registry_content = self._registry.fetch_manifest()
         if registry_content is None:
             return Failure(
                 error="Skills registry not found",
@@ -516,8 +569,8 @@ class SkillService:
             skills_dir.mkdir(parents=True, exist_ok=True)
 
             # Fetch skill files
-            if skill.path and not self.github.fetch_directory(
-                self.skills_repo, skill.path, skill_dest
+            if skill.path and not self._registry.fetch_directory(
+                skill.path, skill_dest
             ):
                 return Failure(
                     error=f"Failed to install skill '{skill_name}'",
@@ -920,10 +973,23 @@ class SkillService:
         self._write_scaffold_release_workflow(repo_path)
         self._write_scaffold_sync_registry_workflow(repo_path)
         self._write_scaffold_validate_skills_workflow(repo_path)
+        self._write_scaffold_auto_rebase_workflow(repo_path)
 
         # --- Scripts ---
         self._write_scaffold_sync_registry_script(repo_path)
         self._write_scaffold_validate_skills_script(repo_path)
+
+        # --- HTTP serving (Docker/nginx) ---
+        (repo_path / "nginx").mkdir(exist_ok=True)
+        self._write_scaffold_dockerfile(repo_path)
+        self._write_scaffold_docker_compose(repo_path)
+        self._write_scaffold_nginx_conf(repo_path)
+
+        # Create web directory for frontend files
+        (repo_path / "web").mkdir(exist_ok=True)
+
+        self._write_scaffold_index_html(repo_path)
+        self._write_scaffold_skill_page(repo_path)
 
         # --- Example skill ---
         self._write_scaffold_example_skill(repo_path)
@@ -940,8 +1006,26 @@ class SkillService:
     # -- Scaffold file writers -----------------------------------------------
 
     def _write_scaffold_skills_json(self, repo_path: Path) -> None:
-        """Write skills.json — empty registry manifest."""
-        registry = {"schema_version": "1.0", "skills": []}
+        """Write skills.json — registry manifest with scaffolded skills."""
+        registry = {
+            "schema_version": "1.0",
+            "skills": [
+                {
+                    "name": "example-skill",
+                    "description": "An example skill to demonstrate the registry structure",
+                    "version": "0.1.0",
+                    "author": "your-name",
+                    "tags": ["example", "getting-started"],
+                },
+                {
+                    "name": "skill-release",
+                    "description": "Guide for creating, versioning, and releasing skills in a ContextHarness skills registry repository.",
+                    "version": "0.1.0",
+                    "author": None,
+                    "tags": [],
+                },
+            ],
+        }
         (repo_path / "skills.json").write_text(
             json.dumps(registry, indent=2) + "\n", encoding="utf-8"
         )
@@ -1007,6 +1091,16 @@ Thumbs.db
 
 Skills registry for [ContextHarness](https://github.com/co-labs-co/context-harness).
 
+## ⚠️ Setup Required
+
+After creating this repo, configure GitHub Actions permissions:
+
+1. Go to **Settings** → **Actions** → **General**
+2. Under **Workflow permissions**, select **Read and write permissions**
+3. Check **Allow GitHub Actions to create and approve pull requests**
+
+Without these settings, release-please cannot create release PRs.
+
 ## How It Works
 
 This registry uses **fully automated semantic versioning**. Authors never touch
@@ -1060,7 +1154,8 @@ context-harness config set skills-repo {repo_name} --global
 │   └── workflows/
 │       ├── release.yml           # release-please automation
 │       ├── sync-registry.yml     # Rebuilds skills.json post-release
-│       └── validate-skills.yml   # PR validation checks
+│       ├── validate-skills.yml   # PR validation checks
+│       └── auto-rebase.yml       # Auto-rebase PRs when shared files change
 ├── scripts/
 │   ├── sync-registry.py          # Parses skills → skills.json
 │   └── validate_skills.py        # Pydantic-based validation
@@ -1171,6 +1266,16 @@ This guide walks you through adding a skill to **{repo_name}**.
 - Git installed
 - GitHub CLI (`gh`) installed and authenticated
 - Repository cloned locally
+
+## ⚠️ Required GitHub Settings
+
+Before using this registry, configure GitHub Actions permissions:
+
+1. Go to **Settings** → **Actions** → **General**
+2. Under **Workflow permissions**, select **Read and write permissions**
+3. Check **Allow GitHub Actions to create and approve pull requests**
+
+Without these settings, release-please cannot create release PRs.
 
 ## Steps
 
@@ -1441,6 +1546,177 @@ jobs:
             content, encoding="utf-8"
         )
 
+    def _write_scaffold_auto_rebase_workflow(self, repo_path: Path) -> None:
+        """Write .github/workflows/auto-rebase.yml for automatic PR rebasing.
+
+        Automatically rebases PRs when main changes to resolve conflicts
+        with shared files (skills.json, release-please-config.json, etc.)
+        that occur when multiple skills are extracted in parallel.
+
+        For JSON files with conflicts, accepts main's version then rebuilds
+        using sync-registry.py to include all skills.
+        """
+        content = """\
+name: Auto Rebase
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "skills.json"
+      - "release-please-config.json"
+      - ".release-please-manifest.json"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  rebase:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install python-frontmatter
+
+      - name: Rebase open PRs with conflict resolution
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Configure git identity for rebase commits
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Get open PRs and process each one
+          gh pr list --base main --state open --json number,headRefName \\
+            --jq '.[] | "\\(.number) \\(.headRefName)"' \\
+            | while read -r pr_number pr_branch; do
+              if [ -z "$pr_number" ] || [ -z "$pr_branch" ]; then
+                continue
+              fi
+
+              echo "Attempting to rebase PR #$pr_number ($pr_branch)"
+
+              # Fetch the PR branch
+              git fetch origin "$pr_branch" || continue
+
+              # Checkout the PR branch
+              git checkout "$pr_branch" || continue
+
+              # Try to rebase onto main
+              if git rebase origin/main; then
+                echo "Rebase successful, pushing..."
+                git push origin "$pr_branch" --force-with-lease
+                echo "✅ PR #$pr_number rebased successfully"
+              else
+                echo "⚠️ Rebase has conflicts, attempting auto-resolution..."
+
+                # Get list of conflicted files
+                CONFLICTS=$(git diff --name-only --diff-filter=U)
+
+                if echo "$CONFLICTS" | grep -q ".json"; then
+                  echo "Found JSON conflicts: $CONFLICTS"
+
+                  # Resolve each conflicting JSON file by merging
+                  python3 << 'PYRESOLVE'
+import json
+import subprocess
+import os
+
+# Get conflicted files
+result = subprocess.run(['git', 'diff', '--name-only', '--diff-filter=U'],
+                       capture_output=True, text=True)
+conflicts = [f for f in result.stdout.strip().split('\n') if f and f.endswith('.json')]
+
+for filepath in conflicts:
+    if not os.path.exists(filepath):
+        continue
+
+    # During rebase conflict:
+    # - :2:filepath = stage 2 = "ours" = upstream (main)
+    # - :3:filepath = stage 3 = "theirs" = commit being replayed (PR)
+
+    # Get main's version (stage 2)
+    main_result = subprocess.run(
+        ['git', 'show', ':2:' + filepath],
+        capture_output=True, text=True
+    )
+    try:
+        main_data = json.loads(main_result.stdout) if main_result.returncode == 0 else {}
+    except:
+        main_data = {}
+
+    # Get PR's version (stage 3 - the commit being replayed during rebase)
+    ours_result = subprocess.run(
+        ['git', 'show', ':3:' + filepath],
+        capture_output=True, text=True
+    )
+    try:
+        ours_data = json.loads(ours_result.stdout) if ours_result.returncode == 0 else {}
+    except:
+        ours_data = {}
+
+    # Deep merge: overlay PR's changes onto main's base
+    def deep_merge(base, overlay):
+        if isinstance(base, dict) and isinstance(overlay, dict):
+            result = dict(base)
+            for k, v in overlay.items():
+                if k in result and isinstance(result[k], dict) and isinstance(v, dict):
+                    result[k] = deep_merge(result[k], v)
+                else:
+                    result[k] = v
+            return result
+        return overlay
+
+    merged = deep_merge(main_data, ours_data)
+
+    # Write merged file
+    with open(filepath, 'w') as f:
+        json.dump(merged, f, indent=2, sort_keys=True)
+        f.write('\n')
+
+    print(f"Merged {filepath}")
+
+# Also rebuild skills.json from all skills on disk
+subprocess.run(['python', 'scripts/sync-registry.py'], capture_output=True)
+print("Rebuilt skills.json")
+PYRESOLVE
+
+                  # Stage all resolved files
+                  git add skills.json release-please-config.json .release-please-manifest.json 2>/dev/null || true
+
+                  # Continue rebase
+                  if git rebase --continue; then
+                    echo "Auto-resolution successful, pushing..."
+                    git push origin "$pr_branch" --force-with-lease
+                    echo "✅ PR #$pr_number rebased with conflict resolution"
+                  else
+                    echo "❌ Could not complete rebase even after conflict resolution"
+                    git rebase --abort
+                  fi
+                else
+                  echo "❌ Non-JSON conflicts detected, cannot auto-resolve"
+                  git rebase --abort
+                fi
+              fi
+
+              # Go back to main for next iteration
+              git checkout main
+            done
+"""
+        (repo_path / ".github" / "workflows" / "auto-rebase.yml").write_text(
+            content, encoding="utf-8"
+        )
+
     def _write_scaffold_sync_registry_script(self, repo_path: Path) -> None:
         """Write scripts/sync-registry.py to rebuild skills.json."""
         content = '''\
@@ -1449,6 +1725,7 @@ jobs:
 
 Parses SKILL.md frontmatter and version.txt for each skill,
 then writes the consolidated skills.json registry manifest.
+Also generates .listing.json for each skill for frontend file discovery.
 
 Usage:
     python scripts/sync-registry.py
@@ -1459,6 +1736,37 @@ import json
 from pathlib import Path
 
 import frontmatter
+
+
+def build_listing(skill_dir: Path) -> dict:
+    """Build .listing.json for a skill directory."""
+    listing = {
+        "files": [],
+        "directories": [],
+        "directory_files": {},
+    }
+
+    skip_names = {".listing.json", ".gitkeep", ".DS_Store", "__pycache__"}
+
+    for item in skill_dir.iterdir():
+        if item.name in skip_names:
+            continue
+
+        if item.is_file():
+            listing["files"].append(item.name)
+        elif item.is_dir():
+            listing["directories"].append(item.name)
+            dir_files = []
+            for subitem in item.iterdir():
+                if subitem.name not in skip_names and subitem.is_file():
+                    dir_files.append(subitem.name)
+            if dir_files:
+                listing["directory_files"][item.name] = sorted(dir_files)
+
+    listing["files"] = sorted(listing["files"])
+    listing["directories"] = sorted(listing["directories"])
+
+    return listing
 
 
 def build_registry() -> dict:
@@ -1504,6 +1812,12 @@ def build_registry() -> dict:
                 ),
                 "content_hash": content_hash,
             }
+        )
+
+        # Generate .listing.json for frontend file discovery
+        listing = build_listing(skill_dir)
+        (skill_dir / ".listing.json").write_text(
+            json.dumps(listing, indent=2) + "\\n", encoding="utf-8"
         )
 
     return {"schema_version": "1.0", "skills": skills}
@@ -1778,6 +2092,45 @@ Use this skill when you need an example of the skill format.
         # version.txt — bootstrapped at 0.1.0 (required by release-please)
         (repo_path / "skill" / "example-skill" / "version.txt").write_text(
             "0.1.0\n", encoding="utf-8"
+        )
+
+        # .listing.json for frontend file discovery
+        self._write_scaffold_skill_listing(repo_path / "skill" / "example-skill")
+
+    def _write_scaffold_skill_listing(self, skill_path: Path) -> None:
+        """Write .listing.json for a skill directory.
+
+        Args:
+            skill_path: Path to the skill directory (e.g., skill/example-skill/)
+        """
+        listing: dict[str, Any] = {
+            "files": [],
+            "directories": [],
+            "directory_files": {},
+        }
+
+        skip_names = {".listing.json", ".gitkeep", ".DS_Store", "__pycache__"}
+
+        for item in skill_path.iterdir():
+            if item.name in skip_names:
+                continue
+
+            if item.is_file():
+                listing["files"].append(item.name)
+            elif item.is_dir():
+                listing["directories"].append(item.name)
+                dir_files = []
+                for subitem in item.iterdir():
+                    if subitem.name not in skip_names and subitem.is_file():
+                        dir_files.append(subitem.name)
+                if dir_files:
+                    listing["directory_files"][item.name] = sorted(dir_files)
+
+        listing["files"] = sorted(listing["files"])
+        listing["directories"] = sorted(listing["directories"])
+
+        (skill_path / ".listing.json").write_text(
+            json.dumps(listing, indent=2) + "\n", encoding="utf-8"
         )
 
     def _write_scaffold_skill_release(self, repo_path: Path) -> None:
@@ -2093,6 +2446,851 @@ python scripts/validate_skills.py
         (repo_path / "skill" / "skill-release" / "version.txt").write_text(
             "0.1.0\n", encoding="utf-8"
         )
+
+        # .listing.json for frontend file discovery
+        self._write_scaffold_skill_listing(repo_path / "skill" / "skill-release")
+
+    def _write_scaffold_dockerfile(self, repo_path: Path) -> None:
+        """Write Dockerfile for serving the registry via HTTP.
+
+        Uses nginx to serve static files, enabling users without GitHub
+        access to consume skills from this registry.
+        """
+        content = """\
+# Skills Registry HTTP Server
+# Serves the registry via HTTP for users without GitHub access
+#
+# Build: docker build -t skills-registry .
+# Run:   docker run -p 8080:80 skills-registry
+#
+# Usage with ContextHarness:
+#   export CONTEXT_HARNESS_REGISTRY_URL=http://localhost:8080
+#   context-harness skill list
+
+FROM nginx:alpine
+
+# Copy nginx configuration
+COPY nginx/nginx.conf /etc/nginx/conf.d/default.conf
+
+# Copy web frontend
+COPY web/index.html /usr/share/nginx/html/
+COPY web/skill.html /usr/share/nginx/html/
+
+# Copy registry files
+COPY skills.json /usr/share/nginx/html/
+COPY skill/ /usr/share/nginx/html/skill/
+
+# Add healthcheck
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \\
+    CMD wget --no-verbose --tries=1 --spider http://localhost/skills.json || exit 1
+
+# Expose port 80
+EXPOSE 80
+
+# Labels for container metadata
+LABEL org.opencontainers.image.title="ContextHarness Skills Registry"
+LABEL org.opencontainers.image.description="HTTP server for ContextHarness skills registry"
+LABEL org.opencontainers.image.source="https://github.com/co-labs-co/context-harness"
+"""
+        (repo_path / "Dockerfile").write_text(content, encoding="utf-8")
+
+    def _write_scaffold_docker_compose(self, repo_path: Path) -> None:
+        """Write docker-compose.yml for easy local deployment."""
+        content = """\
+# Skills Registry - Docker Compose
+#
+# Quick start:
+#   docker-compose up -d
+#   export CONTEXT_HARNESS_REGISTRY_URL=http://localhost:8080
+#   context-harness skill list
+#
+# Stop:
+#   docker-compose down
+
+services:
+  skills-registry:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/skills.json"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  # Optional: Add authentication with a reverse proxy
+  # auth-proxy:
+  #   image: nginx:alpine
+  #   ports:
+  #     - "443:443"
+  #   volumes:
+  #     - ./auth-nginx.conf:/etc/nginx/nginx.conf:ro
+  #   depends_on:
+  #     - skills-registry
+"""
+        (repo_path / "docker-compose.yml").write_text(content, encoding="utf-8")
+
+    def _write_scaffold_nginx_conf(self, repo_path: Path) -> None:
+        """Write nginx.conf for serving the registry.
+
+        Configures nginx to serve static files with appropriate headers
+        for CORS and caching.
+        """
+        content = """\
+# Nginx configuration for ContextHarness Skills Registry
+# Serves static files over HTTP with CORS support
+
+server {
+    listen 80;
+    server_name localhost;
+
+    # Serve files from the html directory
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Enable gzip compression for JSON and text files
+    gzip on;
+    gzip_types application/json text/markdown text/plain text/html text/css application/javascript;
+    gzip_min_length 256;
+
+    # Cache control - skills don't change frequently
+    location ~* \\.(json|md|txt)$ {
+        expires 5m;
+        add_header Cache-Control "public, max-age=300";
+        add_header Access-Control-Allow-Origin * always;
+        add_header Access-Control-Allow-Methods "GET, OPTIONS" always;
+        add_header Access-Control-Allow-Headers "Authorization, X-API-Key" always;
+    }
+
+    # Skills directory - serve all files
+    location /skill/ {
+        autoindex on;
+        expires 5m;
+        add_header Cache-Control "public, max-age=300";
+        add_header Access-Control-Allow-Origin * always;
+        add_header Access-Control-Allow-Methods "GET, OPTIONS" always;
+        add_header Access-Control-Allow-Headers "Authorization, X-API-Key" always;
+    }
+
+    # Health check endpoint
+    location /health {
+        add_header Content-Type text/plain always;
+        add_header Access-Control-Allow-Origin * always;
+        return 200 'OK';
+    }
+
+    # Handle OPTIONS requests for CORS preflight
+    location / {
+        if ($request_method = OPTIONS) {
+            return 204;
+        }
+
+        # Serve index.html for root, skills.json for API clients
+        try_files $uri $uri/ /index.html;
+
+        add_header Access-Control-Allow-Origin * always;
+        add_header Access-Control-Allow-Methods "GET, OPTIONS" always;
+        add_header Access-Control-Allow-Headers "Authorization, X-API-Key" always;
+    }
+}
+"""
+        (repo_path / "nginx" / "nginx.conf").write_text(content, encoding="utf-8")
+
+    def _write_scaffold_index_html(self, repo_path: Path) -> None:
+        """Write index.html - static frontend for browsing skills.
+
+        A clean shadcn-inspired UI using Tailwind CSS with the project theme.
+        """
+        content = """\
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skills Registry</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Noto+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --background: oklch(0.1450 0 0);
+            --foreground: oklch(0.9850 0 0);
+            --card: oklch(0.2050 0 0);
+            --card-foreground: oklch(0.9850 0 0);
+            --primary: oklch(0.9220 0 0);
+            --primary-foreground: oklch(0.2050 0 0);
+            --secondary: oklch(0.2690 0 0);
+            --secondary-foreground: oklch(0.9850 0 0);
+            --muted: oklch(0.2690 0 0);
+            --muted-foreground: oklch(0.7080 0 0);
+            --accent: oklch(0.3710 0 0);
+            --accent-foreground: oklch(0.9850 0 0);
+            --border: oklch(0.2750 0 0);
+            --input: oklch(0.3250 0 0);
+            --ring: oklch(0.5560 0 0);
+            --radius: 0.625rem;
+        }
+
+        * {
+            border-color: var(--border);
+        }
+
+        body {
+            font-family: 'Noto Sans Mono', ui-sans-serif, system-ui, sans-serif;
+            background: var(--background);
+            color: var(--foreground);
+        }
+
+        .font-mono {
+            font-family: 'Fira Code', ui-monospace, monospace;
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <div class="max-w-5xl mx-auto px-6 py-12">
+        <!-- Header -->
+        <header class="mb-12">
+            <h1 class="text-3xl font-semibold tracking-tight mb-2">Skills Registry</h1>
+            <p class="text-[var(--muted-foreground)]">Extend your AI assistant with specialized capabilities</p>
+        </header>
+
+        <!-- Search -->
+        <div class="mb-8">
+            <input
+                type="text"
+                id="search"
+                placeholder="Search skills..."
+                class="w-full px-4 py-2.5 bg-[var(--card)] border rounded-[var(--radius)] text-sm outline-none focus:ring-2 focus:ring-[var(--ring)] transition-shadow"
+            >
+        </div>
+
+        <!-- Skills List -->
+        <div id="skills-list" class="space-y-3">
+            <div class="text-center py-12 text-[var(--muted-foreground)]">
+                Loading...
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="mt-16 pt-8 border-t text-center text-sm text-[var(--muted-foreground)]">
+            <a href="https://github.com/co-labs-co/context-harness" class="hover:text-[var(--foreground)] transition-colors">ContextHarness</a>
+        </footer>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="fixed bottom-6 right-6 px-4 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-[var(--radius)] text-sm font-medium opacity-0 translate-y-2 transition-all duration-200 pointer-events-none">
+        Copied to clipboard
+    </div>
+
+    <script>
+        let skills = [];
+
+        async function loadSkills() {
+            try {
+                const res = await fetch('./skills.json');
+                if (!res.ok) throw new Error('Failed to fetch');
+                const data = await res.json();
+                skills = data.skills || [];
+                render();
+            } catch (e) {
+                document.getElementById('skills-list').innerHTML = `
+                    <div class="text-center py-12 text-[var(--muted-foreground)]">
+                        Failed to load skills
+                    </div>
+                `;
+            }
+        }
+
+        function render(list = skills) {
+            const container = document.getElementById('skills-list');
+
+            if (!list.length) {
+                container.innerHTML = `
+                    <div class="text-center py-12 text-[var(--muted-foreground)]">
+                        No skills found
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = list.map(s => `
+                <a href="skill.html?name=${encodeURIComponent(s.name)}" class="block group p-4 bg-[var(--card)] border rounded-[var(--radius)] hover:border-[var(--ring)] transition-colors">
+                    <div class="flex items-start justify-between gap-4">
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2 mb-1">
+                                <h3 class="font-medium">${esc(s.name)}</h3>
+                                <span class="font-mono text-xs px-1.5 py-0.5 bg-[var(--secondary)] text-[var(--secondary-foreground)] rounded">
+                                    v${esc(s.version || '0.0.0')}
+                                </span>
+                            </div>
+                            <p class="text-sm text-[var(--muted-foreground)] line-clamp-2 mb-2">
+                                ${esc(s.description || 'No description')}
+                            </p>
+                            ${s.tags?.length ? `
+                                <div class="flex flex-wrap gap-1.5">
+                                    ${s.tags.slice(0, 3).map(t => `
+                                        <span class="text-xs px-2 py-0.5 bg-[var(--muted)] text-[var(--muted-foreground)] rounded-full">
+                                            ${esc(t)}
+                                        </span>
+                                    `).join('')}
+                                </div>
+                            ` : ''}
+                        </div>
+                        <span class="shrink-0 px-3 py-1.5 text-xs font-medium bg-[var(--primary)] text-[var(--primary-foreground)] rounded-[var(--radius)] hover:opacity-90 transition-opacity">
+                            View
+                        </span>
+                    </div>
+                </a>
+            `).join('');
+        }
+
+        function copyInstall(name) {
+            const cmd = `ch skill install ${name}`;
+            navigator.clipboard.writeText(cmd).then(() => {
+                const toast = document.getElementById('toast');
+                toast.classList.remove('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.classList.add('opacity-0', 'translate-y-2'), 1500);
+            }).catch(() => {
+                const ta = document.createElement('textarea');
+                ta.value = cmd;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+            });
+        }
+
+        function esc(str) {
+            const el = document.createElement('div');
+            el.textContent = str;
+            return el.innerHTML;
+        }
+
+        let debounceTimer;
+        document.getElementById('search').addEventListener('input', (e) => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                const q = e.target.value.toLowerCase();
+                if (!q) return render();
+                render(skills.filter(s =>
+                    s.name?.toLowerCase().includes(q) ||
+                    s.description?.toLowerCase().includes(q) ||
+                    s.tags?.some(t => t.toLowerCase().includes(q))
+                ));
+            }, 150);
+        });
+
+        loadSkills();
+    </script>
+</body>
+</html>
+"""
+        (repo_path / "web" / "index.html").write_text(content, encoding="utf-8")
+
+    def _write_scaffold_skill_page(self, repo_path: Path) -> None:
+        """Write skill.html - individual skill detail page with file explorer."""
+        content = """\
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skill Details</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Noto+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --background: oklch(0.1450 0 0);
+            --foreground: oklch(0.9850 0 0);
+            --card: oklch(0.2050 0 0);
+            --card-foreground: oklch(0.9850 0 0);
+            --primary: oklch(0.9220 0 0);
+            --primary-foreground: oklch(0.2050 0 0);
+            --secondary: oklch(0.2690 0 0);
+            --secondary-foreground: oklch(0.9850 0 0);
+            --muted: oklch(0.2690 0 0);
+            --muted-foreground: oklch(0.7080 0 0);
+            --accent: oklch(0.3710 0 0);
+            --accent-foreground: oklch(0.9850 0 0);
+            --border: oklch(0.2750 0 0);
+            --input: oklch(0.3250 0 0);
+            --ring: oklch(0.5560 0 0);
+            --radius: 0.625rem;
+        }
+
+        * { border-color: var(--border); }
+
+        body {
+            font-family: 'Noto Sans Mono', ui-sans-serif, system-ui, sans-serif;
+            background: var(--background);
+            color: var(--foreground);
+        }
+
+        .font-mono { font-family: 'Fira Code', ui-monospace, monospace; }
+
+        .file-tree { user-select: none; }
+
+        .file-item {
+            cursor: pointer;
+            padding: 0.375rem 0.5rem;
+            border-radius: var(--radius);
+            transition: background 0.15s;
+        }
+
+        .file-item:hover { background: var(--muted); }
+        .file-item.active { background: var(--accent); color: var(--accent-foreground); }
+
+        .file-content {
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-family: 'Fira Code', ui-monospace, monospace;
+            font-size: 0.8125rem;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <div class="max-w-6xl mx-auto px-6 py-8">
+        <!-- Header -->
+        <header class="mb-8">
+            <a href="index.html" class="inline-flex items-center gap-2 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] mb-4 transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                </svg>
+                Back to Skills
+            </a>
+            <div id="skill-header" class="flex items-start justify-between gap-4">
+                <div>
+                    <h1 class="text-2xl font-semibold" id="skill-name">Loading...</h1>
+                    <p class="text-[var(--muted-foreground)] mt-1" id="skill-description"></p>
+                </div>
+                <div id="skill-meta" class="text-right shrink-0"></div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div id="error-state" class="hidden text-center py-16">
+            <p class="text-[var(--muted-foreground)] mb-4">Skill not found</p>
+            <a href="index.html" class="text-[var(--ring)] hover:underline">Return to skills list</a>
+        </div>
+
+        <div id="skill-content" class="hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                <!-- File Tree -->
+                <div class="lg:col-span-1">
+                    <div class="bg-[var(--card)] border rounded-[var(--radius)] p-4 sticky top-4">
+                        <h2 class="text-sm font-medium mb-3 text-[var(--muted-foreground)]">Files</h2>
+                        <div id="file-tree" class="file-tree text-sm space-y-0.5">
+                            <div class="text-[var(--muted-foreground)] py-2">Loading...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- File Content -->
+                <div class="lg:col-span-3">
+                    <div class="bg-[var(--card)] border rounded-[var(--radius)]">
+                        <!-- File toolbar -->
+                        <div class="flex items-center justify-between px-4 py-3 border-b">
+                            <div class="flex items-center gap-2">
+                                <span id="file-icon" class="text-[var(--muted-foreground)]">📄</span>
+                                <span id="file-path" class="font-mono text-sm">Select a file</span>
+                            </div>
+                            <button id="copy-btn" class="px-2.5 py-1 text-xs bg-[var(--primary)] text-[var(--primary-foreground)] rounded hover:opacity-90 transition-opacity" onclick="copyFileContent()">
+                                Copy
+                            </button>
+                        </div>
+                        <!-- File content -->
+                        <div id="file-content-wrapper" class="p-4 min-h-[400px] max-h-[70vh] overflow-auto">
+                            <div id="file-content" class="file-content">Select a file to view its contents</div>
+                        </div>
+                    </div>
+
+                    <!-- Getting Started -->
+                    <div class="mt-6 space-y-4">
+                        <!-- Setup -->
+                        <div class="p-4 bg-[var(--card)] border rounded-[var(--radius)]">
+                            <h3 class="text-sm font-medium mb-3 text-[var(--muted-foreground)]">Getting Started</h3>
+                            <div class="space-y-3 text-sm">
+                                <p class="text-[var(--muted-foreground)]">First, configure ContextHarness to use this registry:</p>
+                                <div class="flex items-center gap-2">
+                                    <code id="setup-cmd" class="flex-1 px-3 py-2 bg-[var(--background)] rounded font-mono text-xs"></code>
+                                    <button onclick="copySetup()" class="px-2.5 py-2 text-xs font-medium bg-[var(--primary)] text-[var(--primary-foreground)] rounded hover:opacity-90 transition-opacity">
+                                        Copy
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Install command -->
+                        <div class="p-4 bg-[var(--card)] border rounded-[var(--radius)]">
+                            <h3 class="text-sm font-medium mb-2 text-[var(--muted-foreground)]">Install Skill</h3>
+                            <div class="flex items-center gap-2">
+                                <code id="install-cmd" class="flex-1 px-3 py-2 bg-[var(--background)] rounded font-mono text-sm"></code>
+                                <button onclick="copyInstall()" class="px-3 py-2 text-xs font-medium bg-[var(--primary)] text-[var(--primary-foreground)] rounded hover:opacity-90 transition-opacity">
+                                    Copy
+                                </button>
+                            </div>
+                            <p class="text-xs text-[var(--muted-foreground)] mt-2">Or install directly without configuring: <code id="install-direct-cmd" class="px-1.5 py-0.5 bg-[var(--background)] rounded font-mono text-xs"></code></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="fixed bottom-6 right-6 px-4 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-[var(--radius)] text-sm font-medium opacity-0 translate-y-2 transition-all duration-200 pointer-events-none">
+        Copied to clipboard
+    </div>
+
+    <script>
+        let skillName = '';
+        let skillMeta = null;
+        let fileCache = {};
+        let currentFile = null;
+
+        // Get skill name from URL
+        const params = new URLSearchParams(window.location.search);
+        skillName = params.get('name');
+
+        if (!skillName) {
+            document.getElementById('error-state').classList.remove('hidden');
+        } else {
+            loadSkill();
+        }
+
+        async function loadSkill() {
+            try {
+                // Fetch skills.json to get metadata
+                const res = await fetch('./skills.json');
+                if (!res.ok) throw new Error('Failed to fetch skills.json');
+                const data = await res.json();
+                skillMeta = data.skills?.find(s => s.name === skillName);
+
+                if (!skillMeta) {
+                    document.getElementById('error-state').classList.remove('hidden');
+                    return;
+                }
+
+                renderHeader();
+                document.getElementById('skill-content').classList.remove('hidden');
+                document.getElementById('install-cmd').textContent = `ch skill install ${skillName}`;
+                document.getElementById('setup-cmd').textContent = `ch skill use-registry ${window.location.origin}`;
+                document.getElementById('install-direct-cmd').textContent = `ch skill install ${skillName} --registry ${window.location.origin}`;
+
+                // Discover and render file tree
+                await discoverFiles();
+            } catch (e) {
+                console.error('Error loading skill:', e);
+                document.getElementById('error-state').classList.remove('hidden');
+            }
+        }
+
+        function renderHeader() {
+            document.getElementById('skill-name').textContent = skillMeta.name;
+            document.getElementById('skill-description').textContent = skillMeta.description || 'No description';
+
+            let metaHtml = `<span class="font-mono text-xs px-1.5 py-0.5 bg-[var(--secondary)] text-[var(--secondary-foreground)] rounded">v${skillMeta.version || '0.0.0'}</span>`;
+            if (skillMeta.author) {
+                metaHtml += `<div class="text-xs text-[var(--muted-foreground)] mt-2">by ${esc(skillMeta.author)}</div>`;
+            }
+            if (skillMeta.tags?.length) {
+                metaHtml += `<div class="flex flex-wrap gap-1 mt-2 justify-end">${skillMeta.tags.map(t => `<span class="text-xs px-2 py-0.5 bg-[var(--muted)] text-[var(--muted-foreground)] rounded-full">${esc(t)}</span>`).join('')}</div>`;
+            }
+            document.getElementById('skill-meta').innerHTML = metaHtml;
+        }
+
+        async function discoverFiles() {
+            const basePath = `skill/${skillName}`;
+            const files = [];
+
+            // Known files at root level
+            const knownFiles = [
+                { path: 'SKILL.md', icon: '📄', name: 'SKILL.md' },
+                { path: 'version.txt', icon: '📄', name: 'version.txt' },
+                { path: 'CHANGELOG.md', icon: '📄', name: 'CHANGELOG.md' },
+            ];
+
+            // Known directories with their expected file extensions
+            const knownDirs = [
+                { dir: 'references', extensions: ['.md', '.txt'] },
+                { dir: 'scripts', extensions: ['.sh', '.py', '.js', '.ts'] },
+                { dir: 'examples', extensions: ['.md', '.txt', '.json', '.yaml', '.yml'] },
+                { dir: 'templates', extensions: ['.md', '.txt', '.json', '.yaml', '.yml'] },
+                { dir: 'assets', extensions: ['.png', '.jpg', '.svg', '.gif'] },
+            ];
+
+            // Check known files at root
+            for (const file of knownFiles) {
+                const exists = await checkFileExists(`${basePath}/${file.path}`);
+                if (exists) {
+                    files.push({ ...file, type: 'file' });
+                }
+            }
+
+            // Try to fetch .listing.json first (most reliable)
+            let listing = null;
+            try {
+                const listingRes = await fetch(`${basePath}/.listing.json`);
+                if (listingRes.ok) {
+                    listing = await listingRes.json();
+                }
+            } catch (e) {}
+
+            if (listing) {
+                // Use listing as source of truth
+                for (const item of (listing.files || [])) {
+                    // Handle both string format ("SKILL.md") and object format ({path: "SKILL.md"})
+                    const filePath = typeof item === 'string' ? item : (item.path || item.name);
+                    if (!filePath) continue;
+                    if (!files.find(f => f.path === filePath)) {
+                        files.push({
+                            path: filePath,
+                            name: typeof item === 'string' ? item : (item.name || filePath.split('/').pop()),
+                            icon: getFileIcon(filePath),
+                            type: 'file'
+                        });
+                    }
+                }
+                for (const item of (listing.directories || [])) {
+                    const dirName = typeof item === 'string' ? item : (item.name || item.path);
+                    if (!dirName) continue;
+                    const dirFiles = (listing.directory_files || {})[dirName] || [];
+                    files.push({
+                        path: dirName,
+                        name: dirName,
+                        icon: '📁',
+                        type: 'dir',
+                        files: dirFiles.map(f => ({
+                            path: `${dirName}/${f}`,
+                            name: f,
+                            icon: getFileIcon(f),
+                            type: 'file'
+                        }))
+                    });
+                }
+            } else {
+                // Probe known directories
+                for (const dir of knownDirs) {
+                    const dirFiles = await probeDirectory(`${basePath}/${dir.dir}`, dir.extensions);
+                    if (dirFiles.length > 0) {
+                        files.push({
+                            path: dir.dir,
+                            name: dir.dir,
+                            icon: '📁',
+                            type: 'dir',
+                            files: dirFiles
+                        });
+                    }
+                }
+            }
+
+            renderFileTree(files);
+
+            // Auto-select SKILL.md if it exists
+            const skillMd = files.find(f => f.path === 'SKILL.md');
+            if (skillMd) {
+                selectFile(skillMd);
+            }
+        }
+
+        async function probeDirectory(dirPath, extensions) {
+            const files = [];
+            // Common file name patterns to probe
+            const patterns = [
+                'README', 'readme', 'index', 'main', 'guide', 'intro',
+                'getting-started', 'setup', 'config', 'example',
+                'output-patterns', 'workflows', 'troubleshooting',
+                'init_skill', 'package_skill', 'quick_validate',
+                'utils', 'helpers', 'common'
+            ];
+
+            for (const pattern of patterns) {
+                for (const ext of extensions) {
+                    const filePath = `${pattern}${ext}`;
+                    const exists = await checkFileExists(`${dirPath}/${filePath}`);
+                    if (exists) {
+                        files.push({
+                            path: filePath,
+                            name: filePath,
+                            icon: getFileIcon(filePath),
+                            type: 'file'
+                        });
+                    }
+                }
+            }
+
+            return files;
+        }
+
+        async function checkFileExists(path) {
+            try {
+                const res = await fetch(path, { method: 'HEAD' });
+                return res.ok;
+            } catch (e) {
+                return false;
+            }
+        }
+
+        function getFileIcon(path) {
+            const ext = path.split('.').pop()?.toLowerCase();
+            const icons = {
+                'md': '📄', 'txt': '📄', 'json': '📄',
+                'sh': '⚡', 'py': '🐍', 'js': '⚡', 'ts': '⚡',
+                'yaml': '⚙️', 'yml': '⚙️',
+                'png': '🖼️', 'jpg': '🖼️', 'svg': '🖼️', 'gif': '🖼️',
+            };
+            return icons[ext] || '📄';
+        }
+
+        function renderFileTree(files) {
+            const container = document.getElementById('file-tree');
+
+            if (!files.length) {
+                container.innerHTML = '<div class="text-[var(--muted-foreground)] py-2">No files found</div>';
+                return;
+            }
+
+            container.innerHTML = files.map(f => {
+                if (f.type === 'dir') {
+                    return `
+                        <div class="directory">
+                            <div class="file-item flex items-center gap-2" onclick="toggleDir(this)">
+                                <span class="transform transition-transform">${f.icon}</span>
+                                <span>${esc(f.name)}</span>
+                            </div>
+                            <div class="pl-4 hidden">
+                                ${f.files?.map(sf => `
+                                    <div class="file-item flex items-center gap-2" onclick="selectFile({path: '${f.path}/${sf.name}', name: '${sf.name}', icon: '${sf.icon}', type: 'file'})">
+                                        <span>${sf.icon}</span>
+                                        <span>${esc(sf.name)}</span>
+                                    </div>
+                                `).join('') || ''}
+                            </div>
+                        </div>
+                    `;
+                }
+                return `
+                    <div class="file-item flex items-center gap-2" onclick="selectFile({path: '${esc(f.path)}', name: '${esc(f.name)}', icon: '${f.icon}', type: 'file'})">
+                        <span>${f.icon}</span>
+                        <span>${esc(f.name)}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function toggleDir(el) {
+            const content = el.nextElementSibling;
+            content.classList.toggle('hidden');
+        }
+
+        async function selectFile(file) {
+            currentFile = file;
+
+            // Update active state
+            document.querySelectorAll('.file-item').forEach(el => el.classList.remove('active'));
+            event?.target?.closest('.file-item')?.classList.add('active');
+
+            // Update toolbar
+            document.getElementById('file-icon').textContent = file.icon;
+            document.getElementById('file-path').textContent = file.path;
+
+            // Fetch and display content
+            const basePath = `skill/${skillName}`;
+            const fullPath = `${basePath}/${file.path}`;
+
+            try {
+                if (!fileCache[fullPath]) {
+                    const res = await fetch(fullPath);
+                    if (!res.ok) throw new Error('Failed to fetch');
+                    fileCache[fullPath] = await res.text();
+                }
+
+                const content = fileCache[fullPath];
+                renderContent(content, file.path);
+            } catch (e) {
+                document.getElementById('file-content').innerHTML = '<div class="text-[var(--muted-foreground)]">Failed to load file</div>';
+            }
+        }
+
+        function renderContent(content, path) {
+            const container = document.getElementById('file-content');
+            container.textContent = content;
+        }
+
+        async function copyFileContent() {
+            if (!currentFile) return;
+            const content = fileCache[`skill/${skillName}/${currentFile.path}`];
+            if (!content) return;
+
+            try {
+                await navigator.clipboard.writeText(content);
+                showToast();
+            } catch (e) {
+                const ta = document.createElement('textarea');
+                ta.value = content;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                showToast();
+            }
+        }
+
+        function copyInstall() {
+            const cmd = `ch skill install ${skillName}`;
+            navigator.clipboard.writeText(cmd).then(() => {
+                showToast();
+            }).catch(() => {
+                const ta = document.createElement('textarea');
+                ta.value = cmd;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                showToast();
+            });
+        }
+
+        function copySetup() {
+            const cmd = document.getElementById('setup-cmd').textContent;
+            navigator.clipboard.writeText(cmd).then(() => {
+                showToast();
+            }).catch(() => {
+                const ta = document.createElement('textarea');
+                ta.value = cmd;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                showToast();
+            });
+        }
+
+        function showToast() {
+            const toast = document.getElementById('toast');
+            toast.classList.remove('opacity-0', 'translate-y-2');
+            setTimeout(() => toast.classList.add('opacity-0', 'translate-y-2'), 1500);
+        }
+
+        function esc(str) {
+            if (!str) return '';
+            const el = document.createElement('div');
+            el.textContent = str;
+            return el.innerHTML;
+        }
+    </script>
+</body>
+</html>
+"""
+        (repo_path / "web" / "skill.html").write_text(content, encoding="utf-8")
 
     def _compare_versions(
         self,

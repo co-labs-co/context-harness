@@ -15,19 +15,78 @@ from context_harness.primitives.mcp import MCPServerConfig
 # Default skills repository
 DEFAULT_SKILLS_REPO = "co-labs-co/context-harness-skills"
 
-# Environment variable for skills repo override
+# Environment variables for skills registry configuration
 SKILLS_REPO_ENV_VAR = "CONTEXT_HARNESS_SKILLS_REPO"
+SKILLS_REGISTRY_URL_ENV_VAR = "CONTEXT_HARNESS_REGISTRY_URL"
+SKILLS_REGISTRY_TOKEN_ENV_VAR = "CONTEXT_HARNESS_REGISTRY_TOKEN"
+SKILLS_REGISTRY_TYPE_ENV_VAR = "CONTEXT_HARNESS_REGISTRY_TYPE"
+
+
+@dataclass(frozen=True)
+class RegistryAuthConfig:
+    """Authentication configuration for skill registries.
+
+    Attributes:
+        type: Authentication type (none, bearer, api_key, basic)
+        token_env: Environment variable name containing the token
+        header_name: Custom header name for API key auth (default: X-API-Key)
+        username_env: Environment variable for basic auth username
+        password_env: Environment variable for basic auth password
+    """
+
+    type: str = "none"
+    token_env: Optional[str] = None
+    header_name: str = "X-API-Key"
+    username_env: Optional[str] = None
+    password_env: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "RegistryAuthConfig":
+        """Create from dictionary."""
+        return cls(
+            type=data.get("type", "none"),
+            token_env=data.get("token_env"),
+            header_name=data.get("header_name", "X-API-Key"),
+            username_env=data.get("username_env"),
+            password_env=data.get("password_env"),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        result: Dict[str, Any] = {}
+        if self.type != "none":
+            result["type"] = self.type
+        if self.token_env:
+            result["token_env"] = self.token_env
+        if self.header_name != "X-API-Key":
+            result["header_name"] = self.header_name
+        if self.username_env:
+            result["username_env"] = self.username_env
+        if self.password_env:
+            result["password_env"] = self.password_env
+        return result
 
 
 @dataclass(frozen=True)
 class SkillsRegistryConfig:
     """Configuration for skills registry sources.
 
+    Supports both GitHub (default) and HTTP-based registries.
+
+    For GitHub registries, use the 'default' field with owner/repo format.
+    For HTTP registries, use 'type', 'url', and optionally 'auth'.
+
     Attributes:
-        default: Default skills repository (owner/repo format)
+        default: Default skills repository (owner/repo format) - for GitHub
+        type: Registry type (github, http) - defaults to github
+        url: Registry URL for HTTP registries
+        auth: Authentication configuration for HTTP registries
     """
 
     default: str = DEFAULT_SKILLS_REPO
+    type: str = "github"
+    url: Optional[str] = None
+    auth: Optional[RegistryAuthConfig] = None
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "SkillsRegistryConfig":
@@ -39,8 +98,19 @@ class SkillsRegistryConfig:
         Returns:
             SkillsRegistryConfig instance
         """
+        # Handle string shorthand (backward compatibility)
+        if isinstance(data, str):
+            return cls(default=data)
+
+        auth = None
+        if "auth" in data:
+            auth = RegistryAuthConfig.from_dict(data["auth"])
+
         return cls(
             default=data.get("default", DEFAULT_SKILLS_REPO),
+            type=data.get("type", "github"),
+            url=data.get("url"),
+            auth=auth,
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -50,9 +120,34 @@ class SkillsRegistryConfig:
             Dictionary representation
         """
         result: Dict[str, Any] = {}
+
+        # Always include default for backward compatibility
         if self.default != DEFAULT_SKILLS_REPO:
             result["default"] = self.default
+
+        # Include HTTP-specific fields only if type is http
+        if self.type != "github":
+            result["type"] = self.type
+
+        if self.url:
+            result["url"] = self.url
+
+        if self.auth:
+            auth_dict = self.auth.to_dict()
+            if auth_dict:
+                result["auth"] = auth_dict
+
         return result
+
+    @property
+    def is_http(self) -> bool:
+        """Check if this is an HTTP registry."""
+        return self.type == "http" and self.url is not None
+
+    @property
+    def is_github(self) -> bool:
+        """Check if this is a GitHub registry."""
+        return self.type == "github" or not self.is_http
 
 
 @dataclass(frozen=True)
