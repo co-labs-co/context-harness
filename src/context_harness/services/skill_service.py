@@ -979,7 +979,6 @@ class SkillService:
         self._write_scaffold_validate_skills_script(repo_path)
 
         # --- HTTP serving (Docker/nginx) ---
-        (repo_path / "docker").mkdir(exist_ok=True)
         self._write_scaffold_dockerfile(repo_path)
         self._write_scaffold_docker_compose(repo_path)
         self._write_scaffold_nginx_conf(repo_path)
@@ -2214,7 +2213,7 @@ python scripts/validate_skills.py
 FROM nginx:alpine
 
 # Copy nginx configuration
-COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # Copy web frontend
 COPY web/index.html /usr/share/nginx/html/
@@ -2236,7 +2235,7 @@ LABEL org.opencontainers.image.title="ContextHarness Skills Registry"
 LABEL org.opencontainers.image.description="HTTP server for ContextHarness skills registry"
 LABEL org.opencontainers.image.source="https://github.com/co-labs-co/context-harness"
 """
-        (repo_path / "docker" / "Dockerfile").write_text(content, encoding="utf-8")
+        (repo_path / "Dockerfile").write_text(content, encoding="utf-8")
 
     def _write_scaffold_docker_compose(self, repo_path: Path) -> None:
         """Write docker-compose.yml for easy local deployment."""
@@ -2244,18 +2243,18 @@ LABEL org.opencontainers.image.source="https://github.com/co-labs-co/context-har
 # Skills Registry - Docker Compose
 #
 # Quick start:
-#   cd docker && docker-compose up -d
+#   docker-compose up -d
 #   export CONTEXT_HARNESS_REGISTRY_URL=http://localhost:8080
 #   context-harness skill list
 #
 # Stop:
-#   cd docker && docker-compose down
+#   docker-compose down
 
 services:
   skills-registry:
     build:
-      context: ..
-      dockerfile: docker/Dockerfile
+      context: .
+      dockerfile: Dockerfile
     ports:
       - "8080:80"
     restart: unless-stopped
@@ -2276,7 +2275,7 @@ services:
   #   depends_on:
   #     - skills-registry
 """
-        (repo_path / "docker" / "docker-compose.yml").write_text(content, encoding="utf-8")
+        (repo_path / "docker-compose.yml").write_text(content, encoding="utf-8")
 
     def _write_scaffold_nginx_conf(self, repo_path: Path) -> None:
         """Write nginx.conf for serving the registry.
@@ -2342,7 +2341,7 @@ server {
     }
 }
 """
-        (repo_path / "docker" / "nginx.conf").write_text(content, encoding="utf-8")
+        (repo_path / "nginx.conf").write_text(content, encoding="utf-8")
 
     def _write_scaffold_index_html(self, repo_path: Path) -> None:
         """Write index.html - static frontend for browsing skills.
