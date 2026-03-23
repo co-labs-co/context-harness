@@ -1629,57 +1629,58 @@ import os
 # Get conflicted files
 result = subprocess.run(['git', 'diff', '--name-only', '--diff-filter=U'],
                        capture_output=True, text=True)
-conflicts = [f for f in result.stdout.strip().split('\\n') if f.endswith('.json')]
+conflicts = [f for f in result.stdout.strip().split('\n') if f and f.endswith('.json')]
 
 for filepath in conflicts:
-                    if not os.path.exists(filepath):
-                        continue
+    if not os.path.exists(filepath):
+        continue
 
-                    # Get main's version
-                    main_result = subprocess.run(
-                        ['git', 'show', f'origin/main:{filepath}'],
-                        capture_output=True, text=True
-                    )
-                    try:
-                        main_data = json.loads(main_result.stdout) if main_result.returncode == 0 else {{}}
-                    except:
-                        main_data = {{}}
+    # During rebase conflict:
+    # - :2:filepath = stage 2 = "ours" = upstream (main)
+    # - :3:filepath = stage 3 = "theirs" = commit being replayed (PR)
 
-                    # Get PR branch's version (before rebase conflict)
-                    ours_result = subprocess.run(
-                        ['git', 'show', f'HEAD:{filepath}'],
-                        capture_output=True, text=True
-                    )
-                    try:
-                        ours_data = json.loads(ours_result.stdout) if ours_result.returncode == 0 else {{}}
-                    except:
-                        ours_data = {{}}
+    # Get main's version (stage 2)
+    main_result = subprocess.run(
+        ['git', 'show', ':2:' + filepath],
+        capture_output=True, text=True
+    )
+    try:
+        main_data = json.loads(main_result.stdout) if main_result.returncode == 0 else {}
+    except:
+        main_data = {}
 
-                    # Merge the JSON files
-                    def deep_merge(base, overlay):
-                        if isinstance(base, dict) and isinstance(overlay, dict):
-                            result = dict(base)
-                            for k, v in overlay.items():
-                                if k in result and isinstance(result[k], dict) and isinstance(v, dict):
-                                    result[k] = deep_merge(result[k], v)
-                                elif k == 'packages' and isinstance(base.get(k), dict) and isinstance(overlay.get(k), dict):
-                                    # Merge packages dict
-                                    result[k] = {{**base.get(k, {{}}), **overlay.get(k, {{}})}}
-                                else:
-                                    result[k] = v
-                            return result
-                        return overlay
+    # Get PR's version (stage 3 - the commit being replayed during rebase)
+    ours_result = subprocess.run(
+        ['git', 'show', ':3:' + filepath],
+        capture_output=True, text=True
+    )
+    try:
+        ours_data = json.loads(ours_result.stdout) if ours_result.returncode == 0 else {}
+    except:
+        ours_data = {}
 
-                    merged = deep_merge(main_data, ours_data)
+    # Deep merge: overlay PR's changes onto main's base
+    def deep_merge(base, overlay):
+        if isinstance(base, dict) and isinstance(overlay, dict):
+            result = dict(base)
+            for k, v in overlay.items():
+                if k in result and isinstance(result[k], dict) and isinstance(v, dict):
+                    result[k] = deep_merge(result[k], v)
+                else:
+                    result[k] = v
+            return result
+        return overlay
 
-                    # Write merged file
-                    with open(filepath, 'w') as f:
-                        json.dump(merged, f, indent=2, sort_keys=True)
-                        f.write('\\n')
+    merged = deep_merge(main_data, ours_data)
 
-                    print(f"Merged {filepath}")
+    # Write merged file
+    with open(filepath, 'w') as f:
+        json.dump(merged, f, indent=2, sort_keys=True)
+        f.write('\n')
 
-# Also rebuild skills.json from all skills in the repo
+    print(f"Merged {filepath}")
+
+# Also rebuild skills.json from all skills on disk
 subprocess.run(['python', 'scripts/sync-registry.py'], capture_output=True)
 print("Rebuilt skills.json")
 PYRESOLVE
