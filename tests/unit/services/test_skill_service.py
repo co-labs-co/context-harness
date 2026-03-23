@@ -1230,13 +1230,16 @@ class TestSkillServiceInitRegistryRepo:
             assert (tmp_path / filepath).exists(), f"Missing: {filepath}"
 
     def test_scaffold_skills_json_content(self, tmp_path: Path) -> None:
-        """skills.json contains empty registry with schema_version 1.0."""
+        """skills.json contains registry with scaffolded example skills."""
         service = SkillService(github_client=MockGitHubClient())
         service._write_registry_scaffold(tmp_path, "test-user/my-skills")
 
         content = json.loads((tmp_path / "skills.json").read_text())
         assert content["schema_version"] == "1.0"
-        assert content["skills"] == []
+        assert len(content["skills"]) == 2
+        skill_names = [s["name"] for s in content["skills"]]
+        assert "example-skill" in skill_names
+        assert "skill-release" in skill_names
 
     def test_scaffold_readme_contains_repo_name(self, tmp_path: Path) -> None:
         """README.md references the repository name."""
