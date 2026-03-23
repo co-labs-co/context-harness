@@ -3041,60 +3041,90 @@ http {
     def _write_scaffold_index_html(
         self, repo_path: Path, repo_name: str
     ) -> None:
-        """Write index.html - skill listing with search."""
-        display_name = repo_name.split("/")[-1] if "/" in repo_name else repo_name
-        # Use regular string (not f-string) to avoid conflicts with JS template literals
+        """Write index.html - static frontend for browsing skills.
+
+        A clean shadcn-inspired UI using Tailwind CSS with the project theme.
+        """
         content = """\
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>__DISPLAY_NAME__ - Skills Registry</title>
+    <title>Skills Registry</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Noto+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; background: #f5f5f5; }
-        .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
-        header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 2rem; margin-bottom: 2rem; border-radius: 8px; }
-        header h1 { font-size: 2rem; margin-bottom: 0.5rem; }
-        header p { opacity: 0.9; }
-        .search-box { margin-bottom: 2rem; }
-        .search-box input { width: 100%; padding: 1rem; font-size: 1rem; border: 2px solid #ddd; border-radius: 8px; }
-        .search-box input:focus { outline: none; border-color: #667eea; }
-        .skills-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem; }
-        .skill-card { background: white; border-radius: 8px; padding: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: transform 0.2s, box-shadow 0.2s; }
-        .skill-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.15); }
-        .skill-card h3 { color: #667eea; margin-bottom: 0.5rem; }
-        .skill-card .version { display: inline-block; background: #e8f5e9; color: #2e7d32; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.85rem; margin-bottom: 0.5rem; }
-        .skill-card .description { color: #666; margin-bottom: 1rem; }
-        .skill-card .tags { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-        .skill-card .tag { background: #f0f0f0; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; color: #666; }
-        .skill-card a { color: inherit; text-decoration: none; }
-        .empty { text-align: center; padding: 3rem; color: #666; }
-        footer { text-align: center; margin-top: 3rem; padding: 1rem; color: #666; }
-        footer a { color: #667eea; }
+        :root {
+            --background: oklch(0.1450 0 0);
+            --foreground: oklch(0.9850 0 0);
+            --card: oklch(0.2050 0 0);
+            --card-foreground: oklch(0.9850 0 0);
+            --primary: oklch(0.9220 0 0);
+            --primary-foreground: oklch(0.2050 0 0);
+            --secondary: oklch(0.2690 0 0);
+            --secondary-foreground: oklch(0.9850 0 0);
+            --muted: oklch(0.2690 0 0);
+            --muted-foreground: oklch(0.7080 0 0);
+            --accent: oklch(0.3710 0 0);
+            --accent-foreground: oklch(0.9850 0 0);
+            --border: oklch(0.2750 0 0);
+            --input: oklch(0.3250 0 0);
+            --ring: oklch(0.5560 0 0);
+            --radius: 0.625rem;
+        }
+
+        * {
+            border-color: var(--border);
+        }
+
+        body {
+            font-family: 'Noto Sans Mono', ui-sans-serif, system-ui, sans-serif;
+            background: var(--background);
+            color: var(--foreground);
+        }
+
+        .font-mono {
+            font-family: 'Fira Code', ui-monospace, monospace;
+        }
     </style>
 </head>
-<body>
-    <div class="container">
-        <header>
-            <h1>__DISPLAY_NAME__</h1>
-            <p>ContextHarness Skills Registry</p>
+<body class="min-h-screen">
+    <div class="max-w-5xl mx-auto px-6 py-12">
+        <!-- Header -->
+        <header class="mb-12">
+            <h1 class="text-3xl font-semibold tracking-tight mb-2">Skills Registry</h1>
+            <p class="text-[var(--muted-foreground)]">Extend your AI assistant with specialized capabilities</p>
         </header>
 
-        <div class="search-box">
-            <input type="text" id="search" placeholder="Search skills..." autocomplete="off">
+        <!-- Search -->
+        <div class="mb-8">
+            <input
+                type="text"
+                id="search"
+                placeholder="Search skills..."
+                class="w-full px-4 py-2.5 bg-[var(--card)] border rounded-[var(--radius)] text-sm outline-none focus:ring-2 focus:ring-[var(--ring)] transition-shadow"
+            >
         </div>
 
-        <div id="skills" class="skills-grid"></div>
-
-        <div id="empty" class="empty" style="display:none;">
-            <p>No skills found matching your search.</p>
+        <!-- Skills List -->
+        <div id="skills-list" class="space-y-3">
+            <div class="text-center py-12 text-[var(--muted-foreground)]">
+                Loading...
+            </div>
         </div>
 
-        <footer>
-            <p>Powered by <a href="https://github.com/co-labs-co/context-harness">ContextHarness</a></p>
+        <!-- Footer -->
+        <footer class="mt-16 pt-8 border-t text-center text-sm text-[var(--muted-foreground)]">
+            <a href="https://github.com/co-labs-co/context-harness" class="hover:text-[var(--foreground)] transition-colors">ContextHarness</a>
         </footer>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="fixed bottom-6 right-6 px-4 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-[var(--radius)] text-sm font-medium opacity-0 translate-y-2 transition-all duration-200 pointer-events-none">
+        Copied to clipboard
     </div>
 
     <script>
@@ -3102,52 +3132,74 @@ http {
 
         async function loadSkills() {
             try {
-                const response = await fetch('/skills.json');
-                const data = await response.json();
+                const res = await fetch('./skills.json');
+                const data = await res.json();
                 skills = data.skills || [];
-                renderSkills(skills);
+                render();
             } catch (e) {
-                document.getElementById('skills').innerHTML = '<p class="empty">Failed to load skills. Make sure the registry is running.</p>';
+                document.getElementById('skills-list').innerHTML = '<div class="text-center py-12 text-[var(--muted-foreground)]">Failed to load skills</div>';
             }
         }
 
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text || '';
-            return div.innerHTML;
-        }
+        function render(list) {
+            if (!list) list = skills;
+            const container = document.getElementById('skills-list');
 
-        function renderSkills(skillsToRender) {
-            const container = document.getElementById('skills');
-            const empty = document.getElementById('empty');
-
-            if (skillsToRender.length === 0) {
-                container.innerHTML = '';
-                empty.style.display = 'block';
+            if (!list.length) {
+                container.innerHTML = '<div class="text-center py-12 text-[var(--muted-foreground)]">No skills found</div>';
                 return;
             }
 
-            empty.style.display = 'none';
-            container.innerHTML = skillsToRender.map(skill =>
-                '<a href="skill.html?name=' + encodeURIComponent(skill.name) + '">' +
-                '<div class="skill-card">' +
-                '<h3>' + escapeHtml(skill.name) + '</h3>' +
-                '<span class="version">v' + (skill.version || '0.1.0') + '</span>' +
-                '<p class="description">' + escapeHtml(skill.description || 'No description') + '</p>' +
-                '<div class="tags">' +
-                (skill.tags || []).map(tag => '<span class="tag">' + escapeHtml(tag) + '</span>').join('') +
-                '</div></div></a>'
-            ).join('');
+            container.innerHTML = list.map(function(s) {
+                return '<div class="group p-4 bg-[var(--card)] border rounded-[var(--radius)] hover:border-[var(--ring)] transition-colors">' +
+                    '<div class="flex items-start justify-between gap-4">' +
+                    '<div class="flex-1 min-w-0">' +
+                    '<div class="flex items-center gap-2 mb-1">' +
+                    '<h3 class="font-medium">' + esc(s.name) + '</h3>' +
+                    '<span class="font-mono text-xs px-1.5 py-0.5 bg-[var(--secondary)] text-[var(--secondary-foreground)] rounded">v' + esc(s.version || '0.0.0') + '</span>' +
+                    '</div>' +
+                    '<p class="text-sm text-[var(--muted-foreground)] line-clamp-2 mb-2">' + esc(s.description || 'No description') + '</p>' +
+                    (s.tags && s.tags.length ? '<div class="flex flex-wrap gap-1.5">' + s.tags.slice(0, 3).map(function(t) { return '<span class="text-xs px-2 py-0.5 bg-[var(--muted)] text-[var(--muted-foreground)] rounded-full">' + esc(t) + '</span>'; }).join('') + '</div>' : '') +
+                    '</div>' +
+                    '<button onclick="copyInstall(\\'' + esc(s.name) + '\\')" class="shrink-0 px-3 py-1.5 text-xs font-medium bg-[var(--primary)] text-[var(--primary-foreground)] rounded-[var(--radius)] hover:opacity-90 transition-opacity">Copy</button>' +
+                    '</div></div>';
+            }).join('');
         }
 
+        function copyInstall(name) {
+            var cmd = 'ch skill install ' + name;
+            navigator.clipboard.writeText(cmd).then(function() {
+                var toast = document.getElementById('toast');
+                toast.classList.remove('opacity-0', 'translate-y-2');
+                setTimeout(function() { toast.classList.add('opacity-0', 'translate-y-2'); }, 1500);
+            }).catch(function() {
+                var ta = document.createElement('textarea');
+                ta.value = cmd;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+            });
+        }
+
+        function esc(str) {
+            var el = document.createElement('div');
+            el.textContent = str;
+            return el.innerHTML;
+        }
+
+        var debounceTimer;
         document.getElementById('search').addEventListener('input', function(e) {
-            const query = e.target.value.toLowerCase();
-            const filtered = skills.filter(skill =>
-                skill.name.toLowerCase().includes(query) ||
-                (skill.description || '').toLowerCase().includes(query) ||
-                (skill.tags || []).some(tag => tag.toLowerCase().includes(query))
-            );
-            renderSkills(filtered);
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(function() {
+                var q = e.target.value.toLowerCase();
+                if (!q) return render();
+                render(skills.filter(function(s) {
+                    return (s.name && s.name.toLowerCase().includes(q)) ||
+                           (s.description && s.description.toLowerCase().includes(q)) ||
+                           (s.tags && s.tags.some(function(t) { return t.toLowerCase().includes(q); }));
+                }));
+            }, 150);
         });
 
         loadSkills();
@@ -3155,7 +3207,6 @@ http {
 </body>
 </html>
 """
-        content = content.replace("__DISPLAY_NAME__", display_name)
         (repo_path / "registry" / "web" / "index.html").write_text(
             content, encoding="utf-8"
         )
