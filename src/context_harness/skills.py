@@ -489,6 +489,79 @@ def init_repo(
     return SkillResult.ERROR, None
 
 
+def upgrade_repo(
+    repo_path: Path,
+    *,
+    check_only: bool = False,
+    dry_run: bool = False,
+    force: bool = False,
+    quiet: bool = False,
+) -> tuple[SkillResult, Optional[dict]]:
+    """Upgrade a skills registry to the latest scaffold version.
+
+    Detects the current registry version and applies necessary scaffold
+    updates while preserving user skills and customizations.
+
+    Args:
+        repo_path: Path to the local registry repository
+        check_only: Only check for available updates
+        dry_run: Show what would change without applying
+        force: Overwrite all scaffold files without prompting
+        quiet: If True, suppress output messages
+
+    Returns:
+        Tuple of (SkillResult, upgrade details dict or None)
+    """
+    from context_harness.services.skill_service import SkillService
+    from context_harness.primitives import Success, Failure
+
+    service = SkillService()
+
+    if not quiet:
+        console.print(f"[cyan]Checking registry at {repo_path}...[/cyan]")
+
+    result = service.upgrade_registry_repo(
+        repo_path=repo_path,
+        check_only=check_only,
+        dry_run=dry_run,
+        force=force,
+    )
+
+    if isinstance(result, Success):
+        data = result.value
+        current = data.get("current_version", "unknown")
+        latest = data.get("latest_version", "unknown")
+
+        if not quiet:
+            if data.get("upgraded"):
+                console.print(f"\n[green]✅ Registry upgraded: {current} → {latest}[/green]")
+                updated = data.get("files_updated", [])
+                if updated:
+                    console.print("[dim]Updated files:[/dim]")
+                    for f in updated:
+                        console.print(f"[dim]  - {f}[/dim]")
+            elif data.get("dry_run"):
+                console.print(f"\n[yellow]Dry run: would upgrade {current} → {latest}[/yellow]")
+                to_update = data.get("files_to_update", [])
+                if to_update:
+                    console.print("[dim]Files to update:[/dim]")
+                    for f in to_update:
+                        console.print(f"[dim]  - {f}[/dim]")
+            elif data.get("upgrade_available"):
+                console.print(f"\n[yellow]Upgrade available: {current} → {latest}[/yellow]")
+            else:
+                console.print(f"\n[green]✅ Registry is up to date (version {current})[/green]")
+
+        return SkillResult.SUCCESS, data
+
+    elif isinstance(result, Failure):
+        if not quiet:
+            console.print(f"[red]❌ {result.error}[/red]")
+        return SkillResult.ERROR, None
+
+    return SkillResult.ERROR, None
+
+
 def _validate_skill(skill_path: Path, quiet: bool = False) -> bool:
     """Validate a skill directory structure.
 

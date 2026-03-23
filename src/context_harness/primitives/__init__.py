@@ -36,6 +36,7 @@ from context_harness.primitives.skill import (
     SkillSource,
     VersionComparison,
     VersionStatus,
+    RegistryUpgradeStatus,
 )
 from context_harness.primitives.oauth import (
     AuthStatus,

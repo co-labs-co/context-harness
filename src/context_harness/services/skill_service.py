@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, List, Optional, Protocol
 import yaml
 from packaging.version import InvalidVersion, Version
 
+from context_harness import __version__ as CH_VERSION
 from context_harness.primitives import (
     DEFAULT_SKILLS_REPO,
     ErrorCode,
@@ -927,6 +928,268 @@ class SkillService:
             message=f"Skills registry '{name}' created successfully",
         )
 
+    def upgrade_registry_repo(
+        self,
+        repo_path: Path,
+        *,
+        check_only: bool = False,
+        dry_run: bool = False,
+        force: bool = False,
+    ) -> Result[dict]:
+        """Upgrade an existing skills registry to the latest scaffold version.
+
+        Detects the current registry version and applies necessary scaffold
+        updates while preserving user skills and customizations.
+
+        Legacy registries (without .registry-version) are detected as version
+        "0.0.0" and will receive all scaffold updates.
+
+        Args:
+            repo_path: Path to the local registry repository
+            check_only: Only check for available updates, don't apply them
+            dry_run: Show what would be updated without making changes
+            force: Overwrite all scaffold files without prompting
+
+        Returns:
+            Result containing upgrade details dict on success, or Failure
+        """
+        if not repo_path.exists():
+            return Failure(
+                error=f"Registry path does not exist: {repo_path}",
+                code=ErrorCode.VALIDATION_ERROR,
+            )
+
+        # Detect current version (0.0.0 for legacy registries)
+        current_version = self._detect_registry_version(repo_path)
+        latest_version = CH_VERSION
+
+        # Parse versions for comparison
+        try:
+            current = Version(current_version)
+            latest = Version(latest_version.split("+")[0])  # Remove local version
+        except InvalidVersion:
+            return Failure(
+                error=f"Invalid version format: current={current_version}, latest={latest_version}",
+                code=ErrorCode.VALIDATION_ERROR,
+            )
+
+        # Check if upgrade needed
+        if current >= latest:
+            return Success(
+                value={
+                    "current_version": current_version,
+                    "latest_version": latest_version,
+                    "upgraded": False,
+                    "message": "Already at latest version",
+                },
+                message="Registry is already at the latest version",
+            )
+
+        # Check-only mode
+        if check_only:
+            return Success(
+                value={
+                    "current_version": current_version,
+                    "latest_version": latest_version,
+                    "upgraded": False,
+                    "upgrade_available": True,
+                },
+                message=f"Upgrade available: {current_version} → {latest_version}",
+            )
+
+        # Get list of files to update
+        files_to_update = self._get_scaffold_files_to_update(repo_path, current_version)
+
+        if dry_run:
+            return Success(
+                value={
+                    "current_version": current_version,
+                    "latest_version": latest_version,
+                    "upgraded": False,
+                    "dry_run": True,
+                    "files_to_update": files_to_update,
+                },
+                message=f"Dry run: would update {len(files_to_update)} file(s)",
+            )
+
+        # Apply scaffold updates (preserve user skills)
+        updated_files = self._apply_scaffold_updates(
+            repo_path, files_to_update, force=force
+        )
+
+        # Update version markers
+        self._write_scaffold_registry_version(repo_path)
+        self._update_json_version_markers(repo_path)
+
+        return Success(
+            value={
+                "current_version": current_version,
+                "latest_version": latest_version,
+                "upgraded": True,
+                "files_updated": updated_files,
+            },
+            message=f"Registry upgraded: {current_version} → {latest_version}",
+        )
+
+    def _detect_registry_version(self, repo_path: Path) -> str:
+        """Detect the registry scaffold version.
+
+        Returns "0.0.0" for legacy registries without .registry-version file.
+        """
+        version_file = repo_path / ".registry-version"
+        if version_file.exists():
+            return version_file.read_text(encoding="utf-8").strip()
+        return "0.0.0"  # Legacy registry
+
+    def _get_scaffold_files_to_update(
+        self, repo_path: Path, current_version: str
+    ) -> list[str]:
+        """Get list of scaffold files that need updating.
+
+        Excludes user skill directories (skill/*) except scaffolded ones.
+        """
+        # Files that are always safe to update (infrastructure)
+        scaffold_files = [
+            ".github/workflows/release.yml",
+            ".github/workflows/sync-registry.yml",
+            ".github/workflows/validate-skills.yml",
+            ".github/workflows/auto-rebase.yml",
+            ".github/ISSUE_TEMPLATE/bug_report.yml",
+            ".github/ISSUE_TEMPLATE/feature_request.yml",
+            ".github/PULL_REQUEST_TEMPLATE.md",
+            "scripts/sync_registry.py",
+            "scripts/validate_skills.py",
+            "Dockerfile",
+            "docker-compose.yml",
+            "registry/nginx.conf",
+            "registry/web/index.html",
+            "registry/web/skill.html",
+        ]
+
+        # Check which files exist and need updating
+        files_to_update = []
+        for file_path in scaffold_files:
+            full_path = repo_path / file_path
+            # Include if file doesn't exist or if we're forcing
+            if not full_path.exists():
+                files_to_update.append(file_path)
+
+        # Always add version marker files
+        files_to_update.append(".registry-version")
+
+        return files_to_update
+
+    def _apply_scaffold_updates(
+        self, repo_path: Path, files_to_update: list[str], *, force: bool
+    ) -> list[str]:
+        """Apply scaffold file updates while preserving user skills.
+
+        Args:
+            repo_path: Path to the registry repository
+            files_to_update: List of relative file paths to update
+            force: If True, overwrite existing files without checking
+
+        Returns:
+            List of files that were actually updated
+        """
+        updated_files = []
+
+        # Create directory structure if needed
+        (repo_path / ".github" / "workflows").mkdir(parents=True, exist_ok=True)
+        (repo_path / ".github" / "ISSUE_TEMPLATE").mkdir(parents=True, exist_ok=True)
+        (repo_path / "scripts").mkdir(parents=True, exist_ok=True)
+        (repo_path / "registry" / "web").mkdir(parents=True, exist_ok=True)
+
+        # Extract repo name from git remote or use placeholder
+        repo_name = self._get_repo_name_from_git(repo_path)
+
+        # Apply each scaffold file
+        for file_path in files_to_update:
+            full_path = repo_path / file_path
+
+            # Skip if file exists and not forcing
+            if full_path.exists() and not force:
+                continue
+
+            # Write the scaffold file
+            self._write_single_scaffold_file(repo_path, file_path, repo_name)
+            updated_files.append(file_path)
+
+        return updated_files
+
+    def _get_repo_name_from_git(self, repo_path: Path) -> str:
+        """Try to get repo name from git remote."""
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(repo_path), "remote", "get-url", "origin"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            url = result.stdout.strip()
+            # Extract owner/repo from URL
+            if "github.com" in url:
+                # Handle both https and ssh URLs
+                parts = url.replace(".git", "").replace("git@github.com:", "").split("/")
+                if len(parts) >= 2:
+                    return f"{parts[-2]}/{parts[-1]}"
+        except (subprocess.CalledProcessError, IndexError):
+            pass
+        return "owner/skills-registry"  # Fallback
+
+    def _write_single_scaffold_file(
+        self, repo_path: Path, file_path: str, repo_name: str
+    ) -> None:
+        """Write a single scaffold file based on its path."""
+        # Map file paths to their writer methods
+        writers = {
+            ".github/workflows/release.yml": self._write_scaffold_release_workflow,
+            ".github/workflows/sync-registry.yml": self._write_scaffold_sync_registry_workflow,
+            ".github/workflows/validate-skills.yml": self._write_scaffold_validate_skills_workflow,
+            ".github/workflows/auto-rebase.yml": self._write_scaffold_auto_rebase_workflow,
+            "scripts/sync_registry.py": self._write_scaffold_sync_registry_script,
+            "scripts/validate_skills.py": self._write_scaffold_validate_skills_script,
+            "Dockerfile": self._write_scaffold_dockerfile,
+            "docker-compose.yml": lambda p: self._write_scaffold_docker_compose(p, repo_name),
+            "registry/nginx.conf": self._write_scaffold_nginx_conf,
+            "registry/web/index.html": lambda p: self._write_scaffold_index_html(p, repo_name),
+            "registry/web/skill.html": lambda p: self._write_scaffold_skill_html(p, repo_name),
+        }
+
+        writer = writers.get(file_path)
+        if writer:
+            writer(repo_path)
+        elif file_path == ".registry-version":
+            self._write_scaffold_registry_version(repo_path)
+
+    def _update_json_version_markers(self, repo_path: Path) -> None:
+        """Update registry_version in skills.json and marketplace.json."""
+        # Update skills.json
+        skills_json_path = repo_path / "skills.json"
+        if skills_json_path.exists():
+            try:
+                data = json.loads(skills_json_path.read_text(encoding="utf-8"))
+                data["registry_version"] = CH_VERSION
+                data["schema_version"] = "1.1"
+                skills_json_path.write_text(
+                    json.dumps(data, indent=2) + "\n", encoding="utf-8"
+                )
+            except (json.JSONDecodeError, KeyError):
+                pass  # Don't fail if JSON is malformed
+
+        # Update marketplace.json
+        marketplace_path = repo_path / "marketplace.json"
+        if marketplace_path.exists():
+            try:
+                data = json.loads(marketplace_path.read_text(encoding="utf-8"))
+                data["registry_version"] = CH_VERSION
+                data["schema_version"] = "1.1"
+                marketplace_path.write_text(
+                    json.dumps(data, indent=2) + "\n", encoding="utf-8"
+                )
+            except (json.JSONDecodeError, KeyError):
+                pass
+
     def _write_registry_scaffold(self, repo_path: Path, repo_name: str) -> None:
         """Write the full skills registry scaffold with CI/CD automation.
 
@@ -991,12 +1254,16 @@ class SkillService:
         # --- Marketplace manifest for plugin discovery ---
         self._write_scaffold_marketplace_json(repo_path, repo_name)
 
+        # --- Registry version marker (for upgrade detection) ---
+        self._write_scaffold_registry_version(repo_path)
+
     # -- Scaffold file writers -----------------------------------------------
 
     def _write_scaffold_skills_json(self, repo_path: Path) -> None:
         """Write skills.json — registry manifest with scaffolded skills."""
         registry = {
-            "schema_version": "1.0",
+            "schema_version": "1.1",
+            "registry_version": CH_VERSION,
             "skills": [
                 {
                     "name": "example-skill",
@@ -1071,6 +1338,15 @@ Thumbs.db
 *.swp
 """
         (repo_path / ".gitignore").write_text(content, encoding="utf-8")
+
+    def _write_scaffold_registry_version(self, repo_path: Path) -> None:
+        """Write .registry-version file for upgrade detection.
+
+        This file tracks the ContextHarness CLI version that created or
+        last upgraded the registry scaffold. Used by upgrade-repo to
+        determine what updates are needed.
+        """
+        (repo_path / ".registry-version").write_text(CH_VERSION, encoding="utf-8")
 
     def _write_scaffold_readme(self, repo_path: Path, repo_name: str) -> None:
         """Write README.md with lifecycle documentation."""
@@ -2836,7 +3112,8 @@ python scripts/validate_skills.py
 
         marketplace = {
             "$schema": "https://context-harness.dev/schemas/marketplace.json",
-            "schema_version": "1.0",
+            "schema_version": "1.1",
+            "registry_version": CH_VERSION,
             "name": repo_name,
             "display_name": f"{repo_name.split('/')[-1]} Skills Registry",
             "description": "ContextHarness skills registry with versioned skills",

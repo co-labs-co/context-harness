@@ -28,6 +28,15 @@ class VersionStatus(Enum):
     UNKNOWN = "unknown"  # Unable to determine version status
 
 
+class RegistryUpgradeStatus(Enum):
+    """Status of a registry upgrade operation."""
+
+    UP_TO_DATE = "up_to_date"  # Registry is already at latest version
+    UPGRADE_AVAILABLE = "upgrade_available"  # Newer scaffold version available
+    UPGRADED = "upgraded"  # Registry was successfully upgraded
+    LEGACY = "legacy"  # Legacy registry (no version tracking)
+
+
 class RepoVisibility(Enum):
     """Visibility of a GitHub repository."""
 

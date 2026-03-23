@@ -1237,11 +1237,31 @@ class TestSkillServiceInitRegistryRepo:
         service._write_registry_scaffold(tmp_path, "test-user/my-skills")
 
         content = json.loads((tmp_path / "skills.json").read_text())
-        assert content["schema_version"] == "1.0"
+        assert content["schema_version"] == "1.1"
+        assert "registry_version" in content  # Added for upgrade-repo
         assert len(content["skills"]) == 2
         skill_names = [s["name"] for s in content["skills"]]
         assert "example-skill" in skill_names
         assert "skill-release" in skill_names
+
+    def test_scaffold_registry_version_file(self, tmp_path: Path) -> None:
+        """.registry-version file is created for upgrade detection."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        version_file = tmp_path / ".registry-version"
+        assert version_file.exists()
+        version = version_file.read_text().strip()
+        assert version  # Should have a version string
+
+    def test_scaffold_marketplace_json_has_version(self, tmp_path: Path) -> None:
+        """marketplace.json includes registry_version for upgrade detection."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        content = json.loads((tmp_path / "marketplace.json").read_text())
+        assert "registry_version" in content
+        assert content["schema_version"] == "1.1"
 
     def test_scaffold_readme_contains_repo_name(self, tmp_path: Path) -> None:
         """README.md references the repository name."""

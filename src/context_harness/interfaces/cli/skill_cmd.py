@@ -778,3 +778,101 @@ def _configure_registry_project(url: str, is_http: bool) -> None:
     except Exception as e:
         print_error(f"Failed to configure registry: {e}")
         raise SystemExit(1)
+
+
+@skill_group.command("upgrade-repo")
+@click.argument("path", default=".", type=click.Path(exists=True))
+@click.option(
+    "--check",
+    is_flag=True,
+    help="Only check for available updates without applying them.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Show what would change without applying.",
+)
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Overwrite all scaffold files without prompting.",
+)
+def skill_upgrade_repo_cmd(
+    path: str,
+    check: bool,
+    dry_run: bool,
+    force: bool,
+) -> None:
+    """Upgrade a skills registry to the latest scaffold version.
+
+    Detects the current registry version and applies necessary scaffold
+    updates while preserving user skills and customizations.
+
+    Legacy registries (created before version tracking) are automatically
+    detected and upgraded.
+
+    PATH is the path to the registry repository (default: current directory).
+
+    Examples:
+
+        context-harness skill upgrade-repo
+
+        context-harness skill upgrade-repo ./my-skills --check
+
+        context-harness skill upgrade-repo ./my-skills --dry-run
+
+        context-harness skill upgrade-repo ./my-skills --force
+    """
+    from pathlib import Path
+
+    from context_harness.primitives import Success, Failure
+    from context_harness.services.skill_service import SkillService
+
+    print_header("Registry Upgrade")
+
+    repo_path = Path(path).resolve()
+    print_info(f"Registry path: {repo_path}")
+
+    service = SkillService()
+    result = service.upgrade_registry_repo(
+        repo_path,
+        check_only=check,
+        dry_run=dry_run,
+        force=force,
+    )
+
+    if isinstance(result, Success):
+        data = result.value
+        current = data.get("current_version", "unknown")
+        latest = data.get("latest_version", "unknown")
+
+        console.print()
+
+        if data.get("upgraded"):
+            print_success(f"Registry upgraded: {current} → {latest}")
+            updated_files = data.get("files_updated", [])
+            if updated_files:
+                console.print()
+                console.print("[dim]Updated files:[/dim]")
+                for f in updated_files:
+                    console.print(f"[dim]  - {f}[/dim]")
+            console.print()
+            print_info("Commit and push these changes to your repository.")
+        elif data.get("dry_run"):
+            print_info(f"Dry run: would upgrade {current} → {latest}")
+            files_to_update = data.get("files_to_update", [])
+            if files_to_update:
+                console.print()
+                console.print("[dim]Files to update:[/dim]")
+                for f in files_to_update:
+                    console.print(f"[dim]  - {f}[/dim]")
+        elif data.get("upgrade_available"):
+            print_info(f"Upgrade available: {current} → {latest}")
+            console.print("[dim]Run without --check to apply updates.[/dim]")
+        else:
+            print_success(f"Registry is up to date (version {current})")
+
+    elif isinstance(result, Failure):
+        print_error(f"Failed to upgrade registry: {result.error}")
+        raise SystemExit(1)
+
