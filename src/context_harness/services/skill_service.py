@@ -1614,22 +1614,90 @@ jobs:
               else
                 echo "⚠️ Rebase has conflicts, attempting auto-resolution..."
 
-                # For conflicting JSON files, accept main's version
-                # Then rebuild them to include all skills
-                git checkout --theirs skills.json release-please-config.json .release-please-manifest.json 2>/dev/null || true
-                git add skills.json release-please-config.json .release-please-manifest.json 2>/dev/null || true
+                # Get list of conflicted files
+                CONFLICTS=$(git diff --name-only --diff-filter=U)
 
-                # Rebuild skills.json to include all skills from this PR plus main
-                python scripts/sync-registry.py 2>/dev/null || true
-                git add skills.json 2>/dev/null || true
+                if echo "$CONFLICTS" | grep -q ".json"; then
+                  echo "Found JSON conflicts: $CONFLICTS"
 
-                # Continue rebase
-                if git rebase --continue; then
-                  echo "Auto-resolution successful, pushing..."
-                  git push origin "$pr_branch" --force-with-lease
-                  echo "✅ PR #$pr_number rebased with conflict resolution"
+                  # Resolve each conflicting JSON file by merging
+                  python3 << 'PYRESOLVE'
+import json
+import subprocess
+import os
+
+# Get conflicted files
+result = subprocess.run(['git', 'diff', '--name-only', '--diff-filter=U'],
+                       capture_output=True, text=True)
+conflicts = [f for f in result.stdout.strip().split('\\n') if f.endswith('.json')]
+
+for filepath in conflicts:
+                    if not os.path.exists(filepath):
+                        continue
+
+                    # Get main's version
+                    main_result = subprocess.run(
+                        ['git', 'show', f'origin/main:{filepath}'],
+                        capture_output=True, text=True
+                    )
+                    try:
+                        main_data = json.loads(main_result.stdout) if main_result.returncode == 0 else {{}}
+                    except:
+                        main_data = {{}}
+
+                    # Get PR branch's version (before rebase conflict)
+                    ours_result = subprocess.run(
+                        ['git', 'show', f'HEAD:{filepath}'],
+                        capture_output=True, text=True
+                    )
+                    try:
+                        ours_data = json.loads(ours_result.stdout) if ours_result.returncode == 0 else {{}}
+                    except:
+                        ours_data = {{}}
+
+                    # Merge the JSON files
+                    def deep_merge(base, overlay):
+                        if isinstance(base, dict) and isinstance(overlay, dict):
+                            result = dict(base)
+                            for k, v in overlay.items():
+                                if k in result and isinstance(result[k], dict) and isinstance(v, dict):
+                                    result[k] = deep_merge(result[k], v)
+                                elif k == 'packages' and isinstance(base.get(k), dict) and isinstance(overlay.get(k), dict):
+                                    # Merge packages dict
+                                    result[k] = {{**base.get(k, {{}}), **overlay.get(k, {{}})}}
+                                else:
+                                    result[k] = v
+                            return result
+                        return overlay
+
+                    merged = deep_merge(main_data, ours_data)
+
+                    # Write merged file
+                    with open(filepath, 'w') as f:
+                        json.dump(merged, f, indent=2, sort_keys=True)
+                        f.write('\\n')
+
+                    print(f"Merged {filepath}")
+
+# Also rebuild skills.json from all skills in the repo
+subprocess.run(['python', 'scripts/sync-registry.py'], capture_output=True)
+print("Rebuilt skills.json")
+PYRESOLVE
+
+                  # Stage all resolved files
+                  git add skills.json release-please-config.json .release-please-manifest.json 2>/dev/null || true
+
+                  # Continue rebase
+                  if git rebase --continue; then
+                    echo "Auto-resolution successful, pushing..."
+                    git push origin "$pr_branch" --force-with-lease
+                    echo "✅ PR #$pr_number rebased with conflict resolution"
+                  else
+                    echo "❌ Could not complete rebase even after conflict resolution"
+                    git rebase --abort
+                  fi
                 else
-                  echo "❌ Could not complete rebase even after conflict resolution"
+                  echo "❌ Non-JSON conflicts detected, cannot auto-resolve"
                   git rebase --abort
                 fi
               fi
