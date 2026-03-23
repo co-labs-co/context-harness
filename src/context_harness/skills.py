@@ -460,6 +460,15 @@ def init_repo(
         if not quiet:
             console.print(f"\n[green]✅ {result.message}[/green]")
             console.print(f"[dim]URL: {repo.url}[/dim]")
+            console.print(
+                "\n[yellow]⚠️  Next: Configure GitHub Actions permissions[/yellow]"
+            )
+            console.print(
+                "[dim]Settings → Actions → General → Workflow permissions[/dim]"
+            )
+            console.print(
+                "[dim]Select 'Read and write' + 'Allow Actions to create PRs'[/dim]"
+            )
         return SkillResult.SUCCESS, repo.url
 
     if isinstance(result, Failure):

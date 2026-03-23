@@ -1085,6 +1085,16 @@ Thumbs.db
 
 Skills registry for [ContextHarness](https://github.com/co-labs-co/context-harness).
 
+## ⚠️ Setup Required
+
+After creating this repo, configure GitHub Actions permissions:
+
+1. Go to **Settings** → **Actions** → **General**
+2. Under **Workflow permissions**, select **Read and write permissions**
+3. Check **Allow GitHub Actions to create and approve pull requests**
+
+Without these settings, release-please cannot create release PRs.
+
 ## How It Works
 
 This registry uses **fully automated semantic versioning**. Authors never touch
@@ -1250,6 +1260,16 @@ This guide walks you through adding a skill to **{repo_name}**.
 - Git installed
 - GitHub CLI (`gh`) installed and authenticated
 - Repository cloned locally
+
+## ⚠️ Required GitHub Settings
+
+Before using this registry, configure GitHub Actions permissions:
+
+1. Go to **Settings** → **Actions** → **General**
+2. Under **Workflow permissions**, select **Read and write permissions**
+3. Check **Allow GitHub Actions to create and approve pull requests**
+
+Without these settings, release-please cannot create release PRs.
 
 ## Steps
 
