@@ -1526,6 +1526,9 @@ jobs:
         Automatically rebases PRs when main changes to resolve conflicts
         with shared files (skills.json, release-please-config.json, etc.)
         that occur when multiple skills are extracted in parallel.
+
+        For JSON files with additive conflicts (both sides adding new entries),
+        automatically resolves by merging both sets of changes.
         """
         content = """\
 name: Auto Rebase
@@ -1552,7 +1555,7 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Rebase open PRs
+      - name: Rebase open PRs with conflict resolution
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -1578,8 +1581,86 @@ jobs:
                 git push origin "$pr_branch" --force-with-lease
                 echo "✅ PR #$pr_number rebased successfully"
               else
-                echo "❌ Rebase failed for PR #$pr_number, aborting"
-                git rebase --abort
+                echo "⚠️ Rebase has conflicts, attempting auto-resolution..."
+
+                # Get list of conflicted files
+                CONFLICTS=$(git diff --name-only --diff-filter=U)
+
+                if echo "$CONFLICTS" | grep -q ".json"; then
+                  echo "Found JSON conflicts, resolving..."
+
+                  # For each conflicting JSON file, merge both versions
+                  for file in $(echo "$CONFLICTS" | grep ".json"); do
+                    echo "Resolving conflict in $file"
+
+                    # Get ours (PR branch) and theirs (main) versions
+                    git show HEAD:"$file" > /tmp/ours.json 2>/dev/null || echo "{}" > /tmp/ours.json
+                    git show origin/main:"$file" > /tmp/theirs.json 2>/dev/null || echo "{}" > /tmp/theirs.json
+
+                    # Merge JSON files (combine keys, preferring ours for duplicates)
+                    python3 << 'PYEOF'
+import json
+import sys
+
+def merge_json(ours_path, theirs_path, output_path):
+                    try:
+                        with open(ours_path) as f:
+                            ours = json.load(f)
+                    except:
+                        ours = {}
+                    try:
+                        with open(theirs_path) as f:
+                            theirs = json.load(f)
+                    except:
+                        theirs = {}
+
+                    # Deep merge - for dicts, merge keys; for lists, combine unique items
+                    def deep_merge(a, b):
+                        if isinstance(a, dict) and isinstance(b, dict):
+                            result = dict(b)
+                            for k, v in a.items():
+                                if k in result:
+                                    result[k] = deep_merge(v, result[k])
+                                else:
+                                    result[k] = v
+                            return result
+                        elif isinstance(a, list) and isinstance(b, list):
+                            # For lists of dicts with 'name' key, merge by name
+                            if a and b and isinstance(a[0], dict) and 'name' in a[0]:
+                                seen = {}
+                                for item in b + a:
+                                    name = item.get('name')
+                                    if name:
+                                        seen[name] = item
+                                return list(seen.values())
+                            # For other lists, combine and dedupe
+                            return list({json.dumps(x, sort_keys=True): x for x in a + b}.values())
+                        else:
+                            return a  # Prefer ours
+                    merged = deep_merge(ours, theirs)
+                    with open(output_path, 'w') as f:
+                        json.dump(merged, f, indent=2, sort_keys=True)
+                    f.write('\\n')
+
+merge_json('/tmp/ours.json', '/tmp/theirs.json', sys.argv[1])
+PYEOF "$file"
+
+                    git add "$file"
+                  done
+
+                  # Continue rebase
+                  if git rebase --continue; then
+                    echo "Auto-resolution successful, pushing..."
+                    git push origin "$pr_branch" --force-with-lease
+                    echo "✅ PR #$pr_number rebased with conflict resolution"
+                  else
+                    echo "❌ Could not complete rebase even after conflict resolution"
+                    git rebase --abort
+                  fi
+                else
+                  echo "❌ Non-JSON conflicts detected, cannot auto-resolve"
+                  git rebase --abort
+                fi
               fi
 
               # Go back to main for next iteration
