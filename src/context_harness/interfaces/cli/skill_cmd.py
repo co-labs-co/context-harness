@@ -671,7 +671,7 @@ def _configure_registry_user(url: str, is_http: bool) -> None:
         from context_harness.primitives import Failure
         from context_harness.primitives.config import (
             SkillsRegistryConfig,
-            SkillsRegistryAuthConfig,
+            RegistryAuthConfig,
             UserConfig,
         )
         from context_harness.services.user_config_service import UserConfigService
