@@ -1,10 +1,12 @@
 """Skills registry resolution for ContextHarness.
 
-Provides functions to resolve the skills repository with layered precedence:
-1. Environment variable (highest priority)
+Provides functions to resolve the skills registry configuration with layered precedence:
+1. Environment variables (highest priority)
 2. Project config (opencode.json)
 3. User config (~/.context-harness/config.json)
 4. Default (lowest priority)
+
+Supports both GitHub and HTTP-based registries.
 """
 
 from __future__ import annotations
@@ -19,16 +21,297 @@ from context_harness.primitives import (
     OpenCodeConfig,
     Result,
     SKILLS_REPO_ENV_VAR,
+    SKILLS_REGISTRY_TOKEN_ENV_VAR,
+    SKILLS_REGISTRY_TYPE_ENV_VAR,
+    SKILLS_REGISTRY_URL_ENV_VAR,
+    SkillsRegistryConfig,
     Success,
     UserConfig,
 )
+from context_harness.services.registry_client import (
+    AuthType,
+    RegistryAuth,
+    RegistryConfig,
+    RegistryType,
+    create_registry_client,
+)
 
 
+def resolve_registry_config(
+    project_config: Optional[OpenCodeConfig] = None,
+    user_config: Optional[UserConfig] = None,
+) -> Tuple[RegistryConfig, str]:
+    """Resolve the skills registry configuration with layered precedence.
+
+    Priority (highest to lowest):
+    1. CONTEXT_HARNESS_REGISTRY_URL environment variable (HTTP registry)
+    2. CONTEXT_HARNESS_REGISTRY_TYPE environment variable (type override)
+    3. CONTEXT_HARNESS_SKILLS_REPO environment variable (GitHub)
+    4. Project config (opencode.json skillsRegistry)
+    5. User config (~/.context-harness/config.json skillsRegistry)
+    6. Default (co-labs-co/context-harness-skills)
+
+    Args:
+        project_config: Optional project configuration (opencode.json)
+        user_config: Optional user configuration
+
+    Returns:
+        Tuple of (RegistryConfig, source) where source indicates where it came from:
+        - "environment" if from env vars
+        - "project" if from opencode.json
+        - "user" if from user config
+        - "default" if using hardcoded default
+    """
+    # 1. Check for HTTP registry URL environment variable (highest priority)
+    env_url = os.environ.get(SKILLS_REGISTRY_URL_ENV_VAR)
+    if env_url:
+        auth = _resolve_auth_from_env()
+        return (
+            RegistryConfig.http(env_url, auth),
+            "environment",
+        )
+
+    # 2. Check for registry type override
+    env_type = _resolve_registry_type_from_env()
+    if env_type == RegistryType.HTTP:
+        # If type is explicitly HTTP but no URL, fall through to config resolution
+        pass
+    elif env_type == RegistryType.GITHUB:
+        # If type is explicitly GitHub, use the repo env var or default
+        env_repo = os.environ.get(SKILLS_REPO_ENV_VAR)
+        if env_repo:
+            return (RegistryConfig.github(env_repo), "environment")
+
+    # 3. Check for GitHub repo environment variable
+    env_repo = os.environ.get(SKILLS_REPO_ENV_VAR)
+    if env_repo:
+        return (
+            RegistryConfig.github(env_repo),
+            "environment",
+        )
+
+    # 4. Project config
+    if project_config and project_config.skills_registry:
+        config = _config_from_skills_registry(project_config.skills_registry)
+        return (config, "project")
+
+    # 5. User config
+    if user_config and user_config.skills_registry:
+        config = _config_from_skills_registry(user_config.skills_registry)
+        return (config, "user")
+
+    # 6. Default
+    return (RegistryConfig.github(DEFAULT_SKILLS_REPO), "default")
+
+
+def _resolve_auth_from_env() -> Optional[RegistryAuth]:
+    """Resolve authentication from environment variables."""
+    token = os.environ.get(SKILLS_REGISTRY_TOKEN_ENV_VAR)
+    if not token:
+        return None
+
+    # Default to bearer auth when token is provided
+    return RegistryAuth(
+        type=AuthType.BEARER,
+        token_env=SKILLS_REGISTRY_TOKEN_ENV_VAR,
+    )
+
+
+def _resolve_registry_type_from_env() -> Optional[RegistryType]:
+    """Resolve registry type from CONTEXT_HARNESS_REGISTRY_TYPE env var."""
+    env_type = os.environ.get(SKILLS_REGISTRY_TYPE_ENV_VAR)
+    if not env_type:
+        return None
+
+    # Normalize to lowercase for case-insensitive matching
+    normalized = env_type.strip().lower()
+    if normalized == "http":
+        return RegistryType.HTTP
+    elif normalized == "github":
+        return RegistryType.GITHUB
+    return None
+
+
+def _config_from_skills_registry(config: SkillsRegistryConfig) -> RegistryConfig:
+    """Convert SkillsRegistryConfig to RegistryConfig."""
+    if config.is_http and config.url:
+        auth = None
+        if config.auth:
+            # Normalize auth type to be case-insensitive
+            auth_type = AuthType.NONE
+            if config.auth.type:
+                normalized_type = config.auth.type.strip().lower()
+                auth_type_map = {e.value.lower(): e for e in AuthType}
+                auth_type = auth_type_map.get(normalized_type, AuthType.NONE)
+
+            auth = RegistryAuth(
+                type=auth_type,
+                token_env=config.auth.token_env,
+                header_name=config.auth.header_name,
+                username_env=config.auth.username_env,
+                password_env=config.auth.password_env,
+            )
+        return RegistryConfig.http(config.url, auth)
+    else:
+        return RegistryConfig.github(config.default)
+
+
+def resolve_registry_config_with_loading(
+    project_path: Optional[Path] = None,
+) -> Tuple[RegistryConfig, str]:
+    """Resolve registry config, loading configs as needed.
+
+    This is a convenience function that loads project and user configs
+    automatically. Use resolve_registry_config() directly if you already
+    have the configs loaded.
+
+    Args:
+        project_path: Optional project path for loading opencode.json
+
+    Returns:
+        Tuple of (RegistryConfig, source) - see resolve_registry_config() for details
+    """
+    # 1. Check environment variables first (no loading needed)
+    env_url = os.environ.get(SKILLS_REGISTRY_URL_ENV_VAR)
+    if env_url:
+        auth = _resolve_auth_from_env()
+        return (RegistryConfig.http(env_url, auth), "environment")
+
+    env_repo = os.environ.get(SKILLS_REPO_ENV_VAR)
+    if env_repo:
+        return (RegistryConfig.github(env_repo), "environment")
+
+    # 2. Try to load project config
+    project_config: Optional[OpenCodeConfig] = None
+    if project_path:
+        config_file = project_path / "opencode.json"
+    else:
+        config_file = Path.cwd() / "opencode.json"
+
+    if config_file.exists():
+        try:
+            with open(config_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            project_config = OpenCodeConfig.from_dict(data)
+        except (json.JSONDecodeError, ValueError, OSError):
+            pass  # Invalid or unreadable config, fall through to next option
+
+    if project_config and project_config.skills_registry:
+        config = _config_from_skills_registry(project_config.skills_registry)
+        return (config, "project")
+
+    # 3. Try to load user config
+    user_config: Optional[UserConfig] = None
+    user_config_path = UserConfig.config_path()
+
+    if user_config_path.exists():
+        try:
+            with open(user_config_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            user_config = UserConfig.from_dict(data)
+        except (json.JSONDecodeError, ValueError, OSError):
+            pass  # Invalid or unreadable config, fall through to default
+
+    if user_config and user_config.skills_registry:
+        config = _config_from_skills_registry(user_config.skills_registry)
+        return (config, "user")
+
+    # 4. Default
+    return (RegistryConfig.github(DEFAULT_SKILLS_REPO), "default")
+
+
+def get_registry_client(
+    project_path: Optional[Path] = None,
+) -> RegistryClient:
+    """Get the appropriate registry client based on configuration.
+
+    This is the main entry point for getting a registry client.
+    It resolves the configuration and returns the appropriate client.
+
+    Args:
+        project_path: Optional project path for loading opencode.json
+
+    Returns:
+        RegistryClient implementation (GitHub or HTTP)
+    """
+    config, _ = resolve_registry_config_with_loading(project_path)
+    return create_registry_client(config)
+
+
+def get_registry_info() -> Result[dict]:
+    """Get detailed information about registry configuration.
+
+    Returns:
+        Result containing dict with:
+        - type: Registry type (github, http)
+        - url: Registry URL or repo
+        - source: Where the config came from
+        - auth_type: Authentication type (if configured)
+        - env_vars: Dictionary of environment variable values
+    """
+    # Check environment variables
+    env_url = os.environ.get(SKILLS_REGISTRY_URL_ENV_VAR)
+    env_repo = os.environ.get(SKILLS_REPO_ENV_VAR)
+    env_token = os.environ.get(SKILLS_REGISTRY_TOKEN_ENV_VAR)
+    env_type = os.environ.get(SKILLS_REGISTRY_TYPE_ENV_VAR)
+
+    # Load project config
+    project_config: Optional[SkillsRegistryConfig] = None
+    config_file = Path.cwd() / "opencode.json"
+    if config_file.exists():
+        try:
+            with open(config_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            oc = OpenCodeConfig.from_dict(data)
+            project_config = oc.skills_registry
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    # Load user config
+    user_config: Optional[SkillsRegistryConfig] = None
+    user_config_path = UserConfig.config_path()
+    if user_config_path.exists():
+        try:
+            with open(user_config_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            uc = UserConfig.from_dict(data)
+            user_config = uc.skills_registry
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    # Resolve final config
+    registry_config, source = resolve_registry_config_with_loading()
+
+    return Success(
+        value={
+            "type": registry_config.type.value,
+            "url": registry_config.url,
+            "source": source,
+            "auth_type": registry_config.auth.type.value if registry_config.auth else "none",
+            "env_vars": {
+                "registry_url": env_url,
+                "skills_repo": env_repo,
+                "registry_token": "***" if env_token else None,
+                "registry_type": env_type,
+            },
+            "project_config": project_config.to_dict() if project_config else None,
+            "user_config": user_config.to_dict() if user_config else None,
+            "default_repo": DEFAULT_SKILLS_REPO,
+        }
+    )
+
+
+# Backward compatibility functions
 def resolve_skills_repo(
     project_config: Optional[OpenCodeConfig] = None,
     user_config: Optional[UserConfig] = None,
 ) -> Tuple[str, str]:
     """Resolve the skills repository with layered precedence.
+
+    DEPRECATED: Use resolve_registry_config() instead.
+
+    This function is maintained for backward compatibility.
+    It returns only the GitHub repo string, not the full registry config.
 
     Priority (highest to lowest):
     1. CONTEXT_HARNESS_SKILLS_REPO environment variable
@@ -47,27 +330,17 @@ def resolve_skills_repo(
         - "user" if from user config
         - "default" if using hardcoded default
     """
-    # 1. Environment variable (highest priority)
-    env_repo = os.environ.get(SKILLS_REPO_ENV_VAR)
-    if env_repo:
-        return (env_repo, "environment")
-
-    # 2. Project config
-    if project_config and project_config.skills_registry:
-        return (project_config.skills_registry.default, "project")
-
-    # 3. User config
-    if user_config and user_config.skills_registry:
-        return (user_config.skills_registry.default, "user")
-
-    # 4. Default
-    return (DEFAULT_SKILLS_REPO, "default")
+    config, source = resolve_registry_config(project_config, user_config)
+    # Return the URL (which is the repo for GitHub)
+    return (config.url, source)
 
 
 def resolve_skills_repo_with_loading(
     project_path: Optional[Path] = None,
 ) -> Tuple[str, str]:
     """Resolve skills repo, loading configs as needed.
+
+    DEPRECATED: Use resolve_registry_config_with_loading() instead.
 
     This is a convenience function that loads project and user configs
     automatically. Use resolve_skills_repo() directly if you already
@@ -79,50 +352,14 @@ def resolve_skills_repo_with_loading(
     Returns:
         Tuple of (repo, source) - see resolve_skills_repo() for details
     """
-    # 1. Check environment variable first (no loading needed)
-    env_repo = os.environ.get(SKILLS_REPO_ENV_VAR)
-    if env_repo:
-        return (env_repo, "environment")
-
-    # 2. Try to load project config
-    project_config: Optional[OpenCodeConfig] = None
-    if project_path:
-        config_file = project_path / "opencode.json"
-    else:
-        config_file = Path.cwd() / "opencode.json"
-
-    if config_file.exists():
-        try:
-            with open(config_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            project_config = OpenCodeConfig.from_dict(data)
-        except (json.JSONDecodeError, ValueError, OSError):
-            pass  # Invalid or unreadable config, fall through to next option
-
-    if project_config and project_config.skills_registry:
-        return (project_config.skills_registry.default, "project")
-
-    # 3. Try to load user config
-    user_config: Optional[UserConfig] = None
-    user_config_path = UserConfig.config_path()
-
-    if user_config_path.exists():
-        try:
-            with open(user_config_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            user_config = UserConfig.from_dict(data)
-        except (json.JSONDecodeError, ValueError, OSError):
-            pass  # Invalid or unreadable config, fall through to default
-
-    if user_config and user_config.skills_registry:
-        return (user_config.skills_registry.default, "user")
-
-    # 4. Default
-    return (DEFAULT_SKILLS_REPO, "default")
+    config, source = resolve_registry_config_with_loading(project_path)
+    return (config.url, source)
 
 
 def get_skills_repo_info() -> Result[dict]:
     """Get detailed information about skills repo resolution.
+
+    DEPRECATED: Use get_registry_info() instead.
 
     Returns:
         Result containing dict with:
@@ -134,44 +371,19 @@ def get_skills_repo_info() -> Result[dict]:
         - user_value: Value from user config (if set)
         - default_value: The default repository
     """
-    env_value = os.environ.get(SKILLS_REPO_ENV_VAR)
-
-    # Load project config
-    project_value: Optional[str] = None
-    config_file = Path.cwd() / "opencode.json"
-    if config_file.exists():
-        try:
-            with open(config_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            project_config = OpenCodeConfig.from_dict(data)
-            if project_config.skills_registry:
-                project_value = project_config.skills_registry.default
-        except (json.JSONDecodeError, OSError):
-            pass  # Invalid or unreadable config, project_value stays None
-
-    # Load user config
-    user_value: Optional[str] = None
-    user_config_path = UserConfig.config_path()
-    if user_config_path.exists():
-        try:
-            with open(user_config_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            user_config = UserConfig.from_dict(data)
-            if user_config.skills_registry:
-                user_value = user_config.skills_registry.default
-        except (json.JSONDecodeError, OSError):
-            pass  # Invalid or unreadable config, user_value stays None
-
-    repo, source = resolve_skills_repo_with_loading()
-
-    return Success(
-        value={
-            "repo": repo,
-            "source": source,
-            "env_var": SKILLS_REPO_ENV_VAR,
-            "env_value": env_value,
-            "project_value": project_value,
-            "user_value": user_value,
-            "default_value": DEFAULT_SKILLS_REPO,
-        }
-    )
+    result = get_registry_info()
+    if isinstance(result, Success):
+        # Map new registry info to old skills repo info format
+        info = result.value
+        return Success(
+            value={
+                "repo": info.get("url", DEFAULT_SKILLS_REPO),
+                "source": info.get("source", "default"),
+                "env_var": info.get("env_vars", {}).get("skills_repo_env", SKILLS_REPO_ENV_VAR),
+                "env_value": info.get("env_vars", {}).get("skills_repo"),
+                "project_value": info.get("project_config", {}).get("default") if info.get("project_config") else None,
+                "user_value": info.get("user_config", {}).get("default") if info.get("user_config") else None,
+                "default_value": DEFAULT_SKILLS_REPO,
+            }
+        )
+    return result

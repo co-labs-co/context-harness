@@ -15,11 +15,12 @@ import subprocess
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Protocol
+from typing import TYPE_CHECKING, List, Optional, Protocol
 
 import yaml
 from packaging.version import InvalidVersion, Version
 
+from context_harness import __version__ as CH_VERSION
 from context_harness.primitives import (
     DEFAULT_SKILLS_REPO,
     ErrorCode,
@@ -37,6 +38,9 @@ from context_harness.primitives import (
     VersionComparison,
     VersionStatus,
 )
+
+if TYPE_CHECKING:
+    from context_harness.services.registry_client import RegistryClient
 
 
 SKILLS_REGISTRY_PATH = "skills.json"
@@ -222,6 +226,36 @@ class DefaultGitHubClient:
             return None
 
 
+class _GitHubClientAdapter:
+    """Adapter to wrap GitHubClient in RegistryClient interface.
+
+    This provides backward compatibility for code that still uses
+    the GitHubClient interface directly.
+    """
+
+    def __init__(self, client: "GitHubClient", repo: str):
+        self._client = client
+        self._repo = repo
+
+    def check_auth(self) -> bool:
+        return self._client.check_auth()
+
+    def check_access(self) -> bool:
+        return self._client.check_repo_access(self._repo)
+
+    def fetch_manifest(self) -> Optional[str]:
+        return self._client.fetch_file(self._repo, SKILLS_REGISTRY_PATH)
+
+    def fetch_file(self, path: str) -> Optional[bytes]:
+        content = self._client.fetch_file(self._repo, path)
+        if content:
+            return content.encode("utf-8") if isinstance(content, str) else content
+        return None
+
+    def fetch_directory(self, path: str, dest: Path) -> bool:
+        return self._client.fetch_directory(self._repo, path, dest)
+
+
 class SkillService:
     """Service for managing skills.
 
@@ -231,6 +265,8 @@ class SkillService:
     - Installing skills
     - Extracting skills to PRs
     - Validating skill structure
+
+    Supports both GitHub and HTTP registries.
 
     Example:
         service = SkillService()
@@ -247,15 +283,35 @@ class SkillService:
 
     def __init__(
         self,
-        github_client: Optional[GitHubClient] = None,
+        github_client: Optional["GitHubClient"] = None,
+        registry_client: Optional["RegistryClient"] = None,
         skills_repo: str = DEFAULT_SKILLS_REPO,
     ):
         """Initialize the skill service.
 
         Args:
-            github_client: GitHub client for API operations
-            skills_repo: Skills repository (owner/repo format)
+            github_client: GitHub client for API operations (deprecated, use registry_client)
+            registry_client: Registry client for registry operations
+            skills_repo: Skills repository (owner/repo format for GitHub)
         """
+        # Support both old and new interfaces
+        if registry_client is not None:
+            self._registry = registry_client
+            self._is_github = False
+        elif github_client is not None:
+            # Wrap old GitHubClient in adapter
+            self._registry = _GitHubClientAdapter(github_client, skills_repo)
+            self._is_github = True
+        else:
+            # Default to GitHub client
+            from context_harness.services.registry_client import (
+                GitHubRegistryClient,
+            )
+
+            self._registry = GitHubRegistryClient(skills_repo)
+            self._is_github = True
+
+        # Keep for backward compatibility with extract/init-repo
         self.github = github_client or DefaultGitHubClient()
         self.skills_repo = skills_repo
 
@@ -271,23 +327,21 @@ class SkillService:
         Returns:
             Result containing list of Skill primitives
         """
-        if not self.github.check_auth():
+        if not self._registry.check_auth():
             return Failure(
-                error="GitHub CLI is not authenticated. Run 'gh auth login'.",
+                error="Registry authentication failed. For GitHub, run 'gh auth login'. For HTTP, check your token.",
                 code=ErrorCode.AUTH_REQUIRED,
             )
 
-        if not self.github.check_repo_access(self.skills_repo):
+        if not self._registry.check_access():
             return Failure(
-                error=f"Cannot access repository '{self.skills_repo}'",
+                error=f"Cannot access registry '{self.skills_repo}'",
                 code=ErrorCode.PERMISSION_DENIED,
                 details={"repo": self.skills_repo},
             )
 
         # Fetch registry
-        registry_content = self.github.fetch_file(
-            self.skills_repo, SKILLS_REGISTRY_PATH
-        )
+        registry_content = self._registry.fetch_manifest()
         if registry_content is None:
             return Failure(
                 error="Skills registry not found",
@@ -516,8 +570,8 @@ class SkillService:
             skills_dir.mkdir(parents=True, exist_ok=True)
 
             # Fetch skill files
-            if skill.path and not self.github.fetch_directory(
-                self.skills_repo, skill.path, skill_dest
+            if skill.path and not self._registry.fetch_directory(
+                skill.path, skill_dest
             ):
                 return Failure(
                     error=f"Failed to install skill '{skill_name}'",
@@ -874,6 +928,368 @@ class SkillService:
             message=f"Skills registry '{name}' created successfully",
         )
 
+    def upgrade_registry_repo(
+        self,
+        repo_path: Path,
+        *,
+        check_only: bool = False,
+        dry_run: bool = False,
+        force: bool = False,
+    ) -> Result[dict]:
+        """Upgrade an existing skills registry to the latest scaffold version.
+
+        Detects the current registry version and applies necessary scaffold
+        updates while preserving user skills and customizations.
+
+        Legacy registries (without .registry-version) are detected as version
+        "0.0.0" and will receive all scaffold updates.
+
+        Args:
+            repo_path: Path to the local registry repository
+            check_only: Only check for available updates, don't apply them
+            dry_run: Show what would be updated without making changes
+            force: Overwrite all scaffold files without prompting
+
+        Returns:
+            Result containing upgrade details dict on success, or Failure
+        """
+        if not repo_path.exists():
+            return Failure(
+                error=f"Registry path does not exist: {repo_path}",
+                code=ErrorCode.VALIDATION_ERROR,
+            )
+
+        # Detect current version (0.0.0 for legacy registries)
+        current_version = self._detect_registry_version(repo_path)
+        latest_version = CH_VERSION
+
+        # Parse versions for comparison
+        try:
+            current = Version(current_version)
+            latest = Version(latest_version.split("+")[0])  # Remove local version
+        except InvalidVersion:
+            return Failure(
+                error=f"Invalid version format: current={current_version}, latest={latest_version}",
+                code=ErrorCode.VALIDATION_ERROR,
+            )
+
+        # Check-only mode - just report if upgrade available
+        if check_only:
+            if force or current < latest:
+                return Success(
+                    value={
+                        "current_version": current_version,
+                        "latest_version": latest_version,
+                        "upgraded": False,
+                        "upgrade_available": True,
+                    },
+                    message=f"Upgrade available: {current_version} → {latest_version}",
+                )
+            else:
+                return Success(
+                    value={
+                        "current_version": current_version,
+                        "latest_version": latest_version,
+                        "upgraded": False,
+                        "upgrade_available": False,
+                    },
+                    message="Registry is already at the latest version",
+                )
+
+        # Get list of files to update
+        # Note: Critical infrastructure is ALWAYS included, even if version is current
+        files_to_update = self._get_scaffold_files_to_update(
+            repo_path, current_version, force=force
+        )
+
+        # If nothing to update and not forcing, we're done
+        if not files_to_update and not force:
+            return Success(
+                value={
+                    "current_version": current_version,
+                    "latest_version": latest_version,
+                    "upgraded": False,
+                    "message": "Already at latest version",
+                },
+                message="Registry is already at the latest version",
+            )
+
+        if dry_run:
+            return Success(
+                value={
+                    "current_version": current_version,
+                    "latest_version": latest_version,
+                    "upgraded": False,
+                    "dry_run": True,
+                    "files_to_update": files_to_update,
+                },
+                message=f"Dry run: would update {len(files_to_update)} file(s)",
+            )
+
+        # Apply scaffold updates (preserve user skills)
+        updated_files = self._apply_scaffold_updates(
+            repo_path, files_to_update, force=force
+        )
+
+        # Update version markers
+        self._write_scaffold_registry_version(repo_path)
+        self._update_json_version_markers(repo_path)
+
+        return Success(
+            value={
+                "current_version": current_version,
+                "latest_version": latest_version,
+                "upgraded": True,
+                "files_updated": updated_files,
+            },
+            message=f"Registry upgraded: {current_version} → {latest_version}",
+        )
+
+    def _detect_registry_version(self, repo_path: Path) -> str:
+        """Detect the registry scaffold version.
+
+        Returns "0.0.0" for legacy registries without .registry-version file.
+        """
+        version_file = repo_path / ".registry-version"
+        if version_file.exists():
+            return version_file.read_text(encoding="utf-8").strip()
+        return "0.0.0"  # Legacy registry
+
+    def _get_scaffold_files_to_update(
+        self, repo_path: Path, current_version: str, *, force: bool = False
+    ) -> list[str]:
+        """Get list of scaffold files that need updating.
+
+        Excludes user skill directories (skill/*) except scaffolded ones.
+
+        Args:
+            repo_path: Path to the registry repository
+            current_version: Current scaffold version of the registry
+            force: If True, include all scaffold files (overwrite mode)
+
+        Returns:
+            List of relative file paths to update
+
+        NOTE: When adding new scaffold files to init-repo, add them here too!
+        See SCAFFOLD_UPGRADE.md for the complete list and maintenance process.
+        """
+        # Critical infrastructure - ALWAYS updated (contains path references, must stay in sync)
+        # These files reference other files by path and must be updated when scaffold structure changes
+        # Also includes files with AI agent instructions that are updated regularly
+        critical_infrastructure = [
+            "Dockerfile",  # Contains COPY paths that must match actual file locations
+            "docker-compose.yml",  # Contains volume mounts and service config
+            "registry/nginx.conf",  # Nginx config for serving files
+            "registry/web/index.html",  # AI agent instructions are updated regularly
+            "registry/web/skill.html",  # Skill detail page format may change
+            "llms.txt",  # AI agent installation protocol (emerging standard)
+        ]
+
+        # Infrastructure files - added if missing, or with --force
+        infrastructure_files = [
+            # GitHub workflows
+            ".github/workflows/release.yml",
+            ".github/workflows/sync-registry.yml",
+            ".github/workflows/validate-skills.yml",
+            ".github/workflows/auto-rebase.yml",
+            # GitHub templates
+            ".github/ISSUE_TEMPLATE/new-skill.md",
+            ".github/PULL_REQUEST_TEMPLATE.md",
+            # Scripts
+            "scripts/sync-registry.py",
+            "scripts/validate-skills.py",
+            # Release configuration
+            ".releaseplease.json",
+            ".release-please-manifest.json",
+            # Git configuration
+            ".gitignore",
+            # Marketplace manifest
+            "marketplace.json",
+        ]
+
+        # Documentation files - often customized by users
+        # Only add these in force mode or if missing
+        documentation_files = [
+            "README.md",
+            "CONTRIBUTING.md",
+            "QUICKSTART.md",
+        ]
+
+        files_to_update = []
+
+        # ALWAYS include critical infrastructure (regardless of force)
+        # These files contain path references that must stay in sync with scaffold structure
+        files_to_update.extend(critical_infrastructure)
+
+        if force:
+            # Force mode: include all scaffold files for overwrite
+            files_to_update.extend(infrastructure_files)
+            files_to_update.extend(documentation_files)
+        else:
+            # Normal mode: only include infrastructure files that don't exist
+            for file_path in infrastructure_files:
+                full_path = repo_path / file_path
+                if not full_path.exists():
+                    files_to_update.append(file_path)
+            # Documentation files only if missing (users often customize)
+            for file_path in documentation_files:
+                full_path = repo_path / file_path
+                if not full_path.exists():
+                    files_to_update.append(file_path)
+
+        # Always add version marker files
+        files_to_update.append(".registry-version")
+
+        return files_to_update
+
+    def _apply_scaffold_updates(
+        self, repo_path: Path, files_to_update: list[str], *, force: bool
+    ) -> list[str]:
+        """Apply scaffold file updates while preserving user skills.
+
+        Args:
+            repo_path: Path to the registry repository
+            files_to_update: List of relative file paths to update
+            force: If True, overwrite existing files without checking
+
+        Returns:
+            List of files that were actually updated
+        """
+        # Critical infrastructure - ALWAYS overwritten (contains path references or updated instructions)
+        critical_infrastructure = {
+            "Dockerfile",
+            "docker-compose.yml",
+            "registry/nginx.conf",
+            "registry/web/index.html",  # AI agent instructions are updated regularly
+            "registry/web/skill.html",  # Skill detail page format may change
+            "llms.txt",  # AI agent installation protocol (emerging standard)
+        }
+
+        updated_files = []
+
+        # Create directory structure if needed
+        (repo_path / ".github" / "workflows").mkdir(parents=True, exist_ok=True)
+        (repo_path / ".github" / "ISSUE_TEMPLATE").mkdir(parents=True, exist_ok=True)
+        (repo_path / "scripts").mkdir(parents=True, exist_ok=True)
+        (repo_path / "registry" / "web").mkdir(parents=True, exist_ok=True)
+
+        # Extract repo name from git remote or use placeholder
+        repo_name = self._get_repo_name_from_git(repo_path)
+
+        # Apply each scaffold file
+        for file_path in files_to_update:
+            full_path = repo_path / file_path
+
+            # Skip if file exists and not forcing AND not critical infrastructure
+            # Critical infrastructure is ALWAYS updated to keep path references in sync
+            is_critical = file_path in critical_infrastructure
+            if full_path.exists() and not force and not is_critical:
+                continue
+
+            # Write the scaffold file
+            self._write_single_scaffold_file(repo_path, file_path, repo_name)
+            updated_files.append(file_path)
+
+        return updated_files
+
+    def _get_repo_name_from_git(self, repo_path: Path) -> str:
+        """Try to get repo name from git remote."""
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(repo_path), "remote", "get-url", "origin"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            url = result.stdout.strip()
+            # Extract owner/repo from URL
+            if "github.com" in url:
+                # Handle both https and ssh URLs
+                parts = url.replace(".git", "").replace("git@github.com:", "").split("/")
+                if len(parts) >= 2:
+                    return f"{parts[-2]}/{parts[-1]}"
+        except (subprocess.CalledProcessError, IndexError):
+            pass
+        return "owner/skills-registry"  # Fallback
+
+    def _write_single_scaffold_file(
+        self, repo_path: Path, file_path: str, repo_name: str
+    ) -> None:
+        """Write a single scaffold file based on its path.
+
+        NOTE: When adding new scaffold files, add them to both:
+        1. This writers dictionary
+        2. _get_scaffold_files_to_update() list
+        See SCAFFOLD_UPGRADE.md for the maintenance process.
+        """
+        # Map file paths to their writer methods
+        writers = {
+            # GitHub workflows
+            ".github/workflows/release.yml": self._write_scaffold_release_workflow,
+            ".github/workflows/sync-registry.yml": self._write_scaffold_sync_registry_workflow,
+            ".github/workflows/validate-skills.yml": self._write_scaffold_validate_skills_workflow,
+            ".github/workflows/auto-rebase.yml": self._write_scaffold_auto_rebase_workflow,
+            # GitHub templates
+            ".github/ISSUE_TEMPLATE/new-skill.md": self._write_scaffold_issue_template,
+            ".github/PULL_REQUEST_TEMPLATE.md": self._write_scaffold_pr_template,
+            # Scripts
+            "scripts/sync-registry.py": self._write_scaffold_sync_registry_script,
+            "scripts/validate-skills.py": self._write_scaffold_validate_skills_script,
+            # HTTP registry (Docker/nginx)
+            "Dockerfile": self._write_scaffold_dockerfile,
+            "docker-compose.yml": lambda p: self._write_scaffold_docker_compose(p, repo_name),
+            "registry/nginx.conf": self._write_scaffold_nginx_conf,
+            "registry/web/index.html": lambda p: self._write_scaffold_index_html(p, repo_name),
+            "registry/web/skill.html": lambda p: self._write_scaffold_skill_html(p, repo_name),
+            # AI agent instructions
+            "llms.txt": self._write_scaffold_llms_txt,
+            # Release configuration
+            ".releaseplease.json": self._write_scaffold_release_please_config,
+            ".release-please-manifest.json": self._write_scaffold_release_please_manifest,
+            # Git configuration
+            ".gitignore": self._write_scaffold_gitignore,
+            # Marketplace manifest (requires repo_name)
+            "marketplace.json": lambda p: self._write_scaffold_marketplace_json(p, repo_name),
+            # Documentation (requires repo_name)
+            "README.md": lambda p: self._write_scaffold_readme(p, repo_name),
+            "CONTRIBUTING.md": lambda p: self._write_scaffold_contributing(p, repo_name),
+            "QUICKSTART.md": lambda p: self._write_scaffold_quickstart(p, repo_name),
+        }
+
+        writer = writers.get(file_path)
+        if writer:
+            writer(repo_path)
+        elif file_path == ".registry-version":
+            self._write_scaffold_registry_version(repo_path)
+
+    def _update_json_version_markers(self, repo_path: Path) -> None:
+        """Update registry_version in skills.json and marketplace.json."""
+        # Update skills.json
+        skills_json_path = repo_path / "skills.json"
+        if skills_json_path.exists():
+            try:
+                data = json.loads(skills_json_path.read_text(encoding="utf-8"))
+                data["registry_version"] = CH_VERSION
+                data["schema_version"] = "1.1"
+                skills_json_path.write_text(
+                    json.dumps(data, indent=2) + "\n", encoding="utf-8"
+                )
+            except (json.JSONDecodeError, KeyError):
+                pass  # Don't fail if JSON is malformed
+
+        # Update marketplace.json
+        marketplace_path = repo_path / "marketplace.json"
+        if marketplace_path.exists():
+            try:
+                data = json.loads(marketplace_path.read_text(encoding="utf-8"))
+                data["registry_version"] = CH_VERSION
+                data["schema_version"] = "1.1"
+                marketplace_path.write_text(
+                    json.dumps(data, indent=2) + "\n", encoding="utf-8"
+                )
+            except (json.JSONDecodeError, KeyError):
+                pass
+
     def _write_registry_scaffold(self, repo_path: Path, repo_name: str) -> None:
         """Write the full skills registry scaffold with CI/CD automation.
 
@@ -920,6 +1336,7 @@ class SkillService:
         self._write_scaffold_release_workflow(repo_path)
         self._write_scaffold_sync_registry_workflow(repo_path)
         self._write_scaffold_validate_skills_workflow(repo_path)
+        self._write_scaffold_auto_rebase_workflow(repo_path)
 
         # --- Scripts ---
         self._write_scaffold_sync_registry_script(repo_path)
@@ -931,11 +1348,39 @@ class SkillService:
         # --- Skill-release skill (bundled operational guide) ---
         self._write_scaffold_skill_release(repo_path)
 
+        # --- HTTP Registry hosting (Docker/nginx) ---
+        self._write_scaffold_http_registry(repo_path, repo_name)
+
+        # --- Marketplace manifest for plugin discovery ---
+        self._write_scaffold_marketplace_json(repo_path, repo_name)
+
+        # --- Registry version marker (for upgrade detection) ---
+        self._write_scaffold_registry_version(repo_path)
+
     # -- Scaffold file writers -----------------------------------------------
 
     def _write_scaffold_skills_json(self, repo_path: Path) -> None:
-        """Write skills.json — empty registry manifest."""
-        registry = {"schema_version": "1.0", "skills": []}
+        """Write skills.json — registry manifest with scaffolded skills."""
+        registry = {
+            "schema_version": "1.1",
+            "registry_version": CH_VERSION,
+            "skills": [
+                {
+                    "name": "example-skill",
+                    "description": "An example skill to demonstrate the registry structure",
+                    "version": "0.1.0",
+                    "author": "your-name",
+                    "tags": ["example", "getting-started"],
+                },
+                {
+                    "name": "skill-release",
+                    "description": "Guide for creating, versioning, and releasing skills in a ContextHarness skills registry repository.",
+                    "version": "0.1.0",
+                    "author": None,
+                    "tags": [],
+                },
+            ],
+        }
         (repo_path / "skills.json").write_text(
             json.dumps(registry, indent=2) + "\n", encoding="utf-8"
         )
@@ -994,12 +1439,31 @@ Thumbs.db
 """
         (repo_path / ".gitignore").write_text(content, encoding="utf-8")
 
+    def _write_scaffold_registry_version(self, repo_path: Path) -> None:
+        """Write .registry-version file for upgrade detection.
+
+        This file tracks the ContextHarness CLI version that created or
+        last upgraded the registry scaffold. Used by upgrade-repo to
+        determine what updates are needed.
+        """
+        (repo_path / ".registry-version").write_text(CH_VERSION, encoding="utf-8")
+
     def _write_scaffold_readme(self, repo_path: Path, repo_name: str) -> None:
         """Write README.md with lifecycle documentation."""
         content = f"""\
 # {repo_name}
 
 Skills registry for [ContextHarness](https://github.com/co-labs-co/context-harness).
+
+## ⚠️ Setup Required
+
+After creating this repo, configure GitHub Actions permissions:
+
+1. Go to **Settings** → **Actions** → **General**
+2. Under **Workflow permissions**, select **Read and write permissions**
+3. Check **Allow GitHub Actions to create and approve pull requests**
+
+Without these settings, release-please cannot create release PRs.
 
 ## How It Works
 
@@ -1036,6 +1500,35 @@ context-harness config set skills-repo {repo_name}
 context-harness config set skills-repo {repo_name} --global
 ```
 
+## HTTP Hosting (Optional)
+
+Host this registry via HTTP for AI agents or air-gapped environments:
+
+```bash
+# Build and run with Docker
+docker-compose up -d
+
+# Registry available at http://localhost:8080
+```
+
+### AI Agent Discovery
+
+The registry includes `llms.txt` - an emerging standard for LLM-specific instructions. AI coding assistants read this file to understand how to install skills:
+
+```
+http://localhost:8080/llms.txt
+```
+
+### Install from HTTP Registry
+
+```bash
+# Point CLI at HTTP registry
+context-harness skill use-registry http://localhost:8080
+
+# Or install directly
+context-harness skill install <skill-name> --registry http://localhost:8080
+```
+
 ## Commit Convention
 
 | Commit prefix | Version bump | Example |
@@ -1054,15 +1547,25 @@ context-harness config set skills-repo {repo_name} --global
 │   └── workflows/
 │       ├── release.yml           # release-please automation
 │       ├── sync-registry.yml     # Rebuilds skills.json post-release
-│       └── validate-skills.yml   # PR validation checks
+│       ├── validate-skills.yml   # PR validation checks
+│       └── auto-rebase.yml       # Auto-rebase PRs when shared files change
 ├── scripts/
 │   ├── sync-registry.py          # Parses skills → skills.json
 │   └── validate_skills.py        # Pydantic-based validation
+├── registry/                     # HTTP hosting (optional)
+│   ├── nginx.conf                # CORS-enabled nginx config
+│   └── web/
+│       ├── index.html            # Skill browser UI
+│       └── skill.html            # Individual skill pages
 ├── skill/
 │   └── example-skill/
 │       ├── SKILL.md              # Skill content (no version field)
 │       └── version.txt           # Managed by release-please
+├── Dockerfile                    # nginx container for HTTP hosting
+├── docker-compose.yml            # Easy local deployment
+├── llms.txt                      # AI agent installation instructions
 ├── skills.json                   # Auto-maintained registry manifest
+├── marketplace.json              # Plugin marketplace compatibility
 ├── release-please-config.json    # Per-skill release configuration
 ├── .release-please-manifest.json # Current versions (CI-managed)
 ├── CONTRIBUTING.md
@@ -1165,6 +1668,16 @@ This guide walks you through adding a skill to **{repo_name}**.
 - Git installed
 - GitHub CLI (`gh`) installed and authenticated
 - Repository cloned locally
+
+## ⚠️ Required GitHub Settings
+
+Before using this registry, configure GitHub Actions permissions:
+
+1. Go to **Settings** → **Actions** → **General**
+2. Under **Workflow permissions**, select **Read and write permissions**
+3. Check **Allow GitHub Actions to create and approve pull requests**
+
+Without these settings, release-please cannot create release PRs.
 
 ## Steps
 
@@ -1435,6 +1948,177 @@ jobs:
             content, encoding="utf-8"
         )
 
+    def _write_scaffold_auto_rebase_workflow(self, repo_path: Path) -> None:
+        """Write .github/workflows/auto-rebase.yml for automatic PR rebasing.
+
+        Automatically rebases PRs when main changes to resolve conflicts
+        with shared files (skills.json, release-please-config.json, etc.)
+        that occur when multiple skills are extracted in parallel.
+
+        For JSON files with conflicts, accepts main's version then rebuilds
+        using sync-registry.py to include all skills.
+        """
+        content = """\
+name: Auto Rebase
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "skills.json"
+      - "release-please-config.json"
+      - ".release-please-manifest.json"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  rebase:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install python-frontmatter
+
+      - name: Rebase open PRs with conflict resolution
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Configure git identity for rebase commits
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Get open PRs and process each one
+          gh pr list --base main --state open --json number,headRefName \\
+            --jq '.[] | "\\(.number) \\(.headRefName)"' \\
+            | while read -r pr_number pr_branch; do
+              if [ -z "$pr_number" ] || [ -z "$pr_branch" ]; then
+                continue
+              fi
+
+              echo "Attempting to rebase PR #$pr_number ($pr_branch)"
+
+              # Fetch the PR branch
+              git fetch origin "$pr_branch" || continue
+
+              # Checkout the PR branch
+              git checkout "$pr_branch" || continue
+
+              # Try to rebase onto main
+              if git rebase origin/main; then
+                echo "Rebase successful, pushing..."
+                git push origin "$pr_branch" --force-with-lease
+                echo "✅ PR #$pr_number rebased successfully"
+              else
+                echo "⚠️ Rebase has conflicts, attempting auto-resolution..."
+
+                # Get list of conflicted files
+                CONFLICTS=$(git diff --name-only --diff-filter=U)
+
+                if echo "$CONFLICTS" | grep -q ".json"; then
+                  echo "Found JSON conflicts: $CONFLICTS"
+
+                  # Resolve each conflicting JSON file by merging
+                  python3 << 'PYRESOLVE'
+import json
+import subprocess
+import os
+
+# Get conflicted files
+result = subprocess.run(['git', 'diff', '--name-only', '--diff-filter=U'],
+                       capture_output=True, text=True)
+conflicts = [f for f in result.stdout.strip().split('\n') if f and f.endswith('.json')]
+
+for filepath in conflicts:
+    if not os.path.exists(filepath):
+        continue
+
+    # During rebase conflict:
+    # - :2:filepath = stage 2 = "ours" = upstream (main)
+    # - :3:filepath = stage 3 = "theirs" = commit being replayed (PR)
+
+    # Get main's version (stage 2)
+    main_result = subprocess.run(
+        ['git', 'show', ':2:' + filepath],
+        capture_output=True, text=True
+    )
+    try:
+        main_data = json.loads(main_result.stdout) if main_result.returncode == 0 else {}
+    except:
+        main_data = {}
+
+    # Get PR's version (stage 3 - the commit being replayed during rebase)
+    ours_result = subprocess.run(
+        ['git', 'show', ':3:' + filepath],
+        capture_output=True, text=True
+    )
+    try:
+        ours_data = json.loads(ours_result.stdout) if ours_result.returncode == 0 else {}
+    except:
+        ours_data = {}
+
+    # Deep merge: overlay PR's changes onto main's base
+    def deep_merge(base, overlay):
+        if isinstance(base, dict) and isinstance(overlay, dict):
+            result = dict(base)
+            for k, v in overlay.items():
+                if k in result and isinstance(result[k], dict) and isinstance(v, dict):
+                    result[k] = deep_merge(result[k], v)
+                else:
+                    result[k] = v
+            return result
+        return overlay
+
+    merged = deep_merge(main_data, ours_data)
+
+    # Write merged file
+    with open(filepath, 'w') as f:
+        json.dump(merged, f, indent=2, sort_keys=True)
+        f.write('\n')
+
+    print(f"Merged {filepath}")
+
+# Also rebuild skills.json from all skills on disk
+subprocess.run(['python', 'scripts/sync-registry.py'], capture_output=True)
+print("Rebuilt skills.json")
+PYRESOLVE
+
+                  # Stage all resolved files
+                  git add skills.json release-please-config.json .release-please-manifest.json 2>/dev/null || true
+
+                  # Continue rebase
+                  if git rebase --continue; then
+                    echo "Auto-resolution successful, pushing..."
+                    git push origin "$pr_branch" --force-with-lease
+                    echo "✅ PR #$pr_number rebased with conflict resolution"
+                  else
+                    echo "❌ Could not complete rebase even after conflict resolution"
+                    git rebase --abort
+                  fi
+                else
+                  echo "❌ Non-JSON conflicts detected, cannot auto-resolve"
+                  git rebase --abort
+                fi
+              fi
+
+              # Go back to main for next iteration
+              git checkout main
+            done
+"""
+        (repo_path / ".github" / "workflows" / "auto-rebase.yml").write_text(
+            content, encoding="utf-8"
+        )
+
     def _write_scaffold_sync_registry_script(self, repo_path: Path) -> None:
         """Write scripts/sync-registry.py to rebuild skills.json."""
         content = '''\
@@ -1443,6 +2127,7 @@ jobs:
 
 Parses SKILL.md frontmatter and version.txt for each skill,
 then writes the consolidated skills.json registry manifest.
+Also generates .listing.json for each skill for frontend file discovery.
 
 Usage:
     python scripts/sync-registry.py
@@ -1453,6 +2138,37 @@ import json
 from pathlib import Path
 
 import frontmatter
+
+
+def build_listing(skill_dir: Path) -> dict:
+    """Build .listing.json for a skill directory."""
+    listing = {
+        "files": [],
+        "directories": [],
+        "directory_files": {},
+    }
+
+    skip_names = {".listing.json", ".gitkeep", ".DS_Store", "__pycache__"}
+
+    for item in skill_dir.iterdir():
+        if item.name in skip_names:
+            continue
+
+        if item.is_file():
+            listing["files"].append(item.name)
+        elif item.is_dir():
+            listing["directories"].append(item.name)
+            dir_files = []
+            for subitem in item.iterdir():
+                if subitem.name not in skip_names and subitem.is_file():
+                    dir_files.append(subitem.name)
+            if dir_files:
+                listing["directory_files"][item.name] = sorted(dir_files)
+
+    listing["files"] = sorted(listing["files"])
+    listing["directories"] = sorted(listing["directories"])
+
+    return listing
 
 
 def build_registry() -> dict:
@@ -1500,11 +2216,71 @@ def build_registry() -> dict:
             }
         )
 
+        # Generate .listing.json for frontend file discovery
+        listing = build_listing(skill_dir)
+        (skill_dir / ".listing.json").write_text(
+            json.dumps(listing, indent=2) + "\\n", encoding="utf-8"
+        )
+
     return {"schema_version": "1.0", "skills": skills}
 
 
+def update_marketplace_json(skills: list) -> None:
+    """Update marketplace.json with current skills list.
+
+    The marketplace.json provides a standardized format for plugin
+    marketplace discovery, It's regenerated alongside skills.json
+    whenever skills are updated.
+    """
+    import os
+
+    # Determine registry URL from environment or default
+    repo = os.environ.get("GITHUB_REPOSITORY", "")
+    registry_url = ""
+    if repo:
+        parts = repo.split("/")
+        if len(parts) == 2:
+            owner, name = parts
+            registry_url = f"https://{owner}.github.io/{name}"
+
+    # Load existing marketplace.json to preserve metadata
+    marketplace_path = Path("marketplace.json")
+    if marketplace_path.exists():
+                try:
+                    existing = json.loads(marketplace_path.read_text())
+                except json.JSONDecodeError:
+                    existing = {}
+    else:
+        existing = {}
+
+    # Update skills list while preserving other fields
+    marketplace = {
+        "$schema": "https://context-harness.dev/schemas/marketplace.json",
+        "schema_version": existing.get("schema_version", "1.0"),
+        "name": existing.get("name", repo),
+        "display_name": existing.get("display_name", f"{repo.split('/')[-1]} Skills Registry" if repo else "Skills Registry"),
+        "description": existing.get("description", "ContextHarness skills registry with versioned skills"),
+        "registry_type": "context-harness",
+        "registry_url": existing.get("registry_url", registry_url),
+        "skills_endpoint": "/skills.json",
+        "skill_base_path": "/skill",
+        "website": existing.get("website", f"https://github.com/{repo}" if repo else ""),
+        "maintainer": existing.get("maintainer", {}),
+        "compatibility": existing.get("compatibility", {
+            "context_harness": ">=0.5.0",
+            "claude_code": ">=1.0.0",
+        }),
+        "skills": skills,
+    }
+
+    marketplace_path.write_text(
+        json.dumps(marketplace, indent=2) + "\\n", encoding="utf-8"
+    )
+    print(f"Updated marketplace.json with {len(skills)} skill(s)")
+
+
 def main() -> None:
-    """Rebuild and write skills.json."""
+    """Rebuild and write skills.json and marketplace.json."""
     registry = build_registry()
 
     Path("skills.json").write_text(
@@ -1514,6 +2290,9 @@ def main() -> None:
     print(f"Updated skills.json with {len(registry['skills'])} skill(s)")
     for skill in registry["skills"]:
         print(f"  - {skill['name']} v{skill['version']}")
+
+    # Also update marketplace.json
+    update_marketplace_json(registry["skills"])
 
 
 if __name__ == "__main__":
@@ -1715,6 +2494,45 @@ Use this skill when you need an example of the skill format.
         # version.txt — bootstrapped at 0.1.0 (required by release-please)
         (repo_path / "skill" / "example-skill" / "version.txt").write_text(
             "0.1.0\n", encoding="utf-8"
+        )
+
+        # .listing.json for frontend file discovery
+        self._write_scaffold_skill_listing(repo_path / "skill" / "example-skill")
+
+    def _write_scaffold_skill_listing(self, skill_path: Path) -> None:
+        """Write .listing.json for a skill directory.
+
+        Args:
+            skill_path: Path to the skill directory (e.g., skill/example-skill/)
+        """
+        listing: dict[str, Any] = {
+            "files": [],
+            "directories": [],
+            "directory_files": {},
+        }
+
+        skip_names = {".listing.json", ".gitkeep", ".DS_Store", "__pycache__"}
+
+        for item in skill_path.iterdir():
+            if item.name in skip_names:
+                continue
+
+            if item.is_file():
+                listing["files"].append(item.name)
+            elif item.is_dir():
+                listing["directories"].append(item.name)
+                dir_files = []
+                for subitem in item.iterdir():
+                    if subitem.name not in skip_names and subitem.is_file():
+                        dir_files.append(subitem.name)
+                if dir_files:
+                    listing["directory_files"][item.name] = sorted(dir_files)
+
+        listing["files"] = sorted(listing["files"])
+        listing["directories"] = sorted(listing["directories"])
+
+        (skill_path / ".listing.json").write_text(
+            json.dumps(listing, indent=2) + "\n", encoding="utf-8"
         )
 
     def _write_scaffold_skill_release(self, repo_path: Path) -> None:
@@ -2031,6 +2849,9 @@ python scripts/validate_skills.py
             "0.1.0\n", encoding="utf-8"
         )
 
+        # .listing.json for frontend file discovery
+        self._write_scaffold_skill_listing(repo_path / "skill" / "skill-release")
+
     def _compare_versions(
         self,
         skill_name: str,
@@ -2170,39 +2991,20 @@ python scripts/validate_skills.py
         Args:
             skill_name: Name of the skill to extract
             source_path: Source directory containing skill directories
-            tool_target: Which tool directory to search:
-                - "opencode": Only .opencode/skill/
-                - "claude-code": Only .claude/skills/
-                - "both" or None: Search both directories
+            tool_target: Optional target tool (Claude Code or OpenCode)
 
         Returns:
-            Result containing PR URL
+            Result containing PR URL if successful
         """
-        import re
-
-        # Validate skill name
-        if not re.match(r"^[a-zA-Z0-9_-]+$", skill_name):
-            return Failure(
-                error=f"Invalid skill name '{skill_name}'. Only alphanumeric, hyphens, underscores allowed.",
-                code=ErrorCode.VALIDATION_ERROR,
-            )
-
-        if not self.github.check_auth():
-            return Failure(
-                error="GitHub CLI is not authenticated",
-                code=ErrorCode.AUTH_REQUIRED,
-            )
-
-        if not self.github.check_repo_access(self.skills_repo):
-            return Failure(
-                error=f"Cannot access repository '{self.skills_repo}'",
-                code=ErrorCode.PERMISSION_DENIED,
-            )
-
-        # Find the skill in available directories
+        # Determine skill directories to search
         detector = ToolDetector(source_path)
-        skills_dirs = detector.get_skills_dirs(tool_target if tool_target else "both")
+        if tool_target:
+            skills_dirs = detector.get_skills_dirs(tool_target.tool_type)
+        else:
+            # Auto-detect: search both tool types
+            skills_dirs = detector.get_skills_dirs("both")
 
+        # Find the skill
         skill_source: Optional[Path] = None
         for skills_dir in skills_dirs:
             candidate = skills_dir / skill_name
@@ -2423,3 +3225,764 @@ python scripts/validate_skills.py
             truncated = truncated[:last_space]
 
         return truncated + "..."
+
+    # -- HTTP Registry Scaffold Methods --------------------------------------
+
+    def _write_scaffold_marketplace_json(
+        self, repo_path: Path, repo_name: str
+    ) -> None:
+        """Write marketplace.json — standardized manifest for plugin discovery.
+
+        This format provides compatibility with future Claude Code plugin
+        marketplaces and other AI coding assistant ecosystems.
+
+        The marketplace.json is regenerated by sync-registry.py alongside
+        skills.json whenever skills are updated.
+        """
+        # Determine registry URL (GitHub Pages or custom domain)
+        # For GitHub repos, the default is Pages at user.github.io/repo-name
+        parts = repo_name.split("/")
+        if len(parts) == 2:
+            owner, name = parts
+            registry_url = f"https://{owner}.github.io/{name}"
+        else:
+            registry_url = f"https://github.com/{repo_name}"
+
+        marketplace = {
+            "$schema": "https://context-harness.dev/schemas/marketplace.json",
+            "schema_version": "1.1",
+            "registry_version": CH_VERSION,
+            "name": repo_name,
+            "display_name": f"{repo_name.split('/')[-1]} Skills Registry",
+            "description": "ContextHarness skills registry with versioned skills",
+            "registry_type": "context-harness",
+            "registry_url": registry_url,
+            "skills_endpoint": "/skills.json",
+            "skill_base_path": "/skill",
+            "website": f"https://github.com/{repo_name}",
+            "maintainer": {
+                "name": "Registry Owner",
+                "url": f"https://github.com/{parts[0] if len(parts) == 2 else repo_name}",
+            },
+            "compatibility": {
+                "context_harness": ">=0.5.0",
+                "claude_code": ">=1.0.0",
+            },
+            "skills": [],
+        }
+        (repo_path / "marketplace.json").write_text(
+            json.dumps(marketplace, indent=2) + "\n", encoding="utf-8"
+        )
+
+    def _write_scaffold_http_registry(
+        self, repo_path: Path, repo_name: str
+    ) -> None:
+        """Write HTTP registry hosting files for Docker/nginx deployment.
+
+        Creates a complete setup for hosting the skills registry via HTTP:
+        - Dockerfile for containerized nginx serving
+        - docker-compose.yml for easy deployment
+        - nginx.conf with CORS headers for cross-origin access
+        - Web frontend (index.html, skill.html) for browsing skills
+        """
+        # Create directories
+        (repo_path / "registry" / "web").mkdir(parents=True, exist_ok=True)
+
+        # --- Dockerfile ---
+        self._write_scaffold_dockerfile(repo_path)
+
+        # --- docker-compose.yml ---
+        self._write_scaffold_docker_compose(repo_path, repo_name)
+
+        # --- nginx.conf ---
+        self._write_scaffold_nginx_conf(repo_path)
+
+        # --- llms.txt (AI agent instructions) ---
+        self._write_scaffold_llms_txt(repo_path)
+
+        # --- Web frontend ---
+        self._write_scaffold_index_html(repo_path, repo_name)
+        self._write_scaffold_skill_html(repo_path, repo_name)
+
+    def _write_scaffold_dockerfile(self, repo_path: Path) -> None:
+        """Write Dockerfile for nginx-based registry hosting."""
+        content = """\
+# ContextHarness Skills Registry - HTTP Server
+# Serves skills.json and skill files via nginx with CORS support
+
+FROM nginx:alpine
+
+# Copy nginx configuration
+COPY registry/nginx.conf /etc/nginx/nginx.conf
+
+# Copy registry files
+COPY skills.json marketplace.json llms.txt /usr/share/nginx/html/
+COPY skill /usr/share/nginx/html/skill
+
+# Copy web frontend
+COPY registry/web /usr/share/nginx/html
+
+# Expose port
+EXPOSE 80
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \\
+    CMD wget --no-verbose --tries=1 --spider http://localhost/skills.json || exit 1
+"""
+        (repo_path / "Dockerfile").write_text(content, encoding="utf-8")
+
+    def _write_scaffold_docker_compose(
+        self, repo_path: Path, repo_name: str
+    ) -> None:
+        """Write docker-compose.yml for easy deployment."""
+        content = f"""\
+# ContextHarness Skills Registry
+# Quick start: docker-compose up -d
+# Access at: http://localhost:8080
+
+services:
+  registry:
+    build: .
+    ports:
+      - "8080:80"
+    volumes:
+      # Mount skill directories for development
+      - ./skill:/usr/share/nginx/html/skill:ro
+      - ./skills.json:/usr/share/nginx/html/skills.json:ro
+      - ./marketplace.json:/usr/share/nginx/html/marketplace.json:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/skills.json"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  # Optional: GitHub Pages sync (for production)
+  # pages-sync:
+  #   image: alpine:latest
+  #   command: sh -c "while true; do sleep 3600; done"
+"""
+        (repo_path / "docker-compose.yml").write_text(content, encoding="utf-8")
+
+    def _write_scaffold_nginx_conf(self, repo_path: Path) -> None:
+        """Write nginx.conf with CORS headers for cross-origin access."""
+        content = """\
+# ContextHarness Skills Registry nginx configuration
+# Optimized for serving JSON and markdown with CORS support
+
+worker_processes auto;
+error_log /var/log/nginx/error.log warn;
+pid /tmp/nginx.pid;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                    '$status $body_bytes_sent "$http_referer" '
+                    '"$http_user_agent" "$http_x_forwarded_for"';
+
+    access_log /var/log/nginx/access.log main;
+
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+    keepalive_timeout 65;
+    types_hash_max_size 2048;
+
+    # Gzip compression
+    gzip on;
+    gzip_types application/json text/markdown text/plain text/css application/javascript;
+    gzip_min_length 256;
+
+    server {
+        listen 80;
+        server_name _;
+        root /usr/share/nginx/html;
+        index index.html;
+
+        # CORS headers for all requests
+        add_header Access-Control-Allow-Origin * always;
+        add_header Access-Control-Allow-Methods "GET, OPTIONS" always;
+        add_header Access-Control-Allow-Headers "Origin, Content-Type, Accept" always;
+
+        # Cache static assets
+        location ~* \\.(json|md|txt)$ {
+            expires 5m;
+            add_header Cache-Control "public, must-revalidate";
+            add_header Access-Control-Allow-Origin * always;
+        }
+
+        # Serve skills.json
+        location = /skills.json {
+            add_header Content-Type application/json;
+            add_header Access-Control-Allow-Origin * always;
+        }
+
+        # Serve marketplace.json
+        location = /marketplace.json {
+            add_header Content-Type application/json;
+            add_header Access-Control-Allow-Origin * always;
+        }
+
+        # Serve llms.txt (AI agent instructions)
+        location = /llms.txt {
+            add_header Content-Type text/plain;
+            add_header Access-Control-Allow-Origin * always;
+        }
+
+        # Serve skill files
+        location /skill/ {
+            alias /usr/share/nginx/html/skill/;
+            add_header Access-Control-Allow-Origin * always;
+
+            # Markdown as text/markdown
+            location ~* \\.md$ {
+                default_type text/markdown;
+                add_header Access-Control-Allow-Origin * always;
+            }
+        }
+
+        # Web frontend
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+
+        # Health check endpoint
+        location /health {
+            return 200 'OK';
+            add_header Content-Type text/plain;
+        }
+    }
+}
+"""
+        (repo_path / "registry" / "nginx.conf").write_text(content, encoding="utf-8")
+
+    def _write_scaffold_llms_txt(self, repo_path: Path) -> None:
+        """Write llms.txt - AI agent instructions file.
+
+        This is an emerging standard for providing LLM-specific instructions.
+        AI agents are trained to look for this file at the root of websites.
+        """
+        content = """\
+# ContextHarness Skills Registry
+
+> AI Agent Instructions: This registry provides skills that extend AI coding assistants with specialized capabilities.
+
+## Installation Protocol
+
+**ALWAYS use the CLI to install skills:**
+```
+ch skill install <skill-name>
+```
+
+The CLI handles all installation details automatically.
+
+## Rules
+
+- ONLY use `ch skill install` - never manually download or copy files
+- The CLI installs to both `.opencode/skill/` AND `.claude/skills/` automatically
+- User does NOT have git access to this registry
+
+## Available Skills
+
+See `/skills.json` for the complete list of available skills with descriptions.
+"""
+        (repo_path / "llms.txt").write_text(content, encoding="utf-8")
+
+    def _write_scaffold_index_html(
+        self, repo_path: Path, repo_name: str
+    ) -> None:
+        """Write index.html - static frontend for browsing skills.
+
+        A clean shadcn-inspired UI using Tailwind CSS with the project theme.
+        Includes sections for AI agent instructions and skill building.
+        """
+        content = """\
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skills Registry</title>
+    <!-- AI Agent Instructions: Read /llms.txt for installation protocol -->
+    <meta name="llm-instructions" content="/llms.txt">
+    <meta name="ai-agent-protocol" content="read-instructions-first">
+    <meta name="description" content="Skills registry for AI coding assistants. Read /llms.txt for installation instructions.">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Noto+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --background: oklch(0.1450 0 0);
+            --foreground: oklch(0.9850 0 0);
+            --card: oklch(0.2050 0 0);
+            --card-foreground: oklch(0.9850 0 0);
+            --primary: oklch(0.9220 0 0);
+            --primary-foreground: oklch(0.2050 0 0);
+            --secondary: oklch(0.2690 0 0);
+            --secondary-foreground: oklch(0.9850 0 0);
+            --muted: oklch(0.2690 0 0);
+            --muted-foreground: oklch(0.7080 0 0);
+            --accent: oklch(0.3710 0 0);
+            --accent-foreground: oklch(0.9850 0 0);
+            --border: oklch(0.2750 0 0);
+            --input: oklch(0.3250 0 0);
+            --ring: oklch(0.5560 0 0);
+            --radius: 0.625rem;
+        }
+        * { border-color: var(--border); }
+        body { font-family: 'Noto Sans Mono', ui-sans-serif, system-ui, sans-serif; background: var(--background); color: var(--foreground); }
+        .font-mono { font-family: 'Fira Code', ui-monospace, monospace; }
+        .collapsible-content { max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out; }
+        .collapsible-content.open { max-height: 2000px; }
+        .chevron { transition: transform 0.2s; }
+        .chevron.open { transform: rotate(180deg); }
+    </style>
+</head>
+<body class="min-h-screen">
+    <div class="max-w-5xl mx-auto px-6 py-12">
+        <!-- Header -->
+        <header class="mb-8">
+            <h1 class="text-3xl font-semibold tracking-tight mb-2">Skills Registry</h1>
+            <p class="text-[var(--muted-foreground)]">Extend your AI assistant with specialized capabilities</p>
+            <p class="text-xs text-[var(--muted-foreground)] mt-1">🤖 AI agents: read <a href="/llms.txt" class="underline">llms.txt</a> for installation instructions</p>
+        </header>
+
+        <!-- Build a Skill Section (hidden for now) -->
+        <section id="build-skill" class="mb-8 p-4 bg-[var(--card)] border rounded-[var(--radius)]" hidden>
+            <div class="flex items-center justify-between cursor-pointer" onclick="toggleSection('build-content')">
+                <div class="flex items-center gap-2">
+                    <span class="text-lg">🔧</span>
+                    <h2 class="text-sm font-medium">Build a Skill</h2>
+                </div>
+                <svg id="build-chevron" class="w-4 h-4 chevron text-[var(--muted-foreground)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </div>
+            <div id="build-content" class="collapsible-content">
+                <div class="mt-4 pt-4 border-t text-sm space-y-4">
+                    <p class="text-[var(--muted-foreground)]">
+                        Create and contribute skills to extend ContextHarness capabilities for your team.
+                    </p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="p-3 bg-[var(--background)] rounded-[var(--radius)]">
+                            <h3 class="text-xs font-medium mb-2">📁 Skill Structure</h3>
+                            <pre class="text-xs text-[var(--muted-foreground)] overflow-x-auto">skill/my-skill/
+├── SKILL.md       # Instructions
+├── version.txt    # Semantic version
+└── references/    # Optional docs</pre>
+                        </div>
+                        <div class="p-3 bg-[var(--background)] rounded-[var(--radius)]">
+                            <h3 class="text-xs font-medium mb-2">📝 SKILL.md Format</h3>
+                            <pre class="text-xs text-[var(--muted-foreground)] overflow-x-auto">---
+name: my-skill
+description: What it does
+tags: [category]
+---
+
+# Instructions here...</pre>
+                        </div>
+                    </div>
+                    <div class="space-y-2">
+                        <p class="text-xs text-[var(--muted-foreground)]"><strong>Quick Start:</strong></p>
+                        <ol class="list-decimal list-inside text-xs text-[var(--muted-foreground)] space-y-1">
+                            <li>Create a directory in <code class="bg-[var(--muted)] px-1 rounded">skill/my-skill/</code></li>
+                            <li>Add <code class="bg-[var(--muted)] px-1 rounded">SKILL.md</code> with YAML frontmatter</li>
+                            <li>Add <code class="bg-[var(--muted)] px-1 rounded">version.txt</code> with <code class="bg-[var(--muted)] px-1 rounded">0.1.0</code></li>
+                            <li>Commit with <code class="bg-[var(--muted)] px-1 rounded">feat: add my-skill</code></li>
+                        </ol>
+                    </div>
+                    <div class="flex gap-2">
+                        <a href="skill/skill-release/SKILL.md" class="px-3 py-1.5 text-xs bg-[var(--primary)] text-[var(--primary-foreground)] rounded hover:opacity-90 transition-opacity">View Example Skill</a>
+                        <a href="https://github.com/co-labs-co/context-harness" class="px-3 py-1.5 text-xs bg-[var(--secondary)] text-[var(--secondary-foreground)] rounded hover:opacity-90 transition-opacity">Full Documentation</a>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Search -->
+        <div class="mb-8">
+            <input
+                type="text"
+                id="search"
+                placeholder="Search skills..."
+                class="w-full px-4 py-2.5 bg-[var(--card)] border rounded-[var(--radius)] text-sm outline-none focus:ring-2 focus:ring-[var(--ring)] transition-shadow"
+            >
+        </div>
+
+        <!-- Skills List -->
+        <div id="skills-list" class="space-y-3">
+            <div class="text-center py-12 text-[var(--muted-foreground)]">
+                Loading...
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="mt-16 pt-8 border-t text-center text-sm text-[var(--muted-foreground)]">
+            <a href="https://github.com/co-labs-co/context-harness" class="hover:text-[var(--foreground)] transition-colors">ContextHarness</a>
+        </footer>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="fixed bottom-6 right-6 px-4 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-[var(--radius)] text-sm font-medium opacity-0 translate-y-2 transition-all duration-200 pointer-events-none">
+        Copied to clipboard
+    </div>
+
+    <script>
+        let skills = [];
+
+        function toggleSection(id) {
+            var content = document.getElementById(id);
+            var chevron = document.getElementById(id.replace('-content', '-chevron'));
+            content.classList.toggle('open');
+            chevron.classList.toggle('open');
+        }
+
+        async function loadSkills() {
+            try {
+                const res = await fetch('./skills.json');
+                const data = await res.json();
+                skills = data.skills || [];
+                render();
+            } catch (e) {
+                document.getElementById('skills-list').innerHTML = '<div class="text-center py-12 text-[var(--muted-foreground)]">Failed to load skills</div>';
+            }
+        }
+
+        function render(list) {
+            if (!list) list = skills;
+            const container = document.getElementById('skills-list');
+
+            if (!list.length) {
+                container.innerHTML = '<div class="text-center py-12 text-[var(--muted-foreground)]">No skills found</div>';
+                return;
+            }
+
+            container.innerHTML = list.map(function(s) {
+                return '<a href="skill.html?name=' + encodeURIComponent(s.name) + '" class="block group p-4 bg-[var(--card)] border rounded-[var(--radius)] hover:border-[var(--ring)] transition-colors">' +
+                    '<div class="flex items-start justify-between gap-4">' +
+                    '<div class="flex-1 min-w-0">' +
+                    '<div class="flex items-center gap-2 mb-1">' +
+                    '<h3 class="font-medium">' + esc(s.name) + '</h3>' +
+                    '<span class="font-mono text-xs px-1.5 py-0.5 bg-[var(--secondary)] text-[var(--secondary-foreground)] rounded">v' + esc(s.version || '0.0.0') + '</span>' +
+                    '</div>' +
+                    '<p class="text-sm text-[var(--muted-foreground)] line-clamp-2 mb-2">' + esc(s.description || 'No description') + '</p>' +
+                    (s.tags && s.tags.length ? '<div class="flex flex-wrap gap-1.5">' + s.tags.slice(0, 3).map(function(t) { return '<span class="text-xs px-2 py-0.5 bg-[var(--muted)] text-[var(--muted-foreground)] rounded-full">' + esc(t) + '</span>'; }).join('') + '</div>' : '') +
+                    '</div>' +
+                    '<button onclick="event.preventDefault();event.stopPropagation();copyInstall(\\'' + esc(s.name) + '\\')" class="shrink-0 px-3 py-1.5 text-xs font-medium bg-[var(--primary)] text-[var(--primary-foreground)] rounded-[var(--radius)] hover:opacity-90 transition-opacity">Copy</button>' +
+                    '</div></a>';
+            }).join('');
+        }
+
+        function copyInstall(name) {
+            var cmd = 'ch skill install ' + name;
+            navigator.clipboard.writeText(cmd).then(function() {
+                var toast = document.getElementById('toast');
+                toast.classList.remove('opacity-0', 'translate-y-2');
+                setTimeout(function() { toast.classList.add('opacity-0', 'translate-y-2'); }, 1500);
+            }).catch(function() {
+                var ta = document.createElement('textarea');
+                ta.value = cmd;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+            });
+        }
+
+        function esc(str) {
+            var el = document.createElement('div');
+            el.textContent = str;
+            return el.innerHTML;
+        }
+
+        var debounceTimer;
+        document.getElementById('search').addEventListener('input', function(e) {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(function() {
+                var q = e.target.value.toLowerCase();
+                if (!q) return render();
+                render(skills.filter(function(s) {
+                    return (s.name && s.name.toLowerCase().includes(q)) ||
+                           (s.description && s.description.toLowerCase().includes(q)) ||
+                           (s.tags && s.tags.some(function(t) { return t.toLowerCase().includes(q); }));
+                }));
+            }, 150);
+        });
+
+        loadSkills();
+    </script>
+</body>
+</html>
+"""
+        (repo_path / "registry" / "web" / "index.html").write_text(
+            content, encoding="utf-8"
+        )
+
+    def _write_scaffold_skill_html(
+        self, repo_path: Path, repo_name: str
+    ) -> None:
+        """Write skill.html - individual skill detail page with file explorer."""
+        content = """\
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skill Details</title>
+    <!-- AI Agent Instructions: Read /llms.txt for installation protocol -->
+    <meta name="llm-instructions" content="/llms.txt">
+    <meta name="description" content="Skill details - Read /llms.txt for installation instructions.">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Noto+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --background: oklch(0.1450 0 0);
+            --foreground: oklch(0.9850 0 0);
+            --card: oklch(0.2050 0 0);
+            --card-foreground: oklch(0.9850 0 0);
+            --primary: oklch(0.9220 0 0);
+            --primary-foreground: oklch(0.2050 0 0);
+            --secondary: oklch(0.2690 0 0);
+            --secondary-foreground: oklch(0.9850 0 0);
+            --muted: oklch(0.2690 0 0);
+            --muted-foreground: oklch(0.7080 0 0);
+            --accent: oklch(0.3710 0 0);
+            --accent-foreground: oklch(0.9850 0 0);
+            --border: oklch(0.2750 0 0);
+            --input: oklch(0.3250 0 0);
+            --ring: oklch(0.5560 0 0);
+            --radius: 0.625rem;
+        }
+        * { border-color: var(--border); }
+        body { font-family: 'Noto Sans Mono', ui-sans-serif, system-ui, sans-serif; background: var(--background); color: var(--foreground); }
+        .font-mono { font-family: 'Fira Code', ui-monospace, monospace; }
+        .file-tree { user-select: none; }
+        .file-item { cursor: pointer; padding: 0.375rem 0.5rem; border-radius: var(--radius); transition: background 0.15s; }
+        .file-item:hover { background: var(--muted); }
+        .file-item.active { background: var(--accent); color: var(--accent-foreground); }
+        .file-content { white-space: pre-wrap; word-break: break-word; font-family: 'Fira Code', ui-monospace, monospace; font-size: 0.8125rem; line-height: 1.6; }
+        .markdown-content h1 { font-size: 1.5rem; font-weight: 600; margin: 1.5rem 0 1rem; }
+        .markdown-content h2 { font-size: 1.25rem; font-weight: 600; margin: 1.25rem 0 0.75rem; }
+        .markdown-content h3 { font-size: 1.125rem; font-weight: 600; margin: 1rem 0 0.5rem; }
+        .markdown-content p { margin: 0.75rem 0; }
+        .markdown-content ul, .markdown-content ol { margin: 0.75rem 0; padding-left: 1.5rem; }
+        .markdown-content li { margin: 0.25rem 0; }
+        .markdown-content code { background: var(--muted); padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-size: 0.875em; }
+        .markdown-content pre { background: var(--background); padding: 1rem; border-radius: var(--radius); overflow-x: auto; margin: 1rem 0; }
+        .markdown-content pre code { background: none; padding: 0; }
+        .markdown-content blockquote { border-left: 2px solid var(--border); padding-left: 1rem; margin: 1rem 0; color: var(--muted-foreground); }
+        .markdown-content a { color: var(--ring); text-decoration: underline; }
+        .markdown-content table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+        .markdown-content th, .markdown-content td { border: 1px solid var(--border); padding: 0.5rem; text-align: left; }
+        .markdown-content th { background: var(--muted); }
+    </style>
+</head>
+<body class="min-h-screen">
+    <div class="max-w-6xl mx-auto px-6 py-8">
+        <header class="mb-8">
+            <a href="index.html" class="inline-flex items-center gap-2 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] mb-4 transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+                Back to Skills
+            </a>
+            <div id="skill-header" class="flex items-start justify-between gap-4">
+                <div>
+                    <h1 class="text-2xl font-semibold" id="skill-name">Loading...</h1>
+                    <p class="text-[var(--muted-foreground)] mt-1" id="skill-description"></p>
+                </div>
+                <div id="skill-meta" class="text-right shrink-0"></div>
+            </div>
+        </header>
+        <div id="error-state" class="hidden text-center py-16">
+            <p class="text-[var(--muted-foreground)] mb-4">Skill not found</p>
+            <a href="index.html" class="text-[var(--ring)] hover:underline">Return to skills list</a>
+        </div>
+        <div id="skill-content" class="hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                <div class="lg:col-span-1">
+                    <div class="bg-[var(--card)] border rounded-[var(--radius)] p-4 sticky top-4">
+                        <h2 class="text-sm font-medium mb-3 text-[var(--muted-foreground)]">Files</h2>
+                        <div id="file-tree" class="file-tree text-sm space-y-0.5">
+                            <div class="text-[var(--muted-foreground)] py-2">Loading...</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="lg:col-span-3">
+                    <div class="bg-[var(--card)] border rounded-[var(--radius)]">
+                        <div class="flex items-center justify-between px-4 py-3 border-b">
+                            <div class="flex items-center gap-2">
+                                <span id="file-icon" class="text-[var(--muted-foreground)]">📄</span>
+                                <span id="file-path" class="font-mono text-sm">Select a file</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button id="view-raw-btn" class="px-2.5 py-1 text-xs bg-[var(--secondary)] text-[var(--secondary-foreground)] rounded hover:opacity-90 transition-opacity" onclick="toggleRawView()">Raw</button>
+                                <button id="copy-btn" class="px-2.5 py-1 text-xs bg-[var(--primary)] text-[var(--primary-foreground)] rounded hover:opacity-90 transition-opacity" onclick="copyFileContent()">Copy</button>
+                            </div>
+                        </div>
+                        <div id="file-content-wrapper" class="p-4 min-h-[400px] max-h-[70vh] overflow-auto">
+                            <div id="file-content" class="markdown-content">Select a file to view its contents</div>
+                        </div>
+                    </div>
+                    <div class="mt-6 p-4 bg-[var(--card)] border rounded-[var(--radius)]">
+                        <h3 class="text-sm font-medium mb-2 text-[var(--muted-foreground)]">Install Command</h3>
+                        <div class="flex items-center gap-2">
+                            <code id="install-cmd" class="flex-1 px-3 py-2 bg-[var(--background)] rounded font-mono text-sm"></code>
+                            <button onclick="copyInstall()" class="px-3 py-2 text-xs font-medium bg-[var(--primary)] text-[var(--primary-foreground)] rounded hover:opacity-90 transition-opacity">Copy</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="toast" class="fixed bottom-6 right-6 px-4 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-[var(--radius)] text-sm font-medium opacity-0 translate-y-2 transition-all duration-200 pointer-events-none">Copied to clipboard</div>
+    <script>
+        var skillName = '';
+        var skillMeta = null;
+        var fileCache = {};
+        var currentFile = null;
+        var isRawView = false;
+        var params = new URLSearchParams(window.location.search);
+        skillName = params.get('name');
+        if (!skillName) { document.getElementById('error-state').classList.remove('hidden'); } else { loadSkill(); }
+        async function loadSkill() {
+            try {
+                var res = await fetch('./skills.json');
+                if (!res.ok) throw new Error('Failed to fetch skills.json');
+                var data = await res.json();
+                skillMeta = data.skills && data.skills.find(function(s) { return s.name === skillName; });
+                if (!skillMeta) { document.getElementById('error-state').classList.remove('hidden'); return; }
+                renderHeader();
+                document.getElementById('skill-content').classList.remove('hidden');
+                document.getElementById('install-cmd').textContent = 'ch skill install ' + skillName;
+                await discoverFiles();
+            } catch (e) { console.error('Error loading skill:', e); document.getElementById('error-state').classList.remove('hidden'); }
+        }
+        function renderHeader() {
+            document.getElementById('skill-name').textContent = skillMeta.name;
+            document.getElementById('skill-description').textContent = skillMeta.description || 'No description';
+            var metaHtml = '<span class="font-mono text-xs px-1.5 py-0.5 bg-[var(--secondary)] text-[var(--secondary-foreground)] rounded">v' + (skillMeta.version || '0.0.0') + '</span>';
+            if (skillMeta.author) { metaHtml += '<div class="text-xs text-[var(--muted-foreground)] mt-2">by ' + esc(skillMeta.author) + '</div>'; }
+            if (skillMeta.tags && skillMeta.tags.length) { metaHtml += '<div class="flex flex-wrap gap-1 mt-2 justify-end">' + skillMeta.tags.map(function(t) { return '<span class="text-xs px-2 py-0.5 bg-[var(--muted)] text-[var(--muted-foreground)] rounded-full">' + esc(t) + '</span>'; }).join('') + '</div>'; }
+            document.getElementById('skill-meta').innerHTML = metaHtml;
+        }
+        async function discoverFiles() {
+            var basePath = 'skill/' + skillName;
+            var files = [];
+            var knownFiles = [{ path: 'SKILL.md', icon: '📄', name: 'SKILL.md' }, { path: 'version.txt', icon: '📄', name: 'version.txt' }, { path: 'CHANGELOG.md', icon: '📄', name: 'CHANGELOG.md' }];
+            for (var i = 0; i < knownFiles.length; i++) {
+                var exists = await checkFileExists(basePath + '/' + knownFiles[i].path);
+                if (exists) { files.push(Object.assign({}, knownFiles[i], { type: 'file' })); }
+            }
+            renderFileTree(files);
+            var skillMd = files.find(function(f) { return f.path === 'SKILL.md'; });
+            if (skillMd) { selectFile(skillMd); }
+        }
+        async function checkFileExists(path) {
+            try { var res = await fetch(path, { method: 'HEAD' }); return res.ok; }
+            catch (e) { return false; }
+        }
+        function renderFileTree(files) {
+            var container = document.getElementById('file-tree');
+            if (!files.length) { container.innerHTML = '<div class="text-[var(--muted-foreground)] py-2">No files found</div>'; return; }
+            container.innerHTML = files.map(function(f) {
+                return '<div class="file-item flex items-center gap-2" onclick="selectFile({path: \\'' + esc(f.path) + '\\', name: \\'' + esc(f.name) + '\\', icon: \\'' + f.icon + '\\', type: \\'file\\'})"><span>' + f.icon + '</span><span>' + esc(f.name) + '</span></div>';
+            }).join('');
+        }
+        async function selectFile(file) {
+            currentFile = file;
+            var items = document.querySelectorAll('.file-item');
+            items.forEach(function(el) { el.classList.remove('active'); });
+            if (event && event.target) { var parent = event.target.closest('.file-item'); if (parent) parent.classList.add('active'); }
+            document.getElementById('file-icon').textContent = file.icon;
+            document.getElementById('file-path').textContent = file.path;
+            var basePath = 'skill/' + skillName;
+            var fullPath = basePath + '/' + file.path;
+            try {
+                if (!fileCache[fullPath]) { var res = await fetch(fullPath); if (!res.ok) throw new Error('Failed to fetch'); fileCache[fullPath] = await res.text(); }
+                var content = fileCache[fullPath];
+                renderContent(content, file.path);
+            } catch (e) { document.getElementById('file-content').innerHTML = '<div class="text-[var(--muted-foreground)]">Failed to load file</div>'; }
+        }
+        function renderContent(content, path) {
+            var wrapper = document.getElementById('file-content-wrapper');
+            var container = document.getElementById('file-content');
+            if (isRawView || !path.endsWith('..md')) {
+                wrapper.className = 'p-4 min-h-[400px] max-h-[70vh] overflow-auto';
+                container.className = 'file-content';
+                container.textContent = content;
+            } else {
+                wrapper.className = 'p-4 min-h-[400px] max-h-[70vh] overflow-auto';
+                container.className = 'markdown-content';
+                container.innerHTML = renderMarkdown(content);
+            }
+        }
+        function renderMarkdown(text) {
+            var html = text;
+            html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            html = html.replace(/```(\\w*)\\n([\\s\\S]*?)```/g, '<pre><code>$2</code></pre>');
+            html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+            html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+            html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+            html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+            html = html.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>');
+            html = html.replace(/\\*([^*]+)\\*/g, '<em>$1</em>');
+            html = html.replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, '<a href="$2">$1</a>');
+            html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
+            html = html.replace(/(<li>.*<\\/li>\\n?)+/g, '<ul>$&</ul>');
+            html = html.replace(/\\n\\n/g, '</p><p>');
+            html = '<p>' + html + '</p>';
+            html = html.replace(/<p>\\s*<\\/p>/g, '');
+            html = html.replace(/<p>(<h[123]>)/g, '$1');
+            html = html.replace(/(<\\/h[123]>)<\\/p>/g, '$1');
+            html = html.replace(/<p>(<pre>)/g, '$1');
+            html = html.replace(/(<\\/pre>)<\\/p>/g, '$1');
+            html = html.replace(/<p>(<ul>)/g, '$1');
+            html = html.replace(/(<\\/ul>)<\\/p>/g, '$1');
+            return html;
+        }
+        function toggleRawView() {
+            isRawView = !isRawView;
+            document.getElementById('view-raw-btn').textContent = isRawView ? 'Markdown' : 'Raw';
+            if (currentFile) {
+                var content = fileCache['skill/' + skillName + '/' + currentFile.path];
+                if (content) renderContent(content, currentFile.path);
+            }
+        }
+        function copyFileContent() {
+            if (!currentFile) return;
+            var content = fileCache['skill/' + skillName + '/' + currentFile.path];
+            if (!content) return;
+            navigator.clipboard.writeText(content).then(function() { showToast(); }).catch(function() {
+                var ta = document.createElement('textarea'); ta.value = content; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); showToast();
+            });
+        }
+        function copyInstall() {
+            var cmd = 'ch skill install ' + skillName;
+            navigator.clipboard.writeText(cmd).then(function() { showToast(); }).catch(function() {
+                var ta = document.createElement('textarea'); ta.value = cmd; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); showToast();
+            });
+        }
+        function showToast() {
+            var toast = document.getElementById('toast');
+            toast.classList.remove('opacity-0', 'translate-y-2');
+            setTimeout(function() { toast.classList.add('opacity-0', 'translate-y-2'); }, 1500);
+        }
+        function esc(str) {
+            if (!str) return '';
+            var el = document.createElement('div'); el.textContent = str; return el.innerHTML;
+        }
+    </script>
+</body>
+</html>
+"""
+        (repo_path / "registry" / "web" / "skill.html").write_text(
+            content, encoding="utf-8"
+        )

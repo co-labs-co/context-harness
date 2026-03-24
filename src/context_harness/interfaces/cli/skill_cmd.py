@@ -20,6 +20,7 @@ from context_harness.skills import (
     init_repo,
     SkillResult,
 )
+from context_harness.primitives.tool_detector import ToolTarget
 from context_harness.completion import (
     complete_skill_names,
     interactive_skill_picker,
@@ -138,14 +139,38 @@ def skill_info_cmd(skill_name: str) -> None:
     is_flag=True,
     help="Overwrite existing skill if already installed.",
 )
-def skill_install_cmd(skill_name: Optional[str], target: str, force: bool) -> None:
+@click.option(
+    "--registry",
+    "-r",
+    default=None,
+    help="Registry URL to install from (e.g., https://skills.example.com).",
+)
+@click.option(
+    "--tool-target",
+    type=click.Choice(["opencode", "claude-code", "both"], case_sensitive=False),
+    default="both",
+    help="Which harness to install for (default: both).",
+)
+def skill_install_cmd(
+    skill_name: Optional[str],
+    target: str,
+    force: bool,
+    registry: Optional[str],
+    tool_target: str,
+) -> None:
     """Install a skill from the central repository.
 
-    Downloads and installs the specified skill to .opencode/skill/ in the
-    target directory.
+    Downloads and installs the specified skill to the skill directory
+    in the target project. By default, installs to both .opencode/skill/
+    and .claude/skills/ to support both OpenCode and Claude Code harnesses.
 
     If no skill name is provided, an interactive picker will be shown
     with fuzzy search to help you find and select a skill.
+
+    Use --registry to install from a specific HTTP registry without
+    changing your global configuration.
+
+    Use --tool-target to install for a specific harness only.
 
     Examples:
 
@@ -156,36 +181,60 @@ def skill_install_cmd(skill_name: Optional[str], target: str, force: bool) -> No
         context-harness skill install django-auth --target ./my-project
 
         context-harness skill install react-forms --force
+
+        context-harness skill install my-skill --registry https://skills.example.com
+
+        context-harness skill install react-forms --tool-target opencode
     """
+    import os
+
     print_header("Skill Installer")
 
-    # If no skill name provided, show interactive picker
-    if skill_name is None:
-        skill_name = interactive_skill_picker(console)
+    # If --registry is provided, temporarily set the env var
+    original_registry_url = os.environ.get("CONTEXT_HARNESS_REGISTRY_URL")
+    if registry:
+        os.environ["CONTEXT_HARNESS_REGISTRY_URL"] = registry
+
+    try:
+        # If no skill name provided, show interactive picker
         if skill_name is None:
-            # User cancelled or no skills available
-            raise SystemExit(0)
-        console.print()
+            skill_name = interactive_skill_picker(console)
+            if skill_name is None:
+                # User cancelled or no skills available
+                raise SystemExit(0)
+            console.print()
 
-    result = install_skill(skill_name, target=target, force=force)
+        result = install_skill(
+            skill_name,
+            target=target,
+            force=force,
+            tool_target=tool_target,  # type: ignore[arg-type]
+        )
 
-    if result == SkillResult.SUCCESS:
-        console.print()
-        print_bold("Skill installed!")
-        console.print()
-        print_info("The skill is now available in your project.")
-        print_info("It will be automatically loaded when relevant.")
-    elif result == SkillResult.ALREADY_EXISTS:
-        raise SystemExit(0)  # Not an error, just informational
-    elif result == SkillResult.NOT_FOUND:
-        console.print()
-        print_error(f"Skill '{skill_name}' not found.")
-        print_info("Use 'context-harness skill list' to see available skills.")
-        raise SystemExit(1)
-    elif result in (SkillResult.AUTH_ERROR, SkillResult.ERROR):
-        console.print()
-        print_error("Failed to install skill.")
-        raise SystemExit(1)
+        if result == SkillResult.SUCCESS:
+            console.print()
+            print_bold("Skill installed!")
+            console.print()
+            print_info("The skill is now available in your project.")
+            print_info("It will be automatically loaded when relevant.")
+        elif result == SkillResult.ALREADY_EXISTS:
+            raise SystemExit(0)  # Not an error, just informational
+        elif result == SkillResult.NOT_FOUND:
+            console.print()
+            print_error(f"Skill '{skill_name}' not found.")
+            print_info("Use 'context-harness skill list' to see available skills.")
+            raise SystemExit(1)
+        elif result in (SkillResult.AUTH_ERROR, SkillResult.ERROR):
+            console.print()
+            print_error("Failed to install skill.")
+            raise SystemExit(1)
+    finally:
+        # Restore original env var
+        if registry:
+            if original_registry_url is None:
+                os.environ.pop("CONTEXT_HARNESS_REGISTRY_URL", None)
+            else:
+                os.environ["CONTEXT_HARNESS_REGISTRY_URL"] = original_registry_url
 
 
 @skill_group.command("extract")
@@ -588,3 +637,275 @@ def _configure_skills_repo_project(repo_name: str) -> None:
         print_success(f"Project config updated: skills-repo = {repo_name}")
     except Exception as e:
         print_warning(f"Could not update project config: {e}")
+
+
+@skill_group.command("use-registry")
+@click.argument("url")
+@click.option(
+    "--project",
+    "-p",
+    is_flag=True,
+    help="Set for this project only (default: user-wide).",
+)
+def skill_use_registry_cmd(url: str, project: bool) -> None:
+    """Configure the skills registry URL.
+
+    Sets the registry URL for fetching skills. This is useful for
+    organizations hosting their own HTTP-based skill registries.
+
+    By default, sets the registry user-wide (~/.context-harness/config.json).
+    Use --project to set it for the current project only.
+
+    Examples:
+
+        context-harness skill use-registry https://skills.example.com
+
+        context-harness skill use-registry https://skills.internal.com --project
+
+        context-harness skill use-registry https://github.com/myorg/skills
+    """
+    print_header("Configure Skills Registry")
+
+    # Validate URL format
+    if not url.startswith(("http://", "https://", "github.com")):
+        # Treat as GitHub repo if no protocol
+        if "/" in url and not url.startswith("/"):
+            url = f"github.com/{url}" if not url.startswith("github.com") else url
+        else:
+            console.print()
+            print_error(f"Invalid registry URL: {url}")
+            print_info("Expected format: https://registry.example.com or owner/repo")
+            raise SystemExit(1)
+
+    # Determine if it's HTTP or GitHub
+    # GitHub URLs (even with https://) should be treated as GitHub repos
+    is_github = "github.com" in url
+    is_http = url.startswith(("http://", "https://")) and not is_github
+
+    if project:
+        _configure_registry_project(url, is_http)
+    else:
+        _configure_registry_user(url, is_http)
+
+
+def _configure_registry_user(url: str, is_http: bool) -> None:
+    """Configure registry URL in user config."""
+    try:
+        from context_harness.primitives import Failure
+        from context_harness.primitives.config import (
+            SkillsRegistryConfig,
+            RegistryAuthConfig,
+            UserConfig,
+        )
+        from context_harness.services.user_config_service import UserConfigService
+
+        service = UserConfigService()
+
+        # Build registry config
+        if is_http:
+            registry_config = SkillsRegistryConfig(
+                type="http",
+                url=url,
+                auth=None,
+                default="",
+            )
+        else:
+            # GitHub repo - extract owner/repo from URL
+            # Handle: https://github.com/owner/repo, github.com/owner/repo, owner/repo
+            repo = url
+            for prefix in ["https://github.com/", "http://github.com/", "github.com/"]:
+                if repo.startswith(prefix):
+                    repo = repo[len(prefix):]
+                    break
+            registry_config = SkillsRegistryConfig(default=repo)
+
+        new_config = UserConfig(skills_registry=registry_config)
+
+        save_result = service.save(new_config)
+        if isinstance(save_result, Failure):
+            print_error(f"Could not update user config: {save_result.error}")
+            raise SystemExit(1)
+
+        console.print()
+        print_success("Registry configured!")
+        console.print()
+        if is_http:
+            print_info(f"URL: {url}")
+        else:
+            # Use same extraction logic for display
+            repo = url
+            for prefix in ["https://github.com/", "http://github.com/", "github.com/"]:
+                if repo.startswith(prefix):
+                    repo = repo[len(prefix):]
+                    break
+            print_info(f"GitHub repo: {repo}")
+        console.print()
+        print_info("Run 'context-harness skill list' to see available skills.")
+
+    except Exception as e:
+        print_error(f"Failed to configure registry: {e}")
+        raise SystemExit(1)
+
+
+def _configure_registry_project(url: str, is_http: bool) -> None:
+    """Configure registry URL in project config."""
+    try:
+        from pathlib import Path
+
+        from context_harness.primitives import Failure
+        from context_harness.primitives.config import (
+            OpenCodeConfig,
+            SkillsRegistryConfig,
+        )
+        from context_harness.services.config_service import ConfigService
+
+        service = ConfigService()
+
+        # Load or create config
+        result = service.load_or_create()
+        if isinstance(result, Failure):
+            print_error(f"Could not load project config: {result.error}")
+            raise SystemExit(1)
+
+        config = result.value
+
+        # Build registry config
+        if is_http:
+            registry_config = SkillsRegistryConfig(
+                type="http",
+                url=url,
+                auth=None,
+                default="",
+            )
+        else:
+            repo = url.replace("github.com/", "").replace("https://github.com/", "")
+            registry_config = SkillsRegistryConfig(default=repo)
+
+        new_config = OpenCodeConfig(
+            schema_version=config.schema_version,
+            mcp=config.mcp,
+            agents=config.agents,
+            commands=config.commands,
+            skills=config.skills,
+            skills_registry=registry_config,
+            project_context=config.project_context,
+            raw_data=config.raw_data,
+        )
+
+        save_result = service.save(new_config)
+        if isinstance(save_result, Failure):
+            print_error(f"Could not update project config: {save_result.error}")
+            raise SystemExit(1)
+
+        console.print()
+        print_success("Project registry configured!")
+        console.print()
+        if is_http:
+            print_info(f"URL: {url}")
+        else:
+            repo = url.replace("github.com/", "").replace("https://github.com/", "")
+            print_info(f"GitHub repo: {repo}")
+        console.print()
+        print_info("Run 'context-harness skill list' to see available skills.")
+
+    except Exception as e:
+        print_error(f"Failed to configure registry: {e}")
+        raise SystemExit(1)
+
+
+@skill_group.command("upgrade-repo")
+@click.argument("path", default=".", type=click.Path(exists=True))
+@click.option(
+    "--check",
+    is_flag=True,
+    help="Only check for available updates without applying them.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Show what would change without applying.",
+)
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Overwrite all scaffold files without prompting.",
+)
+def skill_upgrade_repo_cmd(
+    path: str,
+    check: bool,
+    dry_run: bool,
+    force: bool,
+) -> None:
+    """Upgrade a skills registry to the latest scaffold version.
+
+    Detects the current registry version and applies necessary scaffold
+    updates while preserving user skills and customizations.
+
+    Legacy registries (created before version tracking) are automatically
+    detected and upgraded.
+
+    PATH is the path to the registry repository (default: current directory).
+
+    Examples:
+
+        context-harness skill upgrade-repo
+
+        context-harness skill upgrade-repo ./my-skills --check
+
+        context-harness skill upgrade-repo ./my-skills --dry-run
+
+        context-harness skill upgrade-repo ./my-skills --force
+    """
+    from pathlib import Path
+
+    from context_harness.primitives import Success, Failure
+    from context_harness.services.skill_service import SkillService
+
+    print_header("Registry Upgrade")
+
+    repo_path = Path(path).resolve()
+    print_info(f"Registry path: {repo_path}")
+
+    service = SkillService()
+    result = service.upgrade_registry_repo(
+        repo_path,
+        check_only=check,
+        dry_run=dry_run,
+        force=force,
+    )
+
+    if isinstance(result, Success):
+        data = result.value
+        current = data.get("current_version", "unknown")
+        latest = data.get("latest_version", "unknown")
+
+        console.print()
+
+        if data.get("upgraded"):
+            print_success(f"Registry upgraded: {current} → {latest}")
+            updated_files = data.get("files_updated", [])
+            if updated_files:
+                console.print()
+                console.print("[dim]Updated files:[/dim]")
+                for f in updated_files:
+                    console.print(f"[dim]  - {f}[/dim]")
+            console.print()
+            print_info("Commit and push these changes to your repository.")
+        elif data.get("dry_run"):
+            print_info(f"Dry run: would upgrade {current} → {latest}")
+            files_to_update = data.get("files_to_update", [])
+            if files_to_update:
+                console.print()
+                console.print("[dim]Files to update:[/dim]")
+                for f in files_to_update:
+                    console.print(f"[dim]  - {f}[/dim]")
+        elif data.get("upgrade_available"):
+            print_info(f"Upgrade available: {current} → {latest}")
+            console.print("[dim]Run without --check to apply updates.[/dim]")
+        else:
+            print_success(f"Registry is up to date (version {current})")
+
+    elif isinstance(result, Failure):
+        print_error(f"Failed to upgrade registry: {result.error}")
+        raise SystemExit(1)
+

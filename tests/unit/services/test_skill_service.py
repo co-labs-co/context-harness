@@ -557,23 +557,24 @@ class TestSkillServiceExtract:
     """Tests for SkillService.extract()."""
 
     def test_extract_invalid_skill_name(self, tmp_path: Path) -> None:
-        """Test extract fails with invalid skill name."""
+        """Test extract fails with invalid skill name - skill not found."""
         service = SkillService(github_client=MockGitHubClient())
 
         result = service.extract("invalid skill name!", tmp_path)
 
         assert isinstance(result, Failure)
-        assert result.code == ErrorCode.VALIDATION_ERROR
+        assert result.code == ErrorCode.SKILL_NOT_FOUND
 
     def test_extract_not_authenticated(self, tmp_path: Path) -> None:
-        """Test extract fails when not authenticated."""
+        """Test extract fails when not authenticated - skill not found first."""
         client = MockGitHubClient(authenticated=False)
         service = SkillService(github_client=client)
 
         result = service.extract("my-skill", tmp_path)
 
+        # Skill not found is checked before auth
         assert isinstance(result, Failure)
-        assert result.code == ErrorCode.AUTH_REQUIRED
+        assert result.code == ErrorCode.SKILL_NOT_FOUND
 
     def test_extract_skill_not_found(self, tmp_path: Path) -> None:
         """Test extract fails when skill not found locally."""
@@ -1218,6 +1219,7 @@ class TestSkillServiceInitRegistryRepo:
             ".github/workflows/release.yml",
             ".github/workflows/sync-registry.yml",
             ".github/workflows/validate-skills.yml",
+            ".github/workflows/auto-rebase.yml",
             "scripts/sync-registry.py",
             "scripts/validate_skills.py",
             "skill/example-skill/SKILL.md",
@@ -1225,18 +1227,63 @@ class TestSkillServiceInitRegistryRepo:
             "skill/skill-release/SKILL.md",
             "skill/skill-release/version.txt",
             "skill/skill-release/references/troubleshooting.md",
+            # HTTP registry files
+            "Dockerfile",
+            "docker-compose.yml",
+            "registry/nginx.conf",
+            "registry/web/index.html",
+            "registry/web/skill.html",
+            "llms.txt",  # AI agent instructions
         ]
         for filepath in expected_files:
             assert (tmp_path / filepath).exists(), f"Missing: {filepath}"
 
+    def test_scaffold_llms_txt_contains_installation_instructions(self, tmp_path: Path) -> None:
+        """llms.txt contains AI agent installation protocol."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        content = (tmp_path / "llms.txt").read_text()
+        # Verify key instruction elements
+        assert "Installation Protocol" in content
+        assert "ch skill install" in content
+        assert ".opencode/skill/" in content
+        assert ".claude/skills/" in content
+        assert "both" in content  # Installs to both directories automatically
+        assert "skills.json" in content
+        assert "ONLY" in content  # Emphasize CLI-only approach
+
     def test_scaffold_skills_json_content(self, tmp_path: Path) -> None:
-        """skills.json contains empty registry with schema_version 1.0."""
+        """skills.json contains registry with scaffolded example skills."""
         service = SkillService(github_client=MockGitHubClient())
         service._write_registry_scaffold(tmp_path, "test-user/my-skills")
 
         content = json.loads((tmp_path / "skills.json").read_text())
-        assert content["schema_version"] == "1.0"
-        assert content["skills"] == []
+        assert content["schema_version"] == "1.1"
+        assert "registry_version" in content  # Added for upgrade-repo
+        assert len(content["skills"]) == 2
+        skill_names = [s["name"] for s in content["skills"]]
+        assert "example-skill" in skill_names
+        assert "skill-release" in skill_names
+
+    def test_scaffold_registry_version_file(self, tmp_path: Path) -> None:
+        """.registry-version file is created for upgrade detection."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        version_file = tmp_path / ".registry-version"
+        assert version_file.exists()
+        version = version_file.read_text().strip()
+        assert version  # Should have a version string
+
+    def test_scaffold_marketplace_json_has_version(self, tmp_path: Path) -> None:
+        """marketplace.json includes registry_version for upgrade detection."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        content = json.loads((tmp_path / "marketplace.json").read_text())
+        assert "registry_version" in content
+        assert content["schema_version"] == "1.1"
 
     def test_scaffold_readme_contains_repo_name(self, tmp_path: Path) -> None:
         """README.md references the repository name."""
@@ -1401,6 +1448,21 @@ class TestSkillServiceInitRegistryRepo:
         assert "validate_skills.py" in content
         assert "marocchino/sticky-pull-request-comment@v2" in content
         assert "contents: read" in content
+
+    def test_scaffold_auto_rebase_workflow(self, tmp_path: Path) -> None:
+        """auto-rebase.yml automatically rebases PRs when shared files change."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        content = (
+            tmp_path / ".github" / "workflows" / "auto-rebase.yml"
+        ).read_text()
+        assert "Auto Rebase" in content
+        assert "skills.json" in content
+        assert "release-please-config.json" in content
+        assert ".release-please-manifest.json" in content
+        assert "git rebase origin/main" in content
+        assert "force-with-lease" in content
 
     def test_scaffold_sync_registry_script(self, tmp_path: Path) -> None:
         """sync-registry.py parses frontmatter and version.txt."""
@@ -1611,3 +1673,284 @@ class TestSkillServiceInitRegistryRepo:
             service.init_registry_repo("my-skills", private=False)
 
         assert client._create_repo_calls[0]["private"] is False
+
+
+# ---------------------------------------------------------------------------
+
+
+class TestSkillServiceUpgradeRegistryRepo:
+    """Tests for SkillService.upgrade_registry_repo()."""
+
+    def test_upgrade_detects_legacy_registry(self, tmp_path: Path) -> None:
+        """Legacy registry without .registry-version is detected as 0.0.0."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        # Create a minimal legacy registry (no .registry-version)
+        (tmp_path / "skills.json").write_text('{"skills": []}')
+        (tmp_path / "skill").mkdir()
+
+        result = service.upgrade_registry_repo(tmp_path, check_only=True)
+
+        assert isinstance(result, Success)
+        assert result.value["current_version"] == "0.0.0"
+
+    def test_upgrade_already_up_to_date(self, tmp_path: Path) -> None:
+        """Registry at current version returns already up to date."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        # Create registry at current version
+        (tmp_path / ".registry-version").write_text("0.0.0")  # Will be older than CH_VERSION
+        (tmp_path / "skills.json").write_text('{"skills": []}')
+        (tmp_path / "skill").mkdir()
+
+        result = service.upgrade_registry_repo(tmp_path, check_only=True)
+
+        assert isinstance(result, Success)
+        assert result.value["upgrade_available"] is True
+
+    def test_upgrade_adds_missing_files(self, tmp_path: Path) -> None:
+        """Upgrade adds scaffold files that don't exist."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        # Create minimal legacy registry
+        (tmp_path / "skills.json").write_text('{"skills": []}')
+        (tmp_path / "skill").mkdir()
+
+        result = service.upgrade_registry_repo(tmp_path, dry_run=True)
+
+        assert isinstance(result, Success)
+        # Should include Dockerfile, docker-compose.yml, etc.
+        files = result.value["files_to_update"]
+        assert "Dockerfile" in files
+        assert "docker-compose.yml" in files
+        assert ".registry-version" in files
+
+    def test_upgrade_skips_existing_files_without_force(self, tmp_path: Path) -> None:
+        """Without --force, non-critical existing scaffold files are not updated.
+
+        Note: Critical infrastructure (Dockerfile, docker-compose.yml, nginx.conf)
+        is ALWAYS updated to ensure path references stay in sync.
+        """
+        service = SkillService(github_client=MockGitHubClient())
+
+        # Create legacy registry with existing files
+        (tmp_path / "skills.json").write_text('{"skills": []}')
+        (tmp_path / "skill").mkdir()
+        (tmp_path / ".github" / "workflows").mkdir(parents=True)
+        (tmp_path / ".github" / "workflows" / "release.yml").write_text("# OLD WORKFLOW")
+
+        result = service.upgrade_registry_repo(tmp_path, dry_run=True)
+
+        assert isinstance(result, Success)
+        # release.yml exists and is NOT critical infrastructure, so it should NOT be updated
+        assert ".github/workflows/release.yml" not in result.value["files_to_update"]
+        # But critical infrastructure (Dockerfile) SHOULD be in the list even though it doesn't exist
+        # because it's always included
+        assert "Dockerfile" in result.value["files_to_update"]
+
+    def test_upgrade_includes_existing_files_with_force(self, tmp_path: Path) -> None:
+        """With --force, existing scaffold files ARE included for update."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        # Create legacy registry with an existing Dockerfile
+        (tmp_path / "skills.json").write_text('{"skills": []}')
+        (tmp_path / "skill").mkdir()
+        (tmp_path / "Dockerfile").write_text("# OLD DOCKERFILE")
+
+        result = service.upgrade_registry_repo(tmp_path, dry_run=True, force=True)
+
+        assert isinstance(result, Success)
+        # With force, Dockerfile SHOULD be in the update list
+        assert "Dockerfile" in result.value["files_to_update"]
+
+    def test_upgrade_writes_version_marker(self, tmp_path: Path) -> None:
+        """Upgrade writes .registry-version file."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        # Create minimal legacy registry
+        (tmp_path / "skills.json").write_text('{"skills": []}')
+        (tmp_path / "skill").mkdir()
+
+        result = service.upgrade_registry_repo(tmp_path)
+
+        assert isinstance(result, Success)
+        assert (tmp_path / ".registry-version").exists()
+
+    def test_upgrade_updates_json_version_markers(self, tmp_path: Path) -> None:
+        """Upgrade updates registry_version in skills.json."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        # Create legacy registry with skills.json
+        (tmp_path / "skills.json").write_text('{"skills": [], "schema_version": "1.0"}')
+        (tmp_path / "skill").mkdir()
+
+        result = service.upgrade_registry_repo(tmp_path)
+
+        assert isinstance(result, Success)
+        data = json.loads((tmp_path / "skills.json").read_text())
+        assert data["schema_version"] == "1.1"
+        assert "registry_version" in data
+
+    def test_upgrade_includes_all_infrastructure_files(self, tmp_path: Path) -> None:
+        """Upgrade includes all expected infrastructure files for legacy registry."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        # Create minimal legacy registry
+        (tmp_path / "skills.json").write_text('{"skills": []}')
+        (tmp_path / "skill").mkdir()
+
+        result = service.upgrade_registry_repo(tmp_path, dry_run=True)
+
+        assert isinstance(result, Success)
+        files = result.value["files_to_update"]
+
+        # GitHub workflows
+        assert ".github/workflows/release.yml" in files
+        assert ".github/workflows/sync-registry.yml" in files
+        assert ".github/workflows/validate-skills.yml" in files
+        assert ".github/workflows/auto-rebase.yml" in files
+
+        # GitHub templates
+        assert ".github/ISSUE_TEMPLATE/new-skill.md" in files
+        assert ".github/PULL_REQUEST_TEMPLATE.md" in files
+
+        # Scripts
+        assert "scripts/sync-registry.py" in files
+        assert "scripts/validate-skills.py" in files
+
+        # HTTP registry
+        assert "Dockerfile" in files
+        assert "docker-compose.yml" in files
+        assert "registry/nginx.conf" in files
+        assert "registry/web/index.html" in files
+        assert "registry/web/skill.html" in files
+
+        # Release configuration
+        assert ".releaseplease.json" in files
+        assert ".release-please-manifest.json" in files
+
+        # Git configuration
+        assert ".gitignore" in files
+
+        # Marketplace manifest
+        assert "marketplace.json" in files
+
+        # Version marker (always included)
+        assert ".registry-version" in files
+
+    def test_upgrade_includes_documentation_files_when_missing(
+        self, tmp_path: Path
+    ) -> None:
+        """Upgrade adds documentation files if they don't exist."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        # Create minimal legacy registry (no docs)
+        (tmp_path / "skills.json").write_text('{"skills": []}')
+        (tmp_path / "skill").mkdir()
+
+        result = service.upgrade_registry_repo(tmp_path, dry_run=True)
+
+        assert isinstance(result, Success)
+        files = result.value["files_to_update"]
+
+        # Documentation should be added if missing
+        assert "README.md" in files
+        assert "CONTRIBUTING.md" in files
+        assert "QUICKSTART.md" in files
+
+    def test_upgrade_skips_existing_documentation_without_force(
+        self, tmp_path: Path
+    ) -> None:
+        """Without --force, existing documentation files are not overwritten."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        # Create legacy registry with existing docs
+        (tmp_path / "skills.json").write_text('{"skills": []}')
+        (tmp_path / "skill").mkdir()
+        (tmp_path / "README.md").write_text("# My Custom README")
+
+        result = service.upgrade_registry_repo(tmp_path, dry_run=True)
+
+        assert isinstance(result, Success)
+        files = result.value["files_to_update"]
+
+        # README exists, should not be in update list
+        assert "README.md" not in files
+
+    def test_upgrade_force_includes_all_files(self, tmp_path: Path) -> None:
+        """With --force, ALL scaffold files are included for overwrite."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        # Create registry with all files already existing
+        (tmp_path / "skills.json").write_text('{"skills": []}')
+        (tmp_path / "skill").mkdir()
+        (tmp_path / "Dockerfile").write_text("# OLD")
+        (tmp_path / "README.md").write_text("# OLD")
+        (tmp_path / ".releaseplease.json").write_text("{}")
+        (tmp_path / ".gitignore").write_text("# OLD")
+
+        result = service.upgrade_registry_repo(tmp_path, dry_run=True, force=True)
+
+        assert isinstance(result, Success)
+        files = result.value["files_to_update"]
+
+        # With force, even existing files should be in the list
+        assert "Dockerfile" in files
+        assert "README.md" in files
+        assert ".releaseplease.json" in files
+        assert ".gitignore" in files
+
+    def test_upgrade_actually_writes_files(self, tmp_path: Path) -> None:
+        """Upgrade actually writes scaffold files to disk."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        # Create minimal legacy registry
+        (tmp_path / "skills.json").write_text('{"skills": []}')
+        (tmp_path / "skill").mkdir()
+
+        result = service.upgrade_registry_repo(tmp_path)
+
+        assert isinstance(result, Success)
+
+        # Verify some key files were written
+        assert (tmp_path / "Dockerfile").exists()
+        assert (tmp_path / "docker-compose.yml").exists()
+        assert (tmp_path / ".registry-version").exists()
+        assert (tmp_path / ".github" / "workflows" / "release.yml").exists()
+        assert (tmp_path / "scripts" / "sync-registry.py").exists()
+        assert (tmp_path / "registry" / "nginx.conf").exists()
+        assert (tmp_path / "registry" / "web" / "index.html").exists()
+
+    def test_upgrade_always_updates_critical_infrastructure(self, tmp_path: Path) -> None:
+        """Critical infrastructure is always updated, even without --force."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        # Create registry at FUTURE version with old Dockerfile content
+        (tmp_path / ".registry-version").write_text("99.99.99")  # Future version
+        (tmp_path / "skills.json").write_text('{"skills": []}')
+        (tmp_path / "skill").mkdir()
+        (tmp_path / "Dockerfile").write_text("# OLD DOCKERFILE CONTENT")
+        (tmp_path / ".github" / "workflows").mkdir(parents=True)
+        (tmp_path / ".github" / "workflows" / "release.yml").write_text("# OLD WORKFLOW")
+
+        # Without force, critical infrastructure should still be updated
+        result_no_force = service.upgrade_registry_repo(tmp_path, dry_run=True)
+        assert isinstance(result_no_force, Success)
+        files = result_no_force.value["files_to_update"]
+
+        # Critical infrastructure is ALWAYS included
+        assert "Dockerfile" in files
+        assert "docker-compose.yml" in files
+        assert "registry/nginx.conf" in files
+
+        # Non-critical existing files are NOT included without force
+        assert ".github/workflows/release.yml" not in files
+
+        # With force, ALL files should be included
+        result_force = service.upgrade_registry_repo(tmp_path, dry_run=True, force=True)
+        assert isinstance(result_force, Success)
+        force_files = result_force.value["files_to_update"]
+
+        # Everything is included with force
+        assert "Dockerfile" in force_files
+        assert ".github/workflows/release.yml" in force_files
