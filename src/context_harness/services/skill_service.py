@@ -1061,7 +1061,15 @@ class SkillService:
         NOTE: When adding new scaffold files to init-repo, add them here too!
         See SCAFFOLD_UPGRADE.md for the complete list and maintenance process.
         """
-        # Infrastructure files - safe to update (rarely user-modified)
+        # Critical infrastructure - ALWAYS updated (contains path references, must stay in sync)
+        # These files reference other files by path and must be updated when scaffold structure changes
+        critical_infrastructure = [
+            "Dockerfile",  # Contains COPY paths that must match actual file locations
+            "docker-compose.yml",  # Contains volume mounts and service config
+            "registry/nginx.conf",  # Nginx config for serving files
+        ]
+
+        # Infrastructure files - added if missing, or with --force
         infrastructure_files = [
             # GitHub workflows
             ".github/workflows/release.yml",
@@ -1074,10 +1082,7 @@ class SkillService:
             # Scripts
             "scripts/sync-registry.py",
             "scripts/validate-skills.py",
-            # HTTP registry (Docker/nginx)
-            "Dockerfile",
-            "docker-compose.yml",
-            "registry/nginx.conf",
+            # HTTP registry web frontend
             "registry/web/index.html",
             "registry/web/skill.html",
             # Release configuration
@@ -1085,7 +1090,7 @@ class SkillService:
             ".release-please-manifest.json",
             # Git configuration
             ".gitignore",
-            # Marketplace manifest (only created if missing)
+            # Marketplace manifest
             "marketplace.json",
         ]
 
@@ -1099,11 +1104,16 @@ class SkillService:
 
         files_to_update = []
 
+        # ALWAYS include critical infrastructure (regardless of force)
+        # These files contain path references that must stay in sync with scaffold structure
+        files_to_update.extend(critical_infrastructure)
+
         if force:
             # Force mode: include all scaffold files for overwrite
-            files_to_update = list(infrastructure_files) + list(documentation_files)
+            files_to_update.extend(infrastructure_files)
+            files_to_update.extend(documentation_files)
         else:
-            # Normal mode: only include files that don't exist (new features)
+            # Normal mode: only include infrastructure files that don't exist
             for file_path in infrastructure_files:
                 full_path = repo_path / file_path
                 if not full_path.exists():

@@ -57,7 +57,17 @@ def _write_single_scaffold_file(self, repo_path: Path, file_path: str, repo_name
 
 ## Current Scaffold Files
 
-### Infrastructure Files (safe to overwrite)
+### Critical Infrastructure Files (ALWAYS updated)
+These files contain path references that must stay in sync with the scaffold structure.
+They are **always updated** during upgrade, even without `--force`.
+
+| File | Writer Method | Notes |
+|------|---------------|-------|
+| `Dockerfile` | `_write_scaffold_dockerfile` | Contains COPY paths that must match file locations |
+| `docker-compose.yml` | `_write_scaffold_docker_compose` | Volume mounts and service config |
+| `registry/nginx.conf` | `_write_scaffold_nginx_conf` | Nginx config for serving files |
+
+### Infrastructure Files (added if missing, or with --force)
 | File | Writer Method | Notes |
 |------|---------------|-------|
 | `.github/workflows/release.yml` | `_write_scaffold_release_workflow` | Release automation |
@@ -66,16 +76,14 @@ def _write_single_scaffold_file(self, repo_path: Path, file_path: str, repo_name
 | `.github/workflows/auto-rebase.yml` | `_write_scaffold_auto_rebase_workflow` | Auto PR rebase |
 | `.github/ISSUE_TEMPLATE/new-skill.md` | `_write_scaffold_issue_template` | Skill request template |
 | `.github/PULL_REQUEST_TEMPLATE.md` | `_write_scaffold_pr_template` | PR template |
-| `scripts/sync_registry.py` | `_write_scaffold_sync_registry_script` | Registry sync script |
-| `scripts/validate_skills.py` | `_write_scaffold_validate_skills_script` | Validation script |
-| `Dockerfile` | `_write_scaffold_dockerfile` | Container build |
-| `docker-compose.yml` | `_write_scaffold_docker_compose` | Local deployment |
-| `registry/nginx.conf` | `_write_scaffold_nginx_conf` | Nginx config with CORS |
+| `scripts/sync-registry.py` | `_write_scaffold_sync_registry_script` | Registry sync script |
+| `scripts/validate-skills.py` | `_write_scaffold_validate_skills_script` | Validation script |
 | `registry/web/index.html` | `_write_scaffold_index_html` | Skill listing page |
 | `registry/web/skill.html` | `_write_scaffold_skill_html` | Skill detail page |
 | `.releaseplease.json` | `_write_scaffold_release_please_config` | Release config |
 | `.release-please-manifest.json` | `_write_scaffold_release_please_manifest` | Version manifest |
 | `.gitignore` | `_write_scaffold_gitignore` | Git ignore rules |
+| `marketplace.json` | `_write_scaffold_marketplace_json` | Plugin discovery manifest |
 
 ### Documentation Files (only if missing or with --force)
 | File | Writer Method | Notes |
@@ -89,18 +97,18 @@ def _write_single_scaffold_file(self, repo_path: Path, file_path: str, repo_name
 |------|---------------|-------|
 | `.registry-version` | `_write_scaffold_registry_version` | Always updated |
 | `skills.json` | `_write_scaffold_skills_json` | Version markers only |
-| `marketplace.json` | `_write_scaffold_marketplace_json` | Version markers only |
 | `skill/*` | Various | User-owned, never touched |
 
 ## Upgrade Behavior
 
 ### Normal Mode (no flags)
-- Only adds **missing** scaffold files
-- Preserves all existing files
+- **Always updates** critical infrastructure (Dockerfile, docker-compose.yml, nginx.conf)
+- Adds **missing** infrastructure files
+- Preserves existing non-critical infrastructure files
 - Updates version markers in skills.json and marketplace.json
 
 ### Force Mode (`--force`)
-- Overwrites **all** scaffold files (infrastructure + documentation)
+- Overwrites **all** scaffold files (critical + infrastructure + documentation)
 - Still preserves user skills and skills.json content
 - Updates version markers
 

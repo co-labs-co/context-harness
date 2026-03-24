@@ -1704,19 +1704,27 @@ class TestSkillServiceUpgradeRegistryRepo:
         assert ".registry-version" in files
 
     def test_upgrade_skips_existing_files_without_force(self, tmp_path: Path) -> None:
-        """Without --force, existing scaffold files are not updated."""
+        """Without --force, non-critical existing scaffold files are not updated.
+
+        Note: Critical infrastructure (Dockerfile, docker-compose.yml, nginx.conf)
+        is ALWAYS updated to ensure path references stay in sync.
+        """
         service = SkillService(github_client=MockGitHubClient())
 
-        # Create legacy registry with an existing Dockerfile
+        # Create legacy registry with existing files
         (tmp_path / "skills.json").write_text('{"skills": []}')
         (tmp_path / "skill").mkdir()
-        (tmp_path / "Dockerfile").write_text("# OLD DOCKERFILE")
+        (tmp_path / ".github" / "workflows").mkdir(parents=True)
+        (tmp_path / ".github" / "workflows" / "release.yml").write_text("# OLD WORKFLOW")
 
         result = service.upgrade_registry_repo(tmp_path, dry_run=True)
 
         assert isinstance(result, Success)
-        # Dockerfile exists, so it should NOT be in the update list
-        assert "Dockerfile" not in result.value["files_to_update"]
+        # release.yml exists and is NOT critical infrastructure, so it should NOT be updated
+        assert ".github/workflows/release.yml" not in result.value["files_to_update"]
+        # But critical infrastructure (Dockerfile) SHOULD be in the list even though it doesn't exist
+        # because it's always included
+        assert "Dockerfile" in result.value["files_to_update"]
 
     def test_upgrade_includes_existing_files_with_force(self, tmp_path: Path) -> None:
         """With --force, existing scaffold files ARE included for update."""
