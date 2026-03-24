@@ -689,8 +689,13 @@ def _configure_registry_user(url: str, is_http: bool) -> None:
                 default="",
             )
         else:
-            # GitHub repo
-            repo = url.replace("github.com/", "").replace("https://github.com/", "")
+            # GitHub repo - extract owner/repo from URL
+            # Handle: https://github.com/owner/repo, github.com/owner/repo, owner/repo
+            repo = url
+            for prefix in ["https://github.com/", "http://github.com/", "github.com/"]:
+                if repo.startswith(prefix):
+                    repo = repo[len(prefix):]
+                    break
             registry_config = SkillsRegistryConfig(default=repo)
 
         new_config = UserConfig(skills_registry=registry_config)
@@ -706,7 +711,12 @@ def _configure_registry_user(url: str, is_http: bool) -> None:
         if is_http:
             print_info(f"URL: {url}")
         else:
-            repo = url.replace("github.com/", "").replace("https://github.com/", "")
+            # Use same extraction logic for display
+            repo = url
+            for prefix in ["https://github.com/", "http://github.com/", "github.com/"]:
+                if repo.startswith(prefix):
+                    repo = repo[len(prefix):]
+                    break
             print_info(f"GitHub repo: {repo}")
         console.print()
         print_info("Run 'context-harness skill list' to see available skills.")
