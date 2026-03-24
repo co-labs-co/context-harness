@@ -1899,24 +1899,36 @@ class TestSkillServiceUpgradeRegistryRepo:
         assert (tmp_path / "registry" / "nginx.conf").exists()
         assert (tmp_path / "registry" / "web" / "index.html").exists()
 
-    def test_upgrade_force_bypasses_version_check(self, tmp_path: Path) -> None:
-        """--force should update files even when version is already up to date."""
+    def test_upgrade_always_updates_critical_infrastructure(self, tmp_path: Path) -> None:
+        """Critical infrastructure is always updated, even without --force."""
         service = SkillService(github_client=MockGitHubClient())
 
-        # Create registry at current version with old Dockerfile content
+        # Create registry at FUTURE version with old Dockerfile content
         (tmp_path / ".registry-version").write_text("99.99.99")  # Future version
         (tmp_path / "skills.json").write_text('{"skills": []}')
         (tmp_path / "skill").mkdir()
         (tmp_path / "Dockerfile").write_text("# OLD DOCKERFILE CONTENT")
+        (tmp_path / ".github" / "workflows").mkdir(parents=True)
+        (tmp_path / ".github" / "workflows" / "release.yml").write_text("# OLD WORKFLOW")
 
-        # Without force, should say already up to date
+        # Without force, critical infrastructure should still be updated
         result_no_force = service.upgrade_registry_repo(tmp_path, dry_run=True)
         assert isinstance(result_no_force, Success)
-        assert result_no_force.value["upgraded"] is False
-        assert "already at the latest" in result_no_force.message.lower()
+        files = result_no_force.value["files_to_update"]
 
-        # With force, should proceed even though version is "higher"
+        # Critical infrastructure is ALWAYS included
+        assert "Dockerfile" in files
+        assert "docker-compose.yml" in files
+        assert "registry/nginx.conf" in files
+
+        # Non-critical existing files are NOT included without force
+        assert ".github/workflows/release.yml" not in files
+
+        # With force, ALL files should be included
         result_force = service.upgrade_registry_repo(tmp_path, dry_run=True, force=True)
         assert isinstance(result_force, Success)
-        # Dockerfile should be in the update list
-        assert "Dockerfile" in result_force.value["files_to_update"]
+        force_files = result_force.value["files_to_update"]
+
+        # Everything is included with force
+        assert "Dockerfile" in force_files
+        assert ".github/workflows/release.yml" in force_files

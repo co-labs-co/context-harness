@@ -973,8 +973,37 @@ class SkillService:
                 code=ErrorCode.VALIDATION_ERROR,
             )
 
-        # Check if upgrade needed (skip if forcing - user wants to refresh all files)
-        if not force and current >= latest:
+        # Check-only mode - just report if upgrade available
+        if check_only:
+            if force or current < latest:
+                return Success(
+                    value={
+                        "current_version": current_version,
+                        "latest_version": latest_version,
+                        "upgraded": False,
+                        "upgrade_available": True,
+                    },
+                    message=f"Upgrade available: {current_version} → {latest_version}",
+                )
+            else:
+                return Success(
+                    value={
+                        "current_version": current_version,
+                        "latest_version": latest_version,
+                        "upgraded": False,
+                        "upgrade_available": False,
+                    },
+                    message="Registry is already at the latest version",
+                )
+
+        # Get list of files to update
+        # Note: Critical infrastructure is ALWAYS included, even if version is current
+        files_to_update = self._get_scaffold_files_to_update(
+            repo_path, current_version, force=force
+        )
+
+        # If nothing to update and not forcing, we're done
+        if not files_to_update and not force:
             return Success(
                 value={
                     "current_version": current_version,
@@ -984,23 +1013,6 @@ class SkillService:
                 },
                 message="Registry is already at the latest version",
             )
-
-        # Check-only mode
-        if check_only:
-            return Success(
-                value={
-                    "current_version": current_version,
-                    "latest_version": latest_version,
-                    "upgraded": False,
-                    "upgrade_available": True,
-                },
-                message=f"Upgrade available: {current_version} → {latest_version}",
-            )
-
-        # Get list of files to update
-        files_to_update = self._get_scaffold_files_to_update(
-            repo_path, current_version, force=force
-        )
 
         if dry_run:
             return Success(
