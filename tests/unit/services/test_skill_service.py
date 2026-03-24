@@ -1887,3 +1887,25 @@ class TestSkillServiceUpgradeRegistryRepo:
         assert (tmp_path / "scripts" / "sync-registry.py").exists()
         assert (tmp_path / "registry" / "nginx.conf").exists()
         assert (tmp_path / "registry" / "web" / "index.html").exists()
+
+    def test_upgrade_force_bypasses_version_check(self, tmp_path: Path) -> None:
+        """--force should update files even when version is already up to date."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        # Create registry at current version with old Dockerfile content
+        (tmp_path / ".registry-version").write_text("99.99.99")  # Future version
+        (tmp_path / "skills.json").write_text('{"skills": []}')
+        (tmp_path / "skill").mkdir()
+        (tmp_path / "Dockerfile").write_text("# OLD DOCKERFILE CONTENT")
+
+        # Without force, should say already up to date
+        result_no_force = service.upgrade_registry_repo(tmp_path, dry_run=True)
+        assert isinstance(result_no_force, Success)
+        assert result_no_force.value["upgraded"] is False
+        assert "already at the latest" in result_no_force.message.lower()
+
+        # With force, should proceed even though version is "higher"
+        result_force = service.upgrade_registry_repo(tmp_path, dry_run=True, force=True)
+        assert isinstance(result_force, Success)
+        # Dockerfile should be in the update list
+        assert "Dockerfile" in result_force.value["files_to_update"]

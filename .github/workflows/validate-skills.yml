@@ -1,0 +1,55 @@
+name: Validate Skills
+
+on:
+  pull_request:
+    paths:
+      - "skill/**"
+      - "release-please-config.json"
+      - ".release-please-manifest.json"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install python-frontmatter pydantic>=2.0 semver
+
+      - name: Validate skills
+        id: validate
+        run: python scripts/validate_skills.py
+        continue-on-error: true
+
+      - name: Read validation report
+        if: always()
+        id: report
+        run: |
+          if [ -f validation-report.md ]; then
+            {
+              echo 'REPORT<<REPORTEOF'
+              cat validation-report.md
+              echo 'REPORTEOF'
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Post PR comment
+        if: always() && steps.report.outputs.REPORT
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: skill-validation
+          message: ${{ steps.report.outputs.REPORT }}
+
+      - name: Fail if validation errors
+        if: steps.validate.outcome == 'failure'
+        run: exit 1

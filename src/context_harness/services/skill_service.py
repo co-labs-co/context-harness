@@ -973,8 +973,8 @@ class SkillService:
                 code=ErrorCode.VALIDATION_ERROR,
             )
 
-        # Check if upgrade needed
-        if current >= latest:
+        # Check if upgrade needed (skip if forcing - user wants to refresh all files)
+        if not force and current >= latest:
             return Success(
                 value={
                     "current_version": current_version,
