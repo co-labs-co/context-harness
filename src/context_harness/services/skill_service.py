@@ -1057,33 +1057,57 @@ class SkillService:
 
         Returns:
             List of relative file paths to update
+
+        NOTE: When adding new scaffold files to init-repo, add them here too!
+        See SCAFFOLD_UPGRADE.md for the complete list and maintenance process.
         """
-        # Files that are always safe to update (infrastructure)
-        scaffold_files = [
+        # Infrastructure files - safe to update (rarely user-modified)
+        infrastructure_files = [
+            # GitHub workflows
             ".github/workflows/release.yml",
             ".github/workflows/sync-registry.yml",
             ".github/workflows/validate-skills.yml",
             ".github/workflows/auto-rebase.yml",
-            ".github/ISSUE_TEMPLATE/bug_report.yml",
-            ".github/ISSUE_TEMPLATE/feature_request.yml",
+            # GitHub templates
+            ".github/ISSUE_TEMPLATE/new-skill.md",
             ".github/PULL_REQUEST_TEMPLATE.md",
-            "scripts/sync_registry.py",
-            "scripts/validate_skills.py",
+            # Scripts
+            "scripts/sync-registry.py",
+            "scripts/validate-skills.py",
+            # HTTP registry (Docker/nginx)
             "Dockerfile",
             "docker-compose.yml",
             "registry/nginx.conf",
             "registry/web/index.html",
             "registry/web/skill.html",
+            # Release configuration
+            ".releaseplease.json",
+            ".release-please-manifest.json",
+            # Git configuration
+            ".gitignore",
+        ]
+
+        # Documentation files - often customized by users
+        # Only add these in force mode or if missing
+        documentation_files = [
+            "README.md",
+            "CONTRIBUTING.md",
+            "QUICKSTART.md",
         ]
 
         files_to_update = []
 
         if force:
             # Force mode: include all scaffold files for overwrite
-            files_to_update = list(scaffold_files)
+            files_to_update = list(infrastructure_files) + list(documentation_files)
         else:
             # Normal mode: only include files that don't exist (new features)
-            for file_path in scaffold_files:
+            for file_path in infrastructure_files:
+                full_path = repo_path / file_path
+                if not full_path.exists():
+                    files_to_update.append(file_path)
+            # Documentation files only if missing (users often customize)
+            for file_path in documentation_files:
                 full_path = repo_path / file_path
                 if not full_path.exists():
                     files_to_update.append(file_path)
@@ -1154,20 +1178,41 @@ class SkillService:
     def _write_single_scaffold_file(
         self, repo_path: Path, file_path: str, repo_name: str
     ) -> None:
-        """Write a single scaffold file based on its path."""
+        """Write a single scaffold file based on its path.
+
+        NOTE: When adding new scaffold files, add them to both:
+        1. This writers dictionary
+        2. _get_scaffold_files_to_update() list
+        See SCAFFOLD_UPGRADE.md for the maintenance process.
+        """
         # Map file paths to their writer methods
         writers = {
+            # GitHub workflows
             ".github/workflows/release.yml": self._write_scaffold_release_workflow,
             ".github/workflows/sync-registry.yml": self._write_scaffold_sync_registry_workflow,
             ".github/workflows/validate-skills.yml": self._write_scaffold_validate_skills_workflow,
             ".github/workflows/auto-rebase.yml": self._write_scaffold_auto_rebase_workflow,
-            "scripts/sync_registry.py": self._write_scaffold_sync_registry_script,
-            "scripts/validate_skills.py": self._write_scaffold_validate_skills_script,
+            # GitHub templates
+            ".github/ISSUE_TEMPLATE/new-skill.md": self._write_scaffold_issue_template,
+            ".github/PULL_REQUEST_TEMPLATE.md": self._write_scaffold_pr_template,
+            # Scripts
+            "scripts/sync-registry.py": self._write_scaffold_sync_registry_script,
+            "scripts/validate-skills.py": self._write_scaffold_validate_skills_script,
+            # HTTP registry (Docker/nginx)
             "Dockerfile": self._write_scaffold_dockerfile,
             "docker-compose.yml": lambda p: self._write_scaffold_docker_compose(p, repo_name),
             "registry/nginx.conf": self._write_scaffold_nginx_conf,
             "registry/web/index.html": lambda p: self._write_scaffold_index_html(p, repo_name),
             "registry/web/skill.html": lambda p: self._write_scaffold_skill_html(p, repo_name),
+            # Release configuration
+            ".releaseplease.json": self._write_scaffold_release_please_config,
+            ".release-please-manifest.json": self._write_scaffold_release_please_manifest,
+            # Git configuration
+            ".gitignore": self._write_scaffold_gitignore,
+            # Documentation (requires repo_name)
+            "README.md": lambda p: self._write_scaffold_readme(p, repo_name),
+            "CONTRIBUTING.md": lambda p: self._write_scaffold_contributing(p, repo_name),
+            "QUICKSTART.md": lambda p: self._write_scaffold_quickstart(p, repo_name),
         }
 
         writer = writers.get(file_path)
