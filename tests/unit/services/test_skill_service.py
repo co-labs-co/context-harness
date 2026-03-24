@@ -1249,8 +1249,9 @@ class TestSkillServiceInitRegistryRepo:
         assert "ch skill install" in content
         assert ".opencode/skill/" in content
         assert ".claude/skills/" in content
-        assert "BOTH" in content  # Emphasize installing to both directories
+        assert "both" in content  # Installs to both directories automatically
         assert "skills.json" in content
+        assert "ONLY" in content  # Emphasize CLI-only approach
 
     def test_scaffold_skills_json_content(self, tmp_path: Path) -> None:
         """skills.json contains registry with scaffolded example skills."""

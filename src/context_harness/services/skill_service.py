@@ -3436,34 +3436,18 @@ http {
 
 ## Installation Protocol
 
-When a user requests to install a skill from this registry, follow these steps:
+**ALWAYS use the CLI to install skills:**
+```
+ch skill install <skill-name>
+```
 
-1. **Use the CLI command** (preferred):
-   ```
-   ch skill install <skill-name>
-   ```
-   The CLI is already configured to use this registry.
+The CLI handles all installation details automatically.
 
-2. **If CLI is not available**, fetch the skill files:
-   - Read `/skills.json` to find the skill's path
-   - Fetch `/skill/<skill-name>/SKILL.md` for instructions
-   - Create directories: `.opencode/skill/<skill-name>/` AND `.claude/skills/<skill-name>/`
-   - Copy all skill files to BOTH directories
+## Rules
 
-## Important Rules
-
-- ALWAYS install skills to BOTH `.opencode/skill/` AND `.claude/skills/` directories
-- DO NOT manually construct installation commands
-- DO NOT skip reading the SKILL.md file for each skill
-- The user does NOT have git access to this registry
-
-## Skill Structure
-
-Each skill is located at `/skill/<name>/` and contains:
-- `SKILL.md` - Main instructions (required)
-- `version.txt` - Semantic version (required)
-- `references/` - Optional reference documents
-- `scripts/` - Optional helper scripts
+- ONLY use `ch skill install` - never manually download or copy files
+- The CLI installs to both `.opencode/skill/` AND `.claude/skills/` automatically
+- User does NOT have git access to this registry
 
 ## Available Skills
 
