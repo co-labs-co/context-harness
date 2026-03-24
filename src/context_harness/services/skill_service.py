@@ -3516,8 +3516,8 @@ See `/skills.json` for the complete list of available skills with descriptions.
             <p class="text-xs text-[var(--muted-foreground)] mt-1">🤖 AI agents: read <a href="/llms.txt" class="underline">llms.txt</a> for installation instructions</p>
         </header>
 
-        <!-- Build a Skill Section -->
-        <section id="build-skill" class="mb-8 p-4 bg-[var(--card)] border rounded-[var(--radius)]">
+        <!-- Build a Skill Section (hidden for now) -->
+        <section id="build-skill" class="mb-8 p-4 bg-[var(--card)] border rounded-[var(--radius)]" hidden>
             <div class="flex items-center justify-between cursor-pointer" onclick="toggleSection('build-content')">
                 <div class="flex items-center gap-2">
                     <span class="text-lg">🔧</span>
