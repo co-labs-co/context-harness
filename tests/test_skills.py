@@ -366,6 +366,161 @@ class TestSkillInstallation:
         # Old file should be gone after force reinstall
         assert not (skill_dir / "old-file.txt").exists()
 
+    @patch("context_harness.skills.get_skill_info")
+    @patch("context_harness.skills._fetch_directory_recursive")
+    def test_install_skill_to_both_directories(self, mock_fetch, mock_info, tmp_path):
+        """Test installing skill to both .opencode/skill/ and .claude/skills/."""
+        from context_harness.skills import install_skill
+
+        mock_info.return_value = SkillInfo(
+            name="dual-skill",
+            description="Dual install test",
+            version="1.0.0",
+            author="test",
+            tags=[],
+            path="skill/dual-skill",
+        )
+
+        def create_skill_files(path, dest, quiet=False):
+            """Mock that creates the skill directory with a file."""
+            dest.mkdir(parents=True, exist_ok=True)
+            (dest / "SKILL.md").write_text("# Test Skill\n", encoding="utf-8")
+            return True
+
+        mock_fetch.side_effect = create_skill_files
+
+        result = install_skill(
+            "dual-skill",
+            target=str(tmp_path),
+            tool_target="both",
+            quiet=True,
+        )
+        assert result == SkillResult.SUCCESS
+
+        # Should be installed to both directories
+        opencode_skill = tmp_path / ".opencode" / "skill" / "dual-skill"
+        claude_skill = tmp_path / ".claude" / "skills" / "dual-skill"
+
+        assert opencode_skill.exists(), "Skill should be in .opencode/skill/"
+        assert claude_skill.exists(), "Skill should be in .claude/skills/"
+        assert (opencode_skill / "SKILL.md").exists()
+        assert (claude_skill / "SKILL.md").exists()
+
+    @patch("context_harness.skills.get_skill_info")
+    @patch("context_harness.skills._fetch_directory_recursive")
+    def test_install_skill_to_opencode_only(self, mock_fetch, mock_info, tmp_path):
+        """Test installing skill to .opencode/skill/ only."""
+        from context_harness.skills import install_skill
+
+        mock_info.return_value = SkillInfo(
+            name="opencode-only",
+            description="OpenCode only test",
+            version="1.0.0",
+            author="test",
+            tags=[],
+            path="skill/opencode-only",
+        )
+
+        def create_skill_files(path, dest, quiet=False):
+            """Mock that creates the skill directory with a file."""
+            dest.mkdir(parents=True, exist_ok=True)
+            (dest / "SKILL.md").write_text("# Test Skill\n", encoding="utf-8")
+            return True
+
+        mock_fetch.side_effect = create_skill_files
+
+        result = install_skill(
+            "opencode-only",
+            target=str(tmp_path),
+            tool_target="opencode",
+            quiet=True,
+        )
+        assert result == SkillResult.SUCCESS
+
+        # Should be installed to OpenCode only
+        opencode_skill = tmp_path / ".opencode" / "skill" / "opencode-only"
+        claude_skill = tmp_path / ".claude" / "skills" / "opencode-only"
+
+        assert opencode_skill.exists(), "Skill should be in .opencode/skill/"
+        assert not claude_skill.exists(), "Skill should NOT be in .claude/skills/"
+
+    @patch("context_harness.skills.get_skill_info")
+    @patch("context_harness.skills._fetch_directory_recursive")
+    def test_install_skill_to_claude_code_only(self, mock_fetch, mock_info, tmp_path):
+        """Test installing skill to .claude/skills/ only."""
+        from context_harness.skills import install_skill
+
+        mock_info.return_value = SkillInfo(
+            name="claude-only",
+            description="Claude Code only test",
+            version="1.0.0",
+            author="test",
+            tags=[],
+            path="skill/claude-only",
+        )
+
+        def create_skill_files(path, dest, quiet=False):
+            """Mock that creates the skill directory with a file."""
+            dest.mkdir(parents=True, exist_ok=True)
+            (dest / "SKILL.md").write_text("# Test Skill\n", encoding="utf-8")
+            return True
+
+        mock_fetch.side_effect = create_skill_files
+
+        result = install_skill(
+            "claude-only",
+            target=str(tmp_path),
+            tool_target="claude-code",
+            quiet=True,
+        )
+        assert result == SkillResult.SUCCESS
+
+        # Should be installed to Claude Code only
+        opencode_skill = tmp_path / ".opencode" / "skill" / "claude-only"
+        claude_skill = tmp_path / ".claude" / "skills" / "claude-only"
+
+        assert not opencode_skill.exists(), "Skill should NOT be in .opencode/skill/"
+        assert claude_skill.exists(), "Skill should be in .claude/skills/"
+
+    @patch("context_harness.skills.get_skill_info")
+    @patch("context_harness.skills._fetch_directory_recursive")
+    def test_install_skill_default_is_both(self, mock_fetch, mock_info, tmp_path):
+        """Test that 'both' target installs to all directories."""
+        from context_harness.skills import install_skill
+
+        mock_info.return_value = SkillInfo(
+            name="default-skill",
+            description="Default target test",
+            version="1.0.0",
+            author="test",
+            tags=[],
+            path="skill/default-skill",
+        )
+
+        def create_skill_files(path, dest, quiet=False):
+            """Mock that creates the skill directory with a file."""
+            dest.mkdir(parents=True, exist_ok=True)
+            (dest / "SKILL.md").write_text("# Test Skill\n", encoding="utf-8")
+            return True
+
+        mock_fetch.side_effect = create_skill_files
+
+        # Install with tool_target="both" - the CLI default
+        result = install_skill(
+            "default-skill",
+            target=str(tmp_path),
+            tool_target="both",
+            quiet=True,
+        )
+        assert result == SkillResult.SUCCESS
+
+        # Should be installed to both directories
+        opencode_skill = tmp_path / ".opencode" / "skill" / "default-skill"
+        claude_skill = tmp_path / ".claude" / "skills" / "default-skill"
+
+        assert opencode_skill.exists(), "Skill should be in .opencode/skill/"
+        assert claude_skill.exists(), "Skill should be in .claude/skills/"
+
 
 class TestTruncateDescription:
     """Tests for description truncation."""
