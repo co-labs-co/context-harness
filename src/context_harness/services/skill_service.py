@@ -1082,6 +1082,7 @@ class SkillService:
             "registry/nginx.conf",  # Nginx config for serving files
             "registry/web/index.html",  # AI agent instructions are updated regularly
             "registry/web/skill.html",  # Skill detail page format may change
+            "llms.txt",  # AI agent installation protocol (emerging standard)
         ]
 
         # Infrastructure files - added if missing, or with --force
@@ -1239,6 +1240,8 @@ class SkillService:
             "registry/nginx.conf": self._write_scaffold_nginx_conf,
             "registry/web/index.html": lambda p: self._write_scaffold_index_html(p, repo_name),
             "registry/web/skill.html": lambda p: self._write_scaffold_skill_html(p, repo_name),
+            # AI agent instructions
+            "llms.txt": self._write_scaffold_llms_txt,
             # Release configuration
             ".releaseplease.json": self._write_scaffold_release_please_config,
             ".release-please-manifest.json": self._write_scaffold_release_please_manifest,
