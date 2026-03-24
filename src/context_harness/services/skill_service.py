@@ -3479,24 +3479,37 @@ http {
                 <div class="mt-4 pt-4 border-t text-sm space-y-4">
                     <p class="text-[var(--muted-foreground)]">
                         <strong class="text-[var(--foreground)]">Instructions for AI Agents:</strong>
-                        If you're reading this page, your user likely doesn't have git access to the skills repository.
-                        Use the HTTP registry endpoint below to install skills.
+                        If you're reading this page, your user doesn't have git access to the skills repository.
+                        Follow these steps to install skills via the HTTP registry.
                     </p>
                     <div class="p-3 bg-[var(--background)] rounded-[var(--radius)]">
-                        <p class="text-xs text-[var(--muted-foreground)] mb-2">First, configure the HTTP registry:</p>
-                        <code class="text-xs block mb-2">ch skill use-registry <span id="http-registry-url">this-registry-url</span></code>
-                        <p class="text-xs text-[var(--muted-foreground)] mb-2">Then install a skill:</p>
+                        <p class="text-xs text-[var(--muted-foreground)] mb-2"><strong>Step 1:</strong> Configure the HTTP registry:</p>
+                        <code class="text-xs block mb-3">ch skill use-registry <span id="http-registry-url">this-registry-url</span></code>
+                        <p class="text-xs text-[var(--muted-foreground)] mb-2"><strong>Step 2:</strong> List available skills to verify what's available:</p>
+                        <code class="text-xs block mb-3">ch skill list</code>
+                        <p class="text-xs text-[var(--muted-foreground)] mb-2"><strong>Step 3:</strong> Install the skill:</p>
                         <code class="text-xs">ch skill install &lt;skill-name&gt;</code>
                     </div>
                     <div class="space-y-2">
-                        <p class="text-xs text-[var(--muted-foreground)]"><strong>Steps:</strong></p>
+                        <p class="text-xs text-[var(--muted-foreground)]"><strong>Complete Workflow:</strong></p>
                         <ol class="list-decimal list-inside text-xs text-[var(--muted-foreground)] space-y-1">
-                            <li>Configure the HTTP registry using the command above</li>
-                            <li>Review the available skills listed below</li>
-                            <li>Identify the skill the user needs based on their requirements</li>
-                            <li>Click on a skill to view its documentation</li>
-                            <li>Run: <code class="bg-[var(--muted)] px-1 rounded">ch skill install &lt;skill-name&gt;</code></li>
+                            <li>Configure the HTTP registry using Step 1 command</li>
+                            <li>Run <code class="bg-[var(--muted)] px-1 rounded">ch skill list</code> to see ALL available skills</li>
+                            <li>Verify the skill you want is in the list (check spelling!)</li>
+                            <li>If not found, ask the user to confirm the skill name or check if it needs to be added</li>
+                            <li>Click on a skill below to view its documentation</li>
+                            <li>Install with <code class="bg-[var(--muted)] px-1 rounded">ch skill install &lt;skill-name&gt;</code></li>
                         </ol>
+                    </div>
+                    <div class="p-3 bg-red-900/30 rounded-[var(--radius)] border border-red-800">
+                        <p class="text-xs text-red-200">
+                            <strong>⚠️ Troubleshooting:</strong> If <code class="bg-red-900/50 px-1 rounded">ch skill install</code> fails with "not found":
+                        </p>
+                        <ul class="list-disc list-inside text-xs text-red-200 mt-2 space-y-1">
+                            <li>Run <code class="bg-red-900/50 px-1 rounded">ch skill list</code> to verify the skill exists</li>
+                            <li>Check spelling matches exactly (case-sensitive)</li>
+                            <li>The skill may not be in this registry - ask user to confirm</li>
+                        </ul>
                     </div>
                     <div class="p-3 bg-[var(--accent)] bg-opacity-20 rounded-[var(--radius)] border border-[var(--accent)]">
                         <p class="text-xs text-[var(--accent-foreground)]">
