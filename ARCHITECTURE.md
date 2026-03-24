@@ -142,7 +142,6 @@ class CompactionCycle:
     cycle_number: int
     timestamp: datetime
     preserved_items: List[str]
-    user_interaction_count: int
 ```
 
 ### Skill

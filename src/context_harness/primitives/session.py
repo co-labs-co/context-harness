@@ -72,19 +72,16 @@ class DocRef:
 class CompactionCycle:
     """Record of a compaction event.
 
-    Compaction happens every N user interactions to preserve
-    context continuity across context window limits.
+    Compaction preserves context continuity across context window limits.
 
     Attributes:
         cycle_number: Sequential cycle number
         timestamp: When compaction occurred
-        user_interaction_count: Interaction count at compaction
         preserved_items: Summary of what was preserved
     """
 
     cycle_number: int
     timestamp: datetime
-    user_interaction_count: int
     preserved_items: List[str] = field(default_factory=list)
 
 

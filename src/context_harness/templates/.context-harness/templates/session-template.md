@@ -70,4 +70,4 @@ Session `{SESSION_NAME}` initialized by ContextHarness Primary Agent.
 
 ---
 
-_Auto-updated by ContextHarness Primary Agent every 2nd user interaction_
+_Auto-updated by ContextHarness Primary Agent via /compact_
