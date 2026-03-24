@@ -657,7 +657,9 @@ def skill_use_registry_cmd(url: str, project: bool) -> None:
             raise SystemExit(1)
 
     # Determine if it's HTTP or GitHub
-    is_http = url.startswith(("http://", "https://"))
+    # GitHub URLs (even with https://) should be treated as GitHub repos
+    is_github = "github.com" in url
+    is_http = url.startswith(("http://", "https://")) and not is_github
 
     if project:
         _configure_registry_project(url, is_http)
