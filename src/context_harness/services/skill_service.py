@@ -3678,9 +3678,6 @@ tags: [category]
             }, 150);
         });
 
-        // Populate the HTTP registry URL for AI agent instructions
-        document.getElementById('http-registry-url').textContent = window.location.origin;
-
         loadSkills();
     </script>
 </body>
