@@ -20,6 +20,7 @@ from context_harness.skills import (
     init_repo,
     SkillResult,
 )
+from context_harness.primitives.tool_detector import ToolTarget
 from context_harness.completion import (
     complete_skill_names,
     interactive_skill_picker,
@@ -144,19 +145,32 @@ def skill_info_cmd(skill_name: str) -> None:
     default=None,
     help="Registry URL to install from (e.g., https://skills.example.com).",
 )
+@click.option(
+    "--tool-target",
+    type=click.Choice(["opencode", "claude-code", "both"], case_sensitive=False),
+    default="both",
+    help="Which harness to install for (default: both).",
+)
 def skill_install_cmd(
-    skill_name: Optional[str], target: str, force: bool, registry: Optional[str]
+    skill_name: Optional[str],
+    target: str,
+    force: bool,
+    registry: Optional[str],
+    tool_target: str,
 ) -> None:
     """Install a skill from the central repository.
 
-    Downloads and installs the specified skill to .opencode/skill/ in the
-    target directory.
+    Downloads and installs the specified skill to the skill directory
+    in the target project. By default, installs to both .opencode/skill/
+    and .claude/skills/ to support both OpenCode and Claude Code harnesses.
 
     If no skill name is provided, an interactive picker will be shown
     with fuzzy search to help you find and select a skill.
 
     Use --registry to install from a specific HTTP registry without
     changing your global configuration.
+
+    Use --tool-target to install for a specific harness only.
 
     Examples:
 
@@ -169,6 +183,8 @@ def skill_install_cmd(
         context-harness skill install react-forms --force
 
         context-harness skill install my-skill --registry https://skills.example.com
+
+        context-harness skill install react-forms --tool-target opencode
     """
     import os
 
@@ -188,7 +204,12 @@ def skill_install_cmd(
                 raise SystemExit(0)
             console.print()
 
-        result = install_skill(skill_name, target=target, force=force)
+        result = install_skill(
+            skill_name,
+            target=target,
+            force=force,
+            tool_target=tool_target,  # type: ignore[arg-type]
+        )
 
         if result == SkillResult.SUCCESS:
             console.print()

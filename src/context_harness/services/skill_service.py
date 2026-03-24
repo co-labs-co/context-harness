@@ -3255,6 +3255,9 @@ python scripts/validate_skills.py
         # --- nginx.conf ---
         self._write_scaffold_nginx_conf(repo_path)
 
+        # --- llms.txt (AI agent instructions) ---
+        self._write_scaffold_llms_txt(repo_path)
+
         # --- Web frontend ---
         self._write_scaffold_index_html(repo_path, repo_name)
         self._write_scaffold_skill_html(repo_path, repo_name)
@@ -3271,7 +3274,7 @@ FROM nginx:alpine
 COPY registry/nginx.conf /etc/nginx/nginx.conf
 
 # Copy registry files
-COPY skills.json marketplace.json /usr/share/nginx/html/
+COPY skills.json marketplace.json llms.txt /usr/share/nginx/html/
 COPY skill /usr/share/nginx/html/skill
 
 # Copy web frontend
@@ -3384,6 +3387,12 @@ http {
             add_header Access-Control-Allow-Origin * always;
         }
 
+        # Serve llms.txt (AI agent instructions)
+        location = /llms.txt {
+            add_header Content-Type text/plain;
+            add_header Access-Control-Allow-Origin * always;
+        }
+
         # Serve skill files
         location /skill/ {
             alias /usr/share/nginx/html/skill/;
@@ -3411,6 +3420,54 @@ http {
 """
         (repo_path / "registry" / "nginx.conf").write_text(content, encoding="utf-8")
 
+    def _write_scaffold_llms_txt(self, repo_path: Path) -> None:
+        """Write llms.txt - AI agent instructions file.
+
+        This is an emerging standard for providing LLM-specific instructions.
+        AI agents are trained to look for this file at the root of websites.
+        """
+        content = """\
+# ContextHarness Skills Registry
+
+> AI Agent Instructions: This registry provides skills that extend AI coding assistants with specialized capabilities.
+
+## Installation Protocol
+
+When a user requests to install a skill from this registry, follow these steps:
+
+1. **Use the CLI command** (preferred):
+   ```
+   ch skill install <skill-name>
+   ```
+   The CLI is already configured to use this registry.
+
+2. **If CLI is not available**, fetch the skill files:
+   - Read `/skills.json` to find the skill's path
+   - Fetch `/skill/<skill-name>/SKILL.md` for instructions
+   - Create directories: `.opencode/skill/<skill-name>/` AND `.claude/skills/<skill-name>/`
+   - Copy all skill files to BOTH directories
+
+## Important Rules
+
+- ALWAYS install skills to BOTH `.opencode/skill/` AND `.claude/skills/` directories
+- DO NOT manually construct installation commands
+- DO NOT skip reading the SKILL.md file for each skill
+- The user does NOT have git access to this registry
+
+## Skill Structure
+
+Each skill is located at `/skill/<name>/` and contains:
+- `SKILL.md` - Main instructions (required)
+- `version.txt` - Semantic version (required)
+- `references/` - Optional reference documents
+- `scripts/` - Optional helper scripts
+
+## Available Skills
+
+See `/skills.json` for the complete list of available skills with descriptions.
+"""
+        (repo_path / "llms.txt").write_text(content, encoding="utf-8")
+
     def _write_scaffold_index_html(
         self, repo_path: Path, repo_name: str
     ) -> None:
@@ -3426,6 +3483,10 @@ http {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Skills Registry</title>
+    <!-- AI Agent Instructions: Read /llms.txt for installation protocol -->
+    <meta name="llm-instructions" content="/llms.txt">
+    <meta name="ai-agent-protocol" content="read-instructions-first">
+    <meta name="description" content="Skills registry for AI coding assistants. Read /llms.txt for installation instructions.">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -3708,6 +3769,9 @@ tags: [category]
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Skill Details</title>
+    <!-- AI Agent Instructions: Read /llms.txt for installation protocol -->
+    <meta name="llm-instructions" content="/llms.txt">
+    <meta name="description" content="Skill details - Read /llms.txt for installation instructions.">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

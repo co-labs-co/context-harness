@@ -1227,9 +1227,30 @@ class TestSkillServiceInitRegistryRepo:
             "skill/skill-release/SKILL.md",
             "skill/skill-release/version.txt",
             "skill/skill-release/references/troubleshooting.md",
+            # HTTP registry files
+            "Dockerfile",
+            "docker-compose.yml",
+            "registry/nginx.conf",
+            "registry/web/index.html",
+            "registry/web/skill.html",
+            "llms.txt",  # AI agent instructions
         ]
         for filepath in expected_files:
             assert (tmp_path / filepath).exists(), f"Missing: {filepath}"
+
+    def test_scaffold_llms_txt_contains_installation_instructions(self, tmp_path: Path) -> None:
+        """llms.txt contains AI agent installation protocol."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        content = (tmp_path / "llms.txt").read_text()
+        # Verify key instruction elements
+        assert "Installation Protocol" in content
+        assert "ch skill install" in content
+        assert ".opencode/skill/" in content
+        assert ".claude/skills/" in content
+        assert "BOTH" in content  # Emphasize installing to both directories
+        assert "skills.json" in content
 
     def test_scaffold_skills_json_content(self, tmp_path: Path) -> None:
         """skills.json contains registry with scaffolded example skills."""
