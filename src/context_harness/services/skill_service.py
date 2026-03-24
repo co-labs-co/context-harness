@@ -1154,6 +1154,13 @@ class SkillService:
         Returns:
             List of files that were actually updated
         """
+        # Critical infrastructure - ALWAYS overwritten (contains path references)
+        critical_infrastructure = {
+            "Dockerfile",
+            "docker-compose.yml",
+            "registry/nginx.conf",
+        }
+
         updated_files = []
 
         # Create directory structure if needed
@@ -1169,8 +1176,10 @@ class SkillService:
         for file_path in files_to_update:
             full_path = repo_path / file_path
 
-            # Skip if file exists and not forcing
-            if full_path.exists() and not force:
+            # Skip if file exists and not forcing AND not critical infrastructure
+            # Critical infrastructure is ALWAYS updated to keep path references in sync
+            is_critical = file_path in critical_infrastructure
+            if full_path.exists() and not force and not is_critical:
                 continue
 
             # Write the scaffold file
