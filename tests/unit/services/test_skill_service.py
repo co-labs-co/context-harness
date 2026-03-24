@@ -1802,6 +1802,9 @@ class TestSkillServiceUpgradeRegistryRepo:
         # Git configuration
         assert ".gitignore" in files
 
+        # Marketplace manifest
+        assert "marketplace.json" in files
+
         # Version marker (always included)
         assert ".registry-version" in files
 

@@ -1085,6 +1085,8 @@ class SkillService:
             ".release-please-manifest.json",
             # Git configuration
             ".gitignore",
+            # Marketplace manifest (only created if missing)
+            "marketplace.json",
         ]
 
         # Documentation files - often customized by users
@@ -1209,6 +1211,8 @@ class SkillService:
             ".release-please-manifest.json": self._write_scaffold_release_please_manifest,
             # Git configuration
             ".gitignore": self._write_scaffold_gitignore,
+            # Marketplace manifest (requires repo_name)
+            "marketplace.json": lambda p: self._write_scaffold_marketplace_json(p, repo_name),
             # Documentation (requires repo_name)
             "README.md": lambda p: self._write_scaffold_readme(p, repo_name),
             "CONTRIBUTING.md": lambda p: self._write_scaffold_contributing(p, repo_name),
