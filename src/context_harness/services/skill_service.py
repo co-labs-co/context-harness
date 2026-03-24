@@ -1075,10 +1075,13 @@ class SkillService:
         """
         # Critical infrastructure - ALWAYS updated (contains path references, must stay in sync)
         # These files reference other files by path and must be updated when scaffold structure changes
+        # Also includes files with AI agent instructions that are updated regularly
         critical_infrastructure = [
             "Dockerfile",  # Contains COPY paths that must match actual file locations
             "docker-compose.yml",  # Contains volume mounts and service config
             "registry/nginx.conf",  # Nginx config for serving files
+            "registry/web/index.html",  # AI agent instructions are updated regularly
+            "registry/web/skill.html",  # Skill detail page format may change
         ]
 
         # Infrastructure files - added if missing, or with --force
@@ -1094,9 +1097,6 @@ class SkillService:
             # Scripts
             "scripts/sync-registry.py",
             "scripts/validate-skills.py",
-            # HTTP registry web frontend
-            "registry/web/index.html",
-            "registry/web/skill.html",
             # Release configuration
             ".releaseplease.json",
             ".release-please-manifest.json",
@@ -1154,11 +1154,13 @@ class SkillService:
         Returns:
             List of files that were actually updated
         """
-        # Critical infrastructure - ALWAYS overwritten (contains path references)
+        # Critical infrastructure - ALWAYS overwritten (contains path references or updated instructions)
         critical_infrastructure = {
             "Dockerfile",
             "docker-compose.yml",
             "registry/nginx.conf",
+            "registry/web/index.html",  # AI agent instructions are updated regularly
+            "registry/web/skill.html",  # Skill detail page format may change
         }
 
         updated_files = []
