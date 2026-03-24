@@ -170,11 +170,31 @@ ch skill info <name>
 
 ### skill install
 
-Install a skill from the registry. Installs to all detected tool directories.
+Install a skill from the registry. Installs to all detected tool directories by default.
 
 ```bash
 ch skill install           # Interactive picker
 ch skill install <name>    # Install specific skill
+```
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `--tool-target` | Target tool: `both` (default), `opencode`, or `claude-code` |
+| `--registry` | Install from HTTP registry URL instead of configured registry |
+
+**Examples:**
+
+```bash
+# Install to both tools (default)
+ch skill install react-forms
+
+# Install to OpenCode only
+ch skill install react-forms --tool-target opencode
+
+# Install from HTTP registry
+ch skill install react-forms --registry http://localhost:8080
 ```
 
 **Installation paths:**
@@ -321,6 +341,47 @@ ch skill upgrade <name> --force  # Upgrade even if version is incompatible
 
 !!! tip "Incompatible Skills"
     If a skill requires a newer version of ContextHarness, the upgrade is blocked and a message is shown. Run `pipx upgrade context-harness` (or `uv tool upgrade context-harness`) first, or use `--force` to override.
+
+### skill upgrade-repo
+
+Upgrade a registry repository's scaffold files to the latest version. Run this in the root of your skills registry to get new features and fixes.
+
+```bash
+ch skill upgrade-repo              # Interactive upgrade
+ch skill upgrade-repo --check      # Only check for updates
+ch skill upgrade-repo --dry-run    # Preview changes without writing
+ch skill upgrade-repo --force      # Overwrite all scaffold files
+```
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `--check` | Only check what would be updated, don't make changes |
+| `--dry-run` | Show what would be updated without writing files |
+| `--force` | Overwrite existing scaffold files (including documentation) |
+
+**What gets updated:**
+
+| Category | Files | Behavior |
+|----------|-------|----------|
+| Critical infrastructure | Dockerfile, docker-compose.yml, nginx.conf, index.html, skill.html, llms.txt | Always updated |
+| Workflows | release.yml, sync-registry.yml, validate-skills.yml, auto-rebase.yml | Only if missing |
+| Documentation | README.md, CONTRIBUTING.md, QUICKSTART.md | Only if missing |
+
+!!! warning "Preserves Skills"
+    Files in `skill/` directory are never modified. Your skill content is safe.
+
+### skill use-registry
+
+Configure the CLI to use an HTTP registry instead of GitHub.
+
+```bash
+ch skill use-registry http://localhost:8080
+ch skill use-registry https://skills.example.com
+```
+
+This updates the project's configuration to fetch skills from the HTTP endpoint.
 
 ## Configuration Management
 

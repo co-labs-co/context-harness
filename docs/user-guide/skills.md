@@ -41,6 +41,28 @@ ch skill install react-forms
 !!! info "Dual-Tool Installation"
     When both OpenCode and Claude Code are configured, skills are automatically installed to both tool directories.
 
+#### Installation Options
+
+**Target specific tool:**
+
+```bash
+# Install to OpenCode only
+ch skill install react-forms --tool-target opencode
+
+# Install to Claude Code only
+ch skill install react-forms --tool-target claude-code
+
+# Install to both (default)
+ch skill install react-forms --tool-target both
+```
+
+**Install from HTTP registry:**
+
+```bash
+# Install directly from an HTTP registry URL
+ch skill install react-forms --registry http://localhost:8080
+```
+
 ### View Skill Details
 
 ```bash
@@ -599,6 +621,97 @@ Use `--force` to bypass the check if needed:
 ```bash
 ch skill upgrade react-forms --force
 ```
+
+## HTTP Registry Hosting
+
+Skills registries can be hosted via HTTP (no Git required) using Docker and nginx. This is useful for:
+
+- **Air-gapped environments** - No GitHub access required
+- **Private networks** - Host on internal infrastructure
+- **AI agent access** - Allow AI coding assistants to discover and install skills
+
+### Hosting a Registry
+
+Registries created with `ch skill init-repo` include Docker configuration:
+
+```bash
+# Build and run the registry
+docker-compose up -d
+
+# Registry available at http://localhost:8080
+```
+
+The scaffold includes:
+
+| File | Purpose |
+|------|---------|
+| `Dockerfile` | nginx-based container |
+| `docker-compose.yml` | Easy local deployment |
+| `registry/nginx.conf` | CORS-enabled configuration |
+| `registry/web/index.html` | Skill browser UI |
+| `registry/web/skill.html` | Individual skill pages |
+| `llms.txt` | AI agent installation instructions |
+
+### AI Agent Discovery
+
+The registry includes `llms.txt` at the root - an emerging standard for LLM-specific instructions. AI agents read this file to understand how to install skills:
+
+```
+http://localhost:8080/llms.txt
+```
+
+The file instructs agents to use the CLI:
+
+```
+ch skill install <skill-name>
+```
+
+### Installing from HTTP Registry
+
+```bash
+# Point CLI at HTTP registry
+ch skill use-registry http://localhost:8080
+
+# Or install directly with --registry flag
+ch skill install react-forms --registry http://localhost:8080
+```
+
+## Upgrading Registry Infrastructure
+
+Keep your registry scaffold up to date with the latest features:
+
+```bash
+# Check for updates
+ch skill upgrade-repo --check
+
+# Preview changes
+ch skill upgrade-repo --dry-run
+
+# Apply updates
+ch skill upgrade-repo
+
+# Force overwrite all scaffold files
+ch skill upgrade-repo --force
+```
+
+The command updates:
+
+- **Critical infrastructure** - Always updated: Dockerfile, nginx.conf, index.html, skill.html, llms.txt
+- **Documentation** - Only if missing (use `--force` to overwrite)
+- **Workflows** - Only if missing (use `--force` to overwrite)
+
+!!! warning "Preserves Your Skills"
+    The `upgrade-repo` command never modifies files in the `skill/` directory - your skill content is safe.
+
+### Registry Version Tracking
+
+Registries include a `.registry-version` file for tracking scaffold version:
+
+```
+4.1.1
+```
+
+Legacy registries (without this file) are detected as version `0.0.0` and can be upgraded.
 
 ## Configuration Precedence
 

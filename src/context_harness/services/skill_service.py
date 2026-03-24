@@ -1500,6 +1500,35 @@ context-harness config set skills-repo {repo_name}
 context-harness config set skills-repo {repo_name} --global
 ```
 
+## HTTP Hosting (Optional)
+
+Host this registry via HTTP for AI agents or air-gapped environments:
+
+```bash
+# Build and run with Docker
+docker-compose up -d
+
+# Registry available at http://localhost:8080
+```
+
+### AI Agent Discovery
+
+The registry includes `llms.txt` - an emerging standard for LLM-specific instructions. AI coding assistants read this file to understand how to install skills:
+
+```
+http://localhost:8080/llms.txt
+```
+
+### Install from HTTP Registry
+
+```bash
+# Point CLI at HTTP registry
+context-harness skill use-registry http://localhost:8080
+
+# Or install directly
+context-harness skill install <skill-name> --registry http://localhost:8080
+```
+
 ## Commit Convention
 
 | Commit prefix | Version bump | Example |
@@ -1523,11 +1552,20 @@ context-harness config set skills-repo {repo_name} --global
 ├── scripts/
 │   ├── sync-registry.py          # Parses skills → skills.json
 │   └── validate_skills.py        # Pydantic-based validation
+├── registry/                     # HTTP hosting (optional)
+│   ├── nginx.conf                # CORS-enabled nginx config
+│   └── web/
+│       ├── index.html            # Skill browser UI
+│       └── skill.html            # Individual skill pages
 ├── skill/
 │   └── example-skill/
 │       ├── SKILL.md              # Skill content (no version field)
 │       └── version.txt           # Managed by release-please
+├── Dockerfile                    # nginx container for HTTP hosting
+├── docker-compose.yml            # Easy local deployment
+├── llms.txt                      # AI agent installation instructions
 ├── skills.json                   # Auto-maintained registry manifest
+├── marketplace.json              # Plugin marketplace compatibility
 ├── release-please-config.json    # Per-skill release configuration
 ├── .release-please-manifest.json # Current versions (CI-managed)
 ├── CONTRIBUTING.md
