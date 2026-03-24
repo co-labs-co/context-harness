@@ -1,88 +1,71 @@
-# Quick Start: Add Your First Skill
+# Quick Start
 
-This guide walks you through adding a skill to **co-labs-co/context-harness**.
+Get up and running with ContextHarness in under 5 minutes.
 
-## Prerequisites
-
-- Git installed
-- GitHub CLI (`gh`) installed and authenticated
-- Repository cloned locally
-
-## ⚠️ Required GitHub Settings
-
-Before using this registry, configure GitHub Actions permissions:
-
-1. Go to **Settings** → **Actions** → **General**
-2. Under **Workflow permissions**, select **Read and write permissions**
-3. Check **Allow GitHub Actions to create and approve pull requests**
-
-Without these settings, release-please cannot create release PRs.
-
-## Steps
-
-### 1. Create the Skill
+## Install
 
 ```bash
-# Create skill directory
-mkdir -p skill/my-first-skill
+# Using uv (recommended)
+uv tool install context-harness
 
-# Create SKILL.md
-cat > skill/my-first-skill/SKILL.md << 'SKILLEOF'
----
-name: my-first-skill
-description: My first custom skill
-author: your-name
-tags:
-  - getting-started
----
-
-# My First Skill
-
-Instructions and content for your skill go here.
-SKILLEOF
-
-# Bootstrap version (required for release-please)
-echo "0.1.0" > skill/my-first-skill/version.txt
+# Using pip
+pip install context-harness
 ```
 
-### 2. Register with Release-Please
-
-Add the skill to `release-please-config.json` under `"packages"`:
-
-```json
-"skill/my-first-skill": {
-  "release-type": "simple",
-  "component": "my-first-skill"
-}
-```
-
-Add to `.release-please-manifest.json`:
-
-```json
-"skill/my-first-skill": "0.1.0"
-```
-
-### 3. Commit and Push
+## Initialize Your Project
 
 ```bash
-git add .
-git commit -m "feat: add my-first-skill"
-git push origin main
+cd your-project
+context-harness init
 ```
 
-### 4. What Happens Next
+This creates:
+- `.context-harness/` - Session data and project context
+- `.opencode/` - OpenCode configuration
+- `.claude/` - Claude Code configuration
 
-1. **release-please** creates a release PR bumping `version.txt`
-2. Merge the release PR → tag `my-first-skill@v0.1.0` is created
-3. **sync-registry** rebuilds `skills.json` automatically
-4. Users can now install: `context-harness skill install my-first-skill`
+## Start a Session
 
-## Install Your Skill
+In your AI coding tool (OpenCode or Claude Code):
+
+```
+/ctx my-feature
+```
+
+This creates an isolated session context for your work.
+
+## Work Normally
+
+Your AI agent now has access to:
+- Session context in `.context-harness/sessions/my-feature/SESSION.md`
+- Custom commands and skills
+- Project configuration
+
+## Compact When Needed
+
+When your conversation gets long, preserve what matters:
+
+```
+/compact
+```
+
+This saves key context to SESSION.md so your agent can pick up where you left off.
+
+## Next Steps
+
+- [Install skills](docs/user-guide/skills.md) to add specialized capabilities
+- [Configure MCP servers](docs/user-guide/mcp.md) for external integrations
+- [Create worktrees](docs/user-guide/worktrees.md) for parallel development
+
+## CLI Reference
 
 ```bash
-# Configure this registry (one time)
-context-harness config set skills-repo co-labs-co/context-harness
+context-harness --help
 
-# Install
-context-harness skill install my-first-skill
+Commands:
+  init       Initialize ContextHarness in your project
+  config     Manage configuration settings
+  skill      Install and manage skills
+  worktree   Manage git worktrees
+  mcp        Configure MCP servers
 ```
