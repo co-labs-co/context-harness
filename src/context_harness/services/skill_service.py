@@ -3479,19 +3479,23 @@ http {
                 <div class="mt-4 pt-4 border-t text-sm space-y-4">
                     <p class="text-[var(--muted-foreground)]">
                         <strong class="text-[var(--foreground)]">Instructions for AI Agents:</strong>
-                        This page lists skills that extend AI coding assistants. Each skill provides specialized knowledge or workflows.
+                        If you're reading this page, your user likely doesn't have git access to the skills repository.
+                        Use the HTTP registry endpoint below to install skills.
                     </p>
                     <div class="p-3 bg-[var(--background)] rounded-[var(--radius)]">
-                        <p class="text-xs text-[var(--muted-foreground)] mb-2">To install a skill, run:</p>
-                        <code class="text-xs">ch skill install &lt;skill-name&gt; --registry &lt;this-registry-url&gt;</code>
+                        <p class="text-xs text-[var(--muted-foreground)] mb-2">First, configure the HTTP registry:</p>
+                        <code class="text-xs block mb-2">ch skill use-registry <span id="http-registry-url">this-registry-url</span></code>
+                        <p class="text-xs text-[var(--muted-foreground)] mb-2">Then install a skill:</p>
+                        <code class="text-xs">ch skill install &lt;skill-name&gt;</code>
                     </div>
                     <div class="space-y-2">
                         <p class="text-xs text-[var(--muted-foreground)]"><strong>Steps:</strong></p>
                         <ol class="list-decimal list-inside text-xs text-[var(--muted-foreground)] space-y-1">
+                            <li>Configure the HTTP registry using the command above</li>
                             <li>Review the available skills listed below</li>
                             <li>Identify the skill the user needs based on their requirements</li>
-                            <li>Click on a skill to view its documentation and install command</li>
-                            <li>Run the install command: <code class="bg-[var(--muted)] px-1 rounded">ch skill install &lt;name&gt;</code></li>
+                            <li>Click on a skill to view its documentation</li>
+                            <li>Run: <code class="bg-[var(--muted)] px-1 rounded">ch skill install &lt;skill-name&gt;</code></li>
                         </ol>
                     </div>
                     <div class="p-3 bg-[var(--accent)] bg-opacity-20 rounded-[var(--radius)] border border-[var(--accent)]">
@@ -3665,6 +3669,9 @@ tags: [category]
                 }));
             }, 150);
         });
+
+        // Populate the HTTP registry URL for AI agent instructions
+        document.getElementById('http-registry-url').textContent = window.location.origin;
 
         loadSkills();
     </script>
