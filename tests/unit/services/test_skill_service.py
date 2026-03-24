@@ -1651,3 +1651,112 @@ class TestSkillServiceInitRegistryRepo:
             service.init_registry_repo("my-skills", private=False)
 
         assert client._create_repo_calls[0]["private"] is False
+
+
+# ---------------------------------------------------------------------------
+
+
+class TestSkillServiceUpgradeRegistryRepo:
+    """Tests for SkillService.upgrade_registry_repo()."""
+
+    def test_upgrade_detects_legacy_registry(self, tmp_path: Path) -> None:
+        """Legacy registry without .registry-version is detected as 0.0.0."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        # Create a minimal legacy registry (no .registry-version)
+        (tmp_path / "skills.json").write_text('{"skills": []}')
+        (tmp_path / "skill").mkdir()
+
+        result = service.upgrade_registry_repo(tmp_path, check_only=True)
+
+        assert isinstance(result, Success)
+        assert result.value["current_version"] == "0.0.0"
+
+    def test_upgrade_already_up_to_date(self, tmp_path: Path) -> None:
+        """Registry at current version returns already up to date."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        # Create registry at current version
+        (tmp_path / ".registry-version").write_text("0.0.0")  # Will be older than CH_VERSION
+        (tmp_path / "skills.json").write_text('{"skills": []}')
+        (tmp_path / "skill").mkdir()
+
+        result = service.upgrade_registry_repo(tmp_path, check_only=True)
+
+        assert isinstance(result, Success)
+        assert result.value["upgrade_available"] is True
+
+    def test_upgrade_adds_missing_files(self, tmp_path: Path) -> None:
+        """Upgrade adds scaffold files that don't exist."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        # Create minimal legacy registry
+        (tmp_path / "skills.json").write_text('{"skills": []}')
+        (tmp_path / "skill").mkdir()
+
+        result = service.upgrade_registry_repo(tmp_path, dry_run=True)
+
+        assert isinstance(result, Success)
+        # Should include Dockerfile, docker-compose.yml, etc.
+        files = result.value["files_to_update"]
+        assert "Dockerfile" in files
+        assert "docker-compose.yml" in files
+        assert ".registry-version" in files
+
+    def test_upgrade_skips_existing_files_without_force(self, tmp_path: Path) -> None:
+        """Without --force, existing scaffold files are not updated."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        # Create legacy registry with an existing Dockerfile
+        (tmp_path / "skills.json").write_text('{"skills": []}')
+        (tmp_path / "skill").mkdir()
+        (tmp_path / "Dockerfile").write_text("# OLD DOCKERFILE")
+
+        result = service.upgrade_registry_repo(tmp_path, dry_run=True)
+
+        assert isinstance(result, Success)
+        # Dockerfile exists, so it should NOT be in the update list
+        assert "Dockerfile" not in result.value["files_to_update"]
+
+    def test_upgrade_includes_existing_files_with_force(self, tmp_path: Path) -> None:
+        """With --force, existing scaffold files ARE included for update."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        # Create legacy registry with an existing Dockerfile
+        (tmp_path / "skills.json").write_text('{"skills": []}')
+        (tmp_path / "skill").mkdir()
+        (tmp_path / "Dockerfile").write_text("# OLD DOCKERFILE")
+
+        result = service.upgrade_registry_repo(tmp_path, dry_run=True, force=True)
+
+        assert isinstance(result, Success)
+        # With force, Dockerfile SHOULD be in the update list
+        assert "Dockerfile" in result.value["files_to_update"]
+
+    def test_upgrade_writes_version_marker(self, tmp_path: Path) -> None:
+        """Upgrade writes .registry-version file."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        # Create minimal legacy registry
+        (tmp_path / "skills.json").write_text('{"skills": []}')
+        (tmp_path / "skill").mkdir()
+
+        result = service.upgrade_registry_repo(tmp_path)
+
+        assert isinstance(result, Success)
+        assert (tmp_path / ".registry-version").exists()
+
+    def test_upgrade_updates_json_version_markers(self, tmp_path: Path) -> None:
+        """Upgrade updates registry_version in skills.json."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        # Create legacy registry with skills.json
+        (tmp_path / "skills.json").write_text('{"skills": [], "schema_version": "1.0"}')
+        (tmp_path / "skill").mkdir()
+
+        result = service.upgrade_registry_repo(tmp_path)
+
+        assert isinstance(result, Success)
+        data = json.loads((tmp_path / "skills.json").read_text())
+        assert data["schema_version"] == "1.1"
+        assert "registry_version" in data

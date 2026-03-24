@@ -998,7 +998,9 @@ class SkillService:
             )
 
         # Get list of files to update
-        files_to_update = self._get_scaffold_files_to_update(repo_path, current_version)
+        files_to_update = self._get_scaffold_files_to_update(
+            repo_path, current_version, force=force
+        )
 
         if dry_run:
             return Success(
@@ -1042,11 +1044,19 @@ class SkillService:
         return "0.0.0"  # Legacy registry
 
     def _get_scaffold_files_to_update(
-        self, repo_path: Path, current_version: str
+        self, repo_path: Path, current_version: str, *, force: bool = False
     ) -> list[str]:
         """Get list of scaffold files that need updating.
 
         Excludes user skill directories (skill/*) except scaffolded ones.
+
+        Args:
+            repo_path: Path to the registry repository
+            current_version: Current scaffold version of the registry
+            force: If True, include all scaffold files (overwrite mode)
+
+        Returns:
+            List of relative file paths to update
         """
         # Files that are always safe to update (infrastructure)
         scaffold_files = [
@@ -1066,13 +1076,17 @@ class SkillService:
             "registry/web/skill.html",
         ]
 
-        # Check which files exist and need updating
         files_to_update = []
-        for file_path in scaffold_files:
-            full_path = repo_path / file_path
-            # Include if file doesn't exist or if we're forcing
-            if not full_path.exists():
-                files_to_update.append(file_path)
+
+        if force:
+            # Force mode: include all scaffold files for overwrite
+            files_to_update = list(scaffold_files)
+        else:
+            # Normal mode: only include files that don't exist (new features)
+            for file_path in scaffold_files:
+                full_path = repo_path / file_path
+                if not full_path.exists():
+                    files_to_update.append(file_path)
 
         # Always add version marker files
         files_to_update.append(".registry-version")
