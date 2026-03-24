@@ -1162,6 +1162,7 @@ class SkillService:
             "registry/nginx.conf",
             "registry/web/index.html",  # AI agent instructions are updated regularly
             "registry/web/skill.html",  # Skill detail page format may change
+            "llms.txt",  # AI agent installation protocol (emerging standard)
         }
 
         updated_files = []
