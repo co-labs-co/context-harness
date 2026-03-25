@@ -369,8 +369,10 @@ ch skill upgrade-repo --force      # Overwrite all scaffold files
 | Workflows | release.yml, sync-registry.yml, validate-skills.yml, auto-rebase.yml | Only if missing |
 | Documentation | README.md, CONTRIBUTING.md, QUICKSTART.md | Only if missing |
 
-!!! warning "Preserves Skills"
+!!! warning "Preserves Skills and Versions"
     Files in `skill/` directory are never modified. Your skill content is safe.
+
+    Additionally, existing version entries in `.release-please-manifest.json` and the `skills` array in `skills.json` are preserved during upgrade to avoid resetting actual release versions.
 
 ### skill use-registry
 

@@ -1360,7 +1360,31 @@ class SkillService:
     # -- Scaffold file writers -----------------------------------------------
 
     def _write_scaffold_skills_json(self, repo_path: Path) -> None:
-        """Write skills.json — registry manifest with scaffolded skills."""
+        """Write skills.json — registry manifest with scaffolded skills.
+
+        When upgrading an existing repo, preserves existing skills array
+        to avoid clearing actual skill registrations. The sync-registry.py
+        script will rebuild this from skill directories during CI.
+        """
+        skills_json_path = repo_path / "skills.json"
+
+        # If file exists and has skills key, preserve the content
+        if skills_json_path.exists():
+            try:
+                existing = json.loads(skills_json_path.read_text())
+                # Preserve if it's a dict with a skills key (even if empty)
+                if isinstance(existing, dict) and "skills" in existing:
+                    # Update schema version but preserve skills
+                    existing["schema_version"] = "1.1"
+                    existing["registry_version"] = CH_VERSION
+                    skills_json_path.write_text(
+                        json.dumps(existing, indent=2) + "\n", encoding="utf-8"
+                    )
+                    return
+            except json.JSONDecodeError:
+                pass
+
+        # Default template for new registries
         registry = {
             "schema_version": "1.1",
             "registry_version": CH_VERSION,
@@ -1381,7 +1405,7 @@ class SkillService:
                 },
             ],
         }
-        (repo_path / "skills.json").write_text(
+        skills_json_path.write_text(
             json.dumps(registry, indent=2) + "\n", encoding="utf-8"
         )
 
@@ -1409,12 +1433,38 @@ class SkillService:
         )
 
     def _write_scaffold_release_please_manifest(self, repo_path: Path) -> None:
-        """Write .release-please-manifest.json with initial versions."""
-        manifest = {
+        """Write .release-please-manifest.json with initial versions.
+
+        Preserves existing version entries when upgrading an existing repo
+        to avoid resetting actual release versions to template defaults.
+        """
+        manifest_path = repo_path / ".release-please-manifest.json"
+
+        # Default template versions
+        default_manifest = {
             "skill/example-skill": "0.1.0",
             "skill/skill-release": "0.1.0",
         }
-        (repo_path / ".release-please-manifest.json").write_text(
+
+        # If file exists, preserve existing versions
+        if manifest_path.exists():
+            try:
+                existing = json.loads(manifest_path.read_text())
+                # Only merge if existing is a dict with string keys/values
+                if isinstance(existing, dict) and all(
+                    isinstance(k, str) and isinstance(v, str)
+                    for k, v in existing.items()
+                ):
+                    # Merge: existing versions take precedence over defaults
+                    manifest = {**default_manifest, **existing}
+                else:
+                    manifest = default_manifest
+            except json.JSONDecodeError:
+                manifest = default_manifest
+        else:
+            manifest = default_manifest
+
+        (manifest_path).write_text(
             json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
         )
 
@@ -1877,8 +1927,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add skills.json
-          git diff --cached --quiet || git commit -m "chore: sync skills.json [skip ci]"
+          git add skills.json marketplace.json skill/*/.listing.json
+          git diff --cached --quiet || git commit -m "chore: sync registry manifests [skip ci]"
           git push
 """
         (repo_path / ".github" / "workflows" / "sync-registry.yml").write_text(
@@ -2171,13 +2221,25 @@ def build_listing(skill_dir: Path) -> dict:
     return listing
 
 
+def get_registry_version() -> str:
+    """Read registry version from .registry-version file."""
+    version_file = Path(".registry-version")
+    if version_file.exists():
+        return version_file.read_text().strip()
+    return "0.0.0"
+
+
 def build_registry() -> dict:
     """Scan skill/ directories and build registry manifest."""
     skills_dir = Path("skill")
     skills = []
 
     if not skills_dir.exists():
-        return {"schema_version": "1.0", "skills": []}
+        return {
+            "schema_version": "1.1",
+            "registry_version": get_registry_version(),
+            "skills": [],
+        }
 
     for skill_dir in sorted(skills_dir.iterdir()):
         if not skill_dir.is_dir():
@@ -2222,7 +2284,11 @@ def build_registry() -> dict:
             json.dumps(listing, indent=2) + "\\n", encoding="utf-8"
         )
 
-    return {"schema_version": "1.0", "skills": skills}
+    return {
+        "schema_version": "1.1",
+        "registry_version": get_registry_version(),
+        "skills": skills,
+    }
 
 
 def update_marketplace_json(skills: list) -> None:
@@ -2246,10 +2312,10 @@ def update_marketplace_json(skills: list) -> None:
     # Load existing marketplace.json to preserve metadata
     marketplace_path = Path("marketplace.json")
     if marketplace_path.exists():
-                try:
-                    existing = json.loads(marketplace_path.read_text())
-                except json.JSONDecodeError:
-                    existing = {}
+        try:
+            existing = json.loads(marketplace_path.read_text())
+        except json.JSONDecodeError:
+            existing = {}
     else:
         existing = {}
 
@@ -2257,6 +2323,7 @@ def update_marketplace_json(skills: list) -> None:
     marketplace = {
         "$schema": "https://context-harness.dev/schemas/marketplace.json",
         "schema_version": existing.get("schema_version", "1.0"),
+        "registry_version": get_registry_version(),
         "name": existing.get("name", repo),
         "display_name": existing.get("display_name", f"{repo.split('/')[-1]} Skills Registry" if repo else "Skills Registry"),
         "description": existing.get("description", "ContextHarness skills registry with versioned skills"),
@@ -3439,12 +3506,13 @@ http {
         location /skill/ {
             alias /usr/share/nginx/html/skill/;
             add_header Access-Control-Allow-Origin * always;
+        }
 
-            # Markdown as text/markdown
-            location ~* \\.md$ {
-                default_type text/markdown;
-                add_header Access-Control-Allow-Origin * always;
-            }
+        # Markdown files with correct content-type (sibling location, not nested)
+        location ~* ^/skill/.*\\.md$ {
+            root /usr/share/nginx/html;
+            default_type text/markdown;
+            add_header Access-Control-Allow-Origin * always;
         }
 
         # Web frontend
@@ -3556,7 +3624,7 @@ See `/skills.json` for the complete list of available skills with descriptions.
 
         <!-- Build a Skill Section (hidden for now) -->
         <section id="build-skill" class="mb-8 p-4 bg-[var(--card)] border rounded-[var(--radius)]" hidden>
-            <div class="flex items-center justify-between cursor-pointer" onclick="toggleSection('build-content')">
+            <div id="build-toggle" class="flex items-center justify-between cursor-pointer">
                 <div class="flex items-center gap-2">
                     <span class="text-lg">🔧</span>
                     <h2 class="text-sm font-medium">Build a Skill</h2>
@@ -3658,26 +3726,70 @@ tags: [category]
         function render(list) {
             if (!list) list = skills;
             const container = document.getElementById('skills-list');
+            container.innerHTML = '';
 
             if (!list.length) {
                 container.innerHTML = '<div class="text-center py-12 text-[var(--muted-foreground)]">No skills found</div>';
                 return;
             }
 
-            container.innerHTML = list.map(function(s) {
-                return '<a href="skill.html?name=' + encodeURIComponent(s.name) + '" class="block group p-4 bg-[var(--card)] border rounded-[var(--radius)] hover:border-[var(--ring)] transition-colors">' +
-                    '<div class="flex items-start justify-between gap-4">' +
-                    '<div class="flex-1 min-w-0">' +
-                    '<div class="flex items-center gap-2 mb-1">' +
-                    '<h3 class="font-medium">' + esc(s.name) + '</h3>' +
-                    '<span class="font-mono text-xs px-1.5 py-0.5 bg-[var(--secondary)] text-[var(--secondary-foreground)] rounded">v' + esc(s.version || '0.0.0') + '</span>' +
-                    '</div>' +
-                    '<p class="text-sm text-[var(--muted-foreground)] line-clamp-2 mb-2">' + esc(s.description || 'No description') + '</p>' +
-                    (s.tags && s.tags.length ? '<div class="flex flex-wrap gap-1.5">' + s.tags.slice(0, 3).map(function(t) { return '<span class="text-xs px-2 py-0.5 bg-[var(--muted)] text-[var(--muted-foreground)] rounded-full">' + esc(t) + '</span>'; }).join('') + '</div>' : '') +
-                    '</div>' +
-                    '<button onclick="event.preventDefault();event.stopPropagation();copyInstall(\\'' + esc(s.name) + '\\')" class="shrink-0 px-3 py-1.5 text-xs font-medium bg-[var(--primary)] text-[var(--primary-foreground)] rounded-[var(--radius)] hover:opacity-90 transition-opacity">Copy</button>' +
-                    '</div></a>';
-            }).join('');
+            list.forEach(function(s) {
+                var a = document.createElement('a');
+                a.href = 'skill.html?name=' + encodeURIComponent(s.name);
+                a.className = 'block group p-4 bg-[var(--card)] border rounded-[var(--radius)] hover:border-[var(--ring)] transition-colors';
+
+                var outerDiv = document.createElement('div');
+                outerDiv.className = 'flex items-start justify-between gap-4';
+
+                var innerDiv = document.createElement('div');
+                innerDiv.className = 'flex-1 min-w-0';
+
+                var titleRow = document.createElement('div');
+                titleRow.className = 'flex items-center gap-2 mb-1';
+
+                var h3 = document.createElement('h3');
+                h3.className = 'font-medium';
+                h3.textContent = s.name;
+                titleRow.appendChild(h3);
+
+                var version = document.createElement('span');
+                version.className = 'font-mono text-xs px-1.5 py-0.5 bg-[var(--secondary)] text-[var(--secondary-foreground)] rounded';
+                version.textContent = 'v' + (s.version || '0.0.0');
+                titleRow.appendChild(version);
+                innerDiv.appendChild(titleRow);
+
+                var desc = document.createElement('p');
+                desc.className = 'text-sm text-[var(--muted-foreground)] line-clamp-2 mb-2';
+                desc.textContent = s.description || 'No description';
+                innerDiv.appendChild(desc);
+
+                if (s.tags && s.tags.length) {
+                    var tagsDiv = document.createElement('div');
+                    tagsDiv.className = 'flex flex-wrap gap-1.5';
+                    s.tags.slice(0, 3).forEach(function(t) {
+                        var tag = document.createElement('span');
+                        tag.className = 'text-xs px-2 py-0.5 bg-[var(--muted)] text-[var(--muted-foreground)] rounded-full';
+                        tag.textContent = t;
+                        tagsDiv.appendChild(tag);
+                    });
+                    innerDiv.appendChild(tagsDiv);
+                }
+                outerDiv.appendChild(innerDiv);
+
+                var btn = document.createElement('button');
+                btn.className = 'shrink-0 px-3 py-1.5 text-xs font-medium bg-[var(--primary)] text-[var(--primary-foreground)] rounded-[var(--radius)] hover:opacity-90 transition-opacity';
+                btn.textContent = 'Copy';
+                btn.dataset.skillName = s.name;
+                btn.addEventListener('click', function(evt) {
+                    evt.preventDefault();
+                    evt.stopPropagation();
+                    copyInstall(this.dataset.skillName);
+                });
+                outerDiv.appendChild(btn);
+
+                a.appendChild(outerDiv);
+                container.appendChild(a);
+            });
         }
 
         function copyInstall(name) {
@@ -3715,6 +3827,12 @@ tags: [category]
                 }));
             }, 150);
         });
+
+        // Setup event listeners for build toggle
+        var buildToggle = document.getElementById('build-toggle');
+        if (buildToggle) {
+            buildToggle.addEventListener('click', function() { toggleSection('build-content'); });
+        }
 
         loadSkills();
     </script>
@@ -3823,8 +3941,8 @@ tags: [category]
                                 <span id="file-path" class="font-mono text-sm">Select a file</span>
                             </div>
                             <div class="flex items-center gap-2">
-                                <button id="view-raw-btn" class="px-2.5 py-1 text-xs bg-[var(--secondary)] text-[var(--secondary-foreground)] rounded hover:opacity-90 transition-opacity" onclick="toggleRawView()">Raw</button>
-                                <button id="copy-btn" class="px-2.5 py-1 text-xs bg-[var(--primary)] text-[var(--primary-foreground)] rounded hover:opacity-90 transition-opacity" onclick="copyFileContent()">Copy</button>
+                                <button id="view-raw-btn" class="px-2.5 py-1 text-xs bg-[var(--secondary)] text-[var(--secondary-foreground)] rounded hover:opacity-90 transition-opacity">Raw</button>
+                                <button id="copy-btn" class="px-2.5 py-1 text-xs bg-[var(--primary)] text-[var(--primary-foreground)] rounded hover:opacity-90 transition-opacity">Copy</button>
                             </div>
                         </div>
                         <div id="file-content-wrapper" class="p-4 min-h-[400px] max-h-[70vh] overflow-auto">
@@ -3835,7 +3953,7 @@ tags: [category]
                         <h3 class="text-sm font-medium mb-2 text-[var(--muted-foreground)]">Install Command</h3>
                         <div class="flex items-center gap-2">
                             <code id="install-cmd" class="flex-1 px-3 py-2 bg-[var(--background)] rounded font-mono text-sm"></code>
-                            <button onclick="copyInstall()" class="px-3 py-2 text-xs font-medium bg-[var(--primary)] text-[var(--primary-foreground)] rounded hover:opacity-90 transition-opacity">Copy</button>
+                            <button id="install-copy-btn" class="px-3 py-2 text-xs font-medium bg-[var(--primary)] text-[var(--primary-foreground)] rounded hover:opacity-90 transition-opacity">Copy</button>
                         </div>
                     </div>
                 </div>
@@ -3892,15 +4010,24 @@ tags: [category]
         function renderFileTree(files) {
             var container = document.getElementById('file-tree');
             if (!files.length) { container.innerHTML = '<div class="text-[var(--muted-foreground)] py-2">No files found</div>'; return; }
-            container.innerHTML = files.map(function(f) {
-                return '<div class="file-item flex items-center gap-2" onclick="selectFile({path: \\'' + esc(f.path) + '\\', name: \\'' + esc(f.name) + '\\', icon: \\'' + f.icon + '\\', type: \\'file\\'})"><span>' + f.icon + '</span><span>' + esc(f.name) + '</span></div>';
-            }).join('');
+            container.innerHTML = '';
+            files.forEach(function(f) {
+                var div = document.createElement('div');
+                div.className = 'file-item flex items-center gap-2';
+                div.dataset.path = f.path;
+                div.dataset.name = f.name;
+                div.dataset.icon = f.icon;
+                div.dataset.type = 'file';
+                div.innerHTML = '<span>' + f.icon + '</span><span>' + esc(f.name) + '</span>';
+                div.addEventListener('click', function(evt) { selectFile(f, evt); });
+                container.appendChild(div);
+            });
         }
-        async function selectFile(file) {
+        async function selectFile(file, evt) {
             currentFile = file;
             var items = document.querySelectorAll('.file-item');
             items.forEach(function(el) { el.classList.remove('active'); });
-            if (event && event.target) { var parent = event.target.closest('.file-item'); if (parent) parent.classList.add('active'); }
+            if (evt && evt.target) { var parent = evt.target.closest('.file-item'); if (parent) parent.classList.add('active'); }
             document.getElementById('file-icon').textContent = file.icon;
             document.getElementById('file-path').textContent = file.path;
             var basePath = 'skill/' + skillName;
@@ -3914,7 +4041,7 @@ tags: [category]
         function renderContent(content, path) {
             var wrapper = document.getElementById('file-content-wrapper');
             var container = document.getElementById('file-content');
-            if (isRawView || !path.endsWith('..md')) {
+            if (isRawView || !path.endsWith('.md')) {
                 wrapper.className = 'p-4 min-h-[400px] max-h-[70vh] overflow-auto';
                 container.className = 'file-content';
                 container.textContent = content;
@@ -3934,7 +4061,11 @@ tags: [category]
             html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
             html = html.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>');
             html = html.replace(/\\*([^*]+)\\*/g, '<em>$1</em>');
-            html = html.replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, '<a href="$2">$1</a>');
+            html = html.replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, function(match, text, url) {
+                var safeUrl = sanitizeUrl(url);
+                if (safeUrl === null) return text;
+                return '<a href="' + escapeAttr(safeUrl) + '">' + text + '</a>';
+            });
             html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
             html = html.replace(/(<li>.*<\\/li>\\n?)+/g, '<ul>$&</ul>');
             html = html.replace(/\\n\\n/g, '</p><p>');
@@ -3947,6 +4078,19 @@ tags: [category]
             html = html.replace(/<p>(<ul>)/g, '$1');
             html = html.replace(/(<\\/ul>)<\\/p>/g, '$1');
             return html;
+        }
+        function sanitizeUrl(url) {
+            var trimmed = url.trim();
+            var safeProtocols = ['http://', 'https://', 'mailto:', 'tel:', '/'];
+            for (var i = 0; i < safeProtocols.length; i++) {
+                if (trimmed.toLowerCase().indexOf(safeProtocols[i]) === 0) {
+                    return trimmed;
+                }
+            }
+            return null;
+        }
+        function escapeAttr(str) {
+            return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         }
         function toggleRawView() {
             isRawView = !isRawView;
@@ -3979,6 +4123,10 @@ tags: [category]
             if (!str) return '';
             var el = document.createElement('div'); el.textContent = str; return el.innerHTML;
         }
+        // Setup event listeners for buttons
+        document.getElementById('view-raw-btn').addEventListener('click', toggleRawView);
+        document.getElementById('copy-btn').addEventListener('click', copyFileContent);
+        document.getElementById('install-copy-btn').addEventListener('click', copyInstall);
     </script>
 </body>
 </html>

@@ -351,7 +351,8 @@ The `skills.json` file is the registry manifest that the CLI fetches to discover
 
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
+  "registry_version": "0.8.0",
   "skills": [
     {
       "name": "my-skill",
@@ -369,6 +370,8 @@ The `skills.json` file is the registry manifest that the CLI fetches to discover
 
 | Field | Description |
 |-------|-------------|
+| `schema_version` | Schema version of the manifest format (currently "1.1") |
+| `registry_version` | ContextHarness CLI version that created/updated the registry |
 | `name` | Skill identifier (matches directory name) |
 | `description` | From SKILL.md frontmatter |
 | `version` | From `version.txt` (managed by release-please) |
