@@ -1368,11 +1368,12 @@ class SkillService:
         """
         skills_json_path = repo_path / "skills.json"
 
-        # If file exists and has skills, preserve them
+        # If file exists and has skills key, preserve the content
         if skills_json_path.exists():
             try:
                 existing = json.loads(skills_json_path.read_text())
-                if existing.get("skills"):
+                # Preserve if it's a dict with a skills key (even if empty)
+                if isinstance(existing, dict) and "skills" in existing:
                     # Update schema version but preserve skills
                     existing["schema_version"] = "1.1"
                     existing["registry_version"] = CH_VERSION
@@ -1449,8 +1450,15 @@ class SkillService:
         if manifest_path.exists():
             try:
                 existing = json.loads(manifest_path.read_text())
-                # Merge: existing versions take precedence over defaults
-                manifest = {**default_manifest, **existing}
+                # Only merge if existing is a dict with string keys/values
+                if isinstance(existing, dict) and all(
+                    isinstance(k, str) and isinstance(v, str)
+                    for k, v in existing.items()
+                ):
+                    # Merge: existing versions take precedence over defaults
+                    manifest = {**default_manifest, **existing}
+                else:
+                    manifest = default_manifest
             except json.JSONDecodeError:
                 manifest = default_manifest
         else:
@@ -1920,7 +1928,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add skills.json marketplace.json skill/*/.listing.json
-          git diff --cached --quiet || git commit -m "chore: sync skills.json [skip ci]"
+          git diff --cached --quiet || git commit -m "chore: sync registry manifests [skip ci]"
           git push
 """
         (repo_path / ".github" / "workflows" / "sync-registry.yml").write_text(
@@ -3502,7 +3510,7 @@ http {
 
         # Markdown files with correct content-type (sibling location, not nested)
         location ~* ^/skill/.*\\.md$ {
-            alias /usr/share/nginx/html;
+            root /usr/share/nginx/html;
             default_type text/markdown;
             add_header Access-Control-Allow-Origin * always;
         }
@@ -3616,7 +3624,7 @@ See `/skills.json` for the complete list of available skills with descriptions.
 
         <!-- Build a Skill Section (hidden for now) -->
         <section id="build-skill" class="mb-8 p-4 bg-[var(--card)] border rounded-[var(--radius)]" hidden>
-            <div class="flex items-center justify-between cursor-pointer" onclick="toggleSection('build-content')">
+            <div id="build-toggle" class="flex items-center justify-between cursor-pointer">
                 <div class="flex items-center gap-2">
                     <span class="text-lg">🔧</span>
                     <h2 class="text-sm font-medium">Build a Skill</h2>
@@ -3820,6 +3828,12 @@ tags: [category]
             }, 150);
         });
 
+        // Setup event listeners for build toggle
+        var buildToggle = document.getElementById('build-toggle');
+        if (buildToggle) {
+            buildToggle.addEventListener('click', function() { toggleSection('build-content'); });
+        }
+
         loadSkills();
     </script>
 </body>
@@ -3927,8 +3941,8 @@ tags: [category]
                                 <span id="file-path" class="font-mono text-sm">Select a file</span>
                             </div>
                             <div class="flex items-center gap-2">
-                                <button id="view-raw-btn" class="px-2.5 py-1 text-xs bg-[var(--secondary)] text-[var(--secondary-foreground)] rounded hover:opacity-90 transition-opacity" onclick="toggleRawView()">Raw</button>
-                                <button id="copy-btn" class="px-2.5 py-1 text-xs bg-[var(--primary)] text-[var(--primary-foreground)] rounded hover:opacity-90 transition-opacity" onclick="copyFileContent()">Copy</button>
+                                <button id="view-raw-btn" class="px-2.5 py-1 text-xs bg-[var(--secondary)] text-[var(--secondary-foreground)] rounded hover:opacity-90 transition-opacity">Raw</button>
+                                <button id="copy-btn" class="px-2.5 py-1 text-xs bg-[var(--primary)] text-[var(--primary-foreground)] rounded hover:opacity-90 transition-opacity">Copy</button>
                             </div>
                         </div>
                         <div id="file-content-wrapper" class="p-4 min-h-[400px] max-h-[70vh] overflow-auto">
@@ -3939,7 +3953,7 @@ tags: [category]
                         <h3 class="text-sm font-medium mb-2 text-[var(--muted-foreground)]">Install Command</h3>
                         <div class="flex items-center gap-2">
                             <code id="install-cmd" class="flex-1 px-3 py-2 bg-[var(--background)] rounded font-mono text-sm"></code>
-                            <button onclick="copyInstall()" class="px-3 py-2 text-xs font-medium bg-[var(--primary)] text-[var(--primary-foreground)] rounded hover:opacity-90 transition-opacity">Copy</button>
+                            <button id="install-copy-btn" class="px-3 py-2 text-xs font-medium bg-[var(--primary)] text-[var(--primary-foreground)] rounded hover:opacity-90 transition-opacity">Copy</button>
                         </div>
                     </div>
                 </div>
@@ -4050,7 +4064,7 @@ tags: [category]
             html = html.replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, function(match, text, url) {
                 var safeUrl = sanitizeUrl(url);
                 if (safeUrl === null) return text;
-                return '<a href="' + safeUrl + '">' + text + '</a>';
+                return '<a href="' + escapeAttr(safeUrl) + '">' + text + '</a>';
             });
             html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
             html = html.replace(/(<li>.*<\\/li>\\n?)+/g, '<ul>$&</ul>');
@@ -4074,6 +4088,9 @@ tags: [category]
                 }
             }
             return null;
+        }
+        function escapeAttr(str) {
+            return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         }
         function toggleRawView() {
             isRawView = !isRawView;
@@ -4106,6 +4123,10 @@ tags: [category]
             if (!str) return '';
             var el = document.createElement('div'); el.textContent = str; return el.innerHTML;
         }
+        // Setup event listeners for buttons
+        document.getElementById('view-raw-btn').addEventListener('click', toggleRawView);
+        document.getElementById('copy-btn').addEventListener('click', copyFileContent);
+        document.getElementById('install-copy-btn').addEventListener('click', copyInstall);
     </script>
 </body>
 </html>
