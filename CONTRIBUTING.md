@@ -1,71 +1,94 @@
-# Contributing to co-labs-co/context-harness
+# Contributing to ContextHarness
 
-## Adding a New Skill
+Thanks for your interest in contributing!
 
-1. **Create the skill directory**:
-   ```bash
-   mkdir -p skill/my-skill
-   ```
+## Development Setup
 
-2. **Create SKILL.md** with frontmatter (no version field!):
-   ```markdown
-   ---
-   name: my-skill
-   description: Brief description of what this skill does
-   author: your-name
-   tags:
-     - category
-   ---
+```bash
+# Clone the repo
+git clone https://github.com/co-labs-co/context-harness.git
+cd context-harness
 
-   # My Skill
+# Install dev dependencies with uv
+uv sync
 
-   Your skill content here...
-   ```
+# Create a feature branch
+git checkout -b feature/my-feature
+```
 
-3. **Create version.txt** (bootstrapped at 0.1.0):
-   ```bash
-   echo "0.1.0" > skill/my-skill/version.txt
-   ```
+## Running Tests
 
-4. **Register with release-please** — add to `release-please-config.json`:
-   ```json
-   {
-     "packages": {
-       "skill/my-skill": {
-         "release-type": "simple",
-         "component": "my-skill"
-       }
-     }
-   }
-   ```
+```bash
+# Run all tests
+uv run pytest
 
-   And to `.release-please-manifest.json`:
-   ```json
-   {
-     "skill/my-skill": "0.1.0"
-   }
-   ```
+# Run with coverage
+uv run pytest --cov=src/context_harness
+```
 
-5. **Commit and push**:
-   ```bash
-   git add skill/my-skill/ release-please-config.json .release-please-manifest.json
-   git commit -m "feat: add my-skill"
-   git push origin main
-   ```
+## Code Style
 
-## Updating a Skill
+- Python 3.9+ compatible
+- Follow the existing architecture (primitives → services → interfaces)
+- Add tests for new functionality
+- Update documentation as needed
 
-1. Edit the skill's `SKILL.md` file
-2. Commit with a conventional commit message:
-   - `fix: correct typo in examples` → patch bump
-   - `feat: add new section on error handling` → minor bump
-   - `feat!: restructure skill format` → major bump
-3. Push and merge your PR
-4. release-please will automatically create a release PR
+## Project Structure
 
-## Important Notes
+```
+src/context_harness/
+├── primitives/     # Domain models (pure dataclasses, no I/O)
+├── services/       # Business logic
+├── storage/        # Persistence layer
+├── interfaces/     # CLI and future interfaces
+└── templates/      # Framework templates
+```
 
-- **Never edit `version.txt` manually** — release-please manages it
-- **Never edit `skills.json` manually** — CI rebuilds it after releases
-- **Never add `version` to SKILL.md frontmatter** — it lives in `version.txt`
-- The `name` field in SKILL.md **must match** the directory name
+See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed design.
+
+## Commit Convention
+
+Use conventional commits:
+
+- `feat:` - New features
+- `fix:` - Bug fixes
+- `docs:` - Documentation changes
+- `refactor:` - Code refactoring
+- `test:` - Test changes
+- `chore:` - Maintenance tasks
+
+## Pull Requests
+
+1. Create a feature branch
+2. Make your changes
+3. Run tests: `uv run pytest`
+4. Submit a PR with a clear description
+
+## Adding MCP Server Support
+
+To add support for a new MCP server:
+
+1. Add server config to `src/context_harness/mcp_config.py`
+2. Add OAuth provider config if needed (in `oauth.py`)
+3. Add tests
+4. Update documentation
+
+## Adding Skills
+
+Skills are managed in a separate repository. See the [skills documentation](docs/user-guide/skills.md) for how to create and publish skills.
+
+## Documentation
+
+Documentation is built with MkDocs:
+
+```bash
+# Serve docs locally
+uv run mkdocs serve
+
+# Build for production
+uv run mkdocs build
+```
+
+## License
+
+By contributing, you agree that your contributions will be licensed under AGPL-3.0-or-later.

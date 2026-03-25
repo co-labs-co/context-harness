@@ -1,87 +1,167 @@
-# co-labs-co/context-harness
+# ContextHarness
 
-Skills registry for [ContextHarness](https://github.com/co-labs-co/context-harness).
+A CLI framework for AI-assisted development with context preservation.
 
-## ⚠️ Setup Required
+ContextHarness helps you maintain session continuity with AI coding agents through user-driven compaction cycles, so your agent remembers what matters across long conversations.
 
-After creating this repo, configure GitHub Actions permissions:
+## Install
 
-1. Go to **Settings** → **Actions** → **General**
-2. Under **Workflow permissions**, select **Read and write permissions**
-3. Check **Allow GitHub Actions to create and approve pull requests**
+```bash
+# Using uv (recommended)
+uv tool install context-harness
 
-Without these settings, release-please cannot create release PRs.
+# Using pip
+pip install context-harness
 
-## How It Works
-
-This registry uses **fully automated semantic versioning**. Authors never touch
-version numbers — just write content and use conventional commits:
-
-```mermaid
-flowchart TD
-    A["Author edits skill/my-skill/SKILL.md"] --> B["Commits: feat: add new examples"]
-    B --> C["PR merged to main"]
-    C --> D["release-please detects path-scoped change"]
-    D --> E["Creates release PR"]
-    E --> |"Bumps version.txt & CHANGELOG.md"| F["Release PR merged"]
-    F --> G["Tag: my-skill@v0.2.0 + GitHub Release"]
-    G --> H["sync-registry rebuilds skills.json"]
-    H --> I["CLI: context-harness skill outdated"]
-
-    style A fill:#f9f,stroke:#333
-    style G fill:#9f9,stroke:#333
-    style I fill:#9cf,stroke:#333
+# Using pipx
+pipx install context-harness
 ```
 
 ## Quick Start
 
-See [QUICKSTART.md](QUICKSTART.md) for adding your first skill.
+```bash
+# Initialize in your project
+context-harness init
 
-## Configure as Your Registry
+# Start a session
+/ctx my-feature
+
+# Work normally with your AI agent...
+
+# Compact when context gets full
+/compact
+```
+
+## What It Does
+
+ContextHarness creates a structured workflow for AI-assisted development:
+
+1. **Sessions** - Isolated work contexts for features, bugs, or experiments
+2. **Compaction** - Preserve key context when conversations get long
+3. **Skills** - Reusable prompts and workflows for common tasks
+4. **Worktrees** - Git worktree management for parallel development
+
+## CLI Commands
+
+```
+context-harness init          # Initialize framework in project
+context-harness config        # Manage configuration
+context-harness skill         # Install and manage skills
+context-harness worktree      # Create isolated worktrees
+context-harness mcp           # Configure MCP servers
+```
+
+### Init
 
 ```bash
-# Set for current project
-context-harness config set skills-repo co-labs-co/context-harness
+# Initialize for both OpenCode and Claude Code
+context-harness init
 
-# Set for all projects (user-level)
-context-harness config set skills-repo co-labs-co/context-harness --global
+# Initialize for a specific tool
+context-harness init --tool opencode
+context-harness init --tool claude-code
 ```
 
-## Commit Convention
+### Skills
 
-| Commit prefix | Version bump | Example |
-|---------------|-------------|---------|
-| `fix:` | Patch (0.0.x) | `fix: correct typo in examples` |
-| `feat:` | Minor (0.x.0) | `feat: add error handling patterns` |
-| `feat!:` | Major (x.0.0) | `feat!: restructure skill format` |
-| `docs:` | No release | `docs: update readme` |
-| `chore:` | No release | `chore: clean up formatting` |
+```bash
+# List available skills
+context-harness skill list
 
-## Structure
+# Install a skill
+context-harness skill install <skill-name>
+
+# Set your skills registry
+context-harness config set skills-repo owner/repo
+```
+
+### Worktrees
+
+```bash
+# Create an isolated worktree
+context-harness worktree create feature-branch
+
+# List worktrees
+context-harness worktree list
+```
+
+### MCP Servers
+
+```bash
+# Add an MCP server
+context-harness mcp add context7
+context-harness mcp add atlassian
+
+# Authenticate with OAuth
+context-harness mcp auth atlassian
+
+# List configured servers
+context-harness mcp list
+```
+
+## Directory Structure
+
+After running `context-harness init`, your project will have:
 
 ```
-co-labs-co/context-harness/
-├── .github/
-│   └── workflows/
-│       ├── release.yml           # release-please automation
-│       ├── sync-registry.yml     # Rebuilds skills.json post-release
-│       ├── validate-skills.yml   # PR validation checks
-│       └── auto-rebase.yml       # Auto-rebase PRs when shared files change
-├── scripts/
-│   ├── sync-registry.py          # Parses skills → skills.json
-│   └── validate_skills.py        # Pydantic-based validation
-├── skill/
-│   └── example-skill/
-│       ├── SKILL.md              # Skill content (no version field)
-│       └── version.txt           # Managed by release-please
-├── skills.json                   # Auto-maintained registry manifest
-├── release-please-config.json    # Per-skill release configuration
-├── .release-please-manifest.json # Current versions (CI-managed)
-├── CONTRIBUTING.md
-├── QUICKSTART.md
-└── README.md
+your-project/
+├── .context-harness/             # Session data and project context
+│   └── sessions/                 # Session directories
+│       └── <session-name>/       # e.g. my-feature
+│           └── SESSION.md        # Session transcript and notes
+├── .opencode/                    # OpenCode configuration
+│   ├── agent/                    # Custom agents
+│   ├── command/                  # Slash commands
+│   └── skill/                    # Installed skills
+├── .claude/                      # Claude Code configuration
+│   ├── agents/                   # Custom agents
+│   ├── commands/                 # Slash commands
+│   └── skills/                   # Installed skills
+└── opencode.json                 # Project configuration
+```
+
+## Skills Registry
+
+ContextHarness can install skills from any GitHub repository. The default registry is `co-labs-co/context-harness-skills` (the official skills registry: https://github.com/co-labs-co/context-harness-skills).
+
+To use a different registry:
+
+```bash
+# Project-level
+context-harness config set skills-repo your-org/your-skills
+
+# User-level (applies to all projects)
+context-harness config set skills-repo your-org/your-skills --user
+```
+
+## Documentation
+
+- [Getting Started](docs/getting-started/) - Step-by-step guides
+- [User Guide](docs/user-guide/) - Detailed usage documentation
+- [Reference](docs/reference/) - API and command reference
+- [Architecture](ARCHITECTURE.md) - System design
+
+## Development
+
+```bash
+# Clone the repo
+git clone https://github.com/co-labs-co/context-harness.git
+cd context-harness
+
+# Install dev dependencies
+uv sync
+
+# Run tests
+uv run pytest
+
+# Build docs
+uv run mkdocs serve
 ```
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for how to add or update skills.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## License
+
+AGPL-3.0-or-later
