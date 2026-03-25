@@ -54,8 +54,8 @@ This saves key context to SESSION.md so your agent can pick up where you left of
 ## Next Steps
 
 - [Install skills](docs/user-guide/skills.md) to add specialized capabilities
-- [Configure MCP servers](docs/user-guide/mcp.md) for external integrations
-- [Create worktrees](docs/user-guide/worktrees.md) for parallel development
+- [Use commands](docs/user-guide/commands.md) for slash commands
+- [Manage sessions](docs/user-guide/sessions.md) for context preservation
 
 ## CLI Reference
 

@@ -105,17 +105,19 @@ After running `context-harness init`, your project will have:
 
 ```
 your-project/
-├── .context-harness/     # Session data and project context
-│   └── sessions/         # Session files (SESSION.md)
-├── .opencode/            # OpenCode configuration
-│   ├── agents/           # Custom agents
-│   ├── commands/         # Slash commands
-│   └── skills/           # Installed skills
-├── .claude/              # Claude Code configuration
-│   ├── agents/           # Custom agents
-│   ├── commands/         # Slash commands
-│   └── skills/           # Installed skills
-└── opencode.json         # Project configuration
+├── .context-harness/             # Session data and project context
+│   └── sessions/                 # Session directories
+│       └── <session-name>/       # e.g. my-feature
+│           └── SESSION.md        # Session transcript and notes
+├── .opencode/                    # OpenCode configuration
+│   ├── agent/                    # Custom agents
+│   ├── command/                  # Slash commands
+│   └── skill/                    # Installed skills
+├── .claude/                      # Claude Code configuration
+│   ├── agents/                   # Custom agents
+│   ├── commands/                 # Slash commands
+│   └── skills/                   # Installed skills
+└── opencode.json                 # Project configuration
 ```
 
 ## Skills Registry
