@@ -120,7 +120,7 @@ your-project/
 
 ## Skills Registry
 
-ContextHarness can install skills from any GitHub repository. The default registry is `co-labs-co/context-harness` (this repo).
+ContextHarness can install skills from any GitHub repository. The default registry is `co-labs-co/context-harness-skills` (the official skills registry: https://github.com/co-labs-co/context-harness-skills).
 
 To use a different registry:
 
