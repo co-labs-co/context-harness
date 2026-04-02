@@ -2201,3 +2201,50 @@ class TestSkillServiceUpgradeRegistryRepo:
 
         data = json.loads((tmp_path / "skills.json").read_text())
         assert "min_context_harness_version" not in data["skills"][0]
+
+    def test_upgrade_regenerates_skills_json_included_in_files_updated(
+        self, tmp_path: Path
+    ) -> None:
+        """Upgrade includes skills.json in the files_updated list."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        (tmp_path / "skills.json").write_text('{"skills": []}')
+        skill_dir = tmp_path / "skill" / "my-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: my-skill\ndescription: A skill\n---\n# My Skill\n"
+        )
+        (skill_dir / "version.txt").write_text("1.0.0")
+
+        result = service.upgrade_registry_repo(tmp_path)
+        assert isinstance(result, Success)
+        assert "skills.json" in result.value["files_updated"]
+
+    def test_upgrade_no_skill_dir_still_updates_skills_json_version(
+        self, tmp_path: Path
+    ) -> None:
+        """Without a skill/ directory, skills.json version markers are still updated."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        # Pre-existing skills.json with stale version markers
+        (tmp_path / "skills.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "1.0",
+                    "registry_version": "0.0.0",
+                    "skills": [{"name": "existing-skill", "version": "1.0.0"}],
+                }
+            )
+        )
+        # No skill/ directory at all
+
+        result = service.upgrade_registry_repo(tmp_path)
+        assert isinstance(result, Success)
+
+        data = json.loads((tmp_path / "skills.json").read_text())
+        # Version markers should be updated
+        assert data["schema_version"] == "1.1"
+        assert data["registry_version"] != "0.0.0"
+        # Existing skills list should be preserved (not wiped)
+        assert len(data["skills"]) == 1
+        assert data["skills"][0]["name"] == "existing-skill"

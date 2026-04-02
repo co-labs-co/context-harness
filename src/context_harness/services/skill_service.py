@@ -1039,7 +1039,9 @@ class SkillService:
         # Regenerate skills.json with full metadata from skill/ directories
         # This ensures the web frontend has name, description, version, tags
         # instead of stale id-only entries from the old schema
-        self._regenerate_skills_json(repo_path)
+        if self._regenerate_skills_json(repo_path):
+            if "skills.json" not in updated_files:
+                updated_files.append("skills.json")
 
         return Success(
             value={
@@ -1300,21 +1302,41 @@ class SkillService:
             except (json.JSONDecodeError, KeyError):
                 pass
 
-    def _regenerate_skills_json(self, repo_path: Path) -> None:
+    def _regenerate_skills_json(self, repo_path: Path) -> bool:
         """Regenerate skills.json by scanning skill/ directories for metadata.
 
         Parses SKILL.md frontmatter and version.txt for each skill directory,
-        producing the full skills.json that the web frontend requires.
+        producing the full skills.json that the web frontend requires
+        (name, version, description, tags, author, content_hash).
 
-        This is the Python equivalent of what scripts/sync-registry.py does,
-        but runs inline during upgrade-repo so skills.json is never stale.
+        Unlike scripts/sync-registry.py, this does NOT generate per-skill
+        .listing.json files — only the top-level skills.json.
+
+        If no skill/ directory exists, falls back to updating version markers
+        in any existing skills.json without altering the skills list.
 
         Args:
             repo_path: Path to the registry repository
+
+        Returns:
+            True if skills.json was written, False otherwise.
         """
         skills_dir = repo_path / "skill"
         if not skills_dir.exists():
-            return
+            # No skill/ dir — still update version markers in existing skills.json
+            skills_json_path = repo_path / "skills.json"
+            if skills_json_path.exists():
+                try:
+                    data = json.loads(skills_json_path.read_text(encoding="utf-8"))
+                    data["registry_version"] = CH_VERSION
+                    data["schema_version"] = "1.1"
+                    skills_json_path.write_text(
+                        json.dumps(data, indent=2) + "\n", encoding="utf-8"
+                    )
+                    return True
+                except (json.JSONDecodeError, OSError):
+                    pass
+            return False
 
         skills_json_path = repo_path / "skills.json"
 
@@ -1382,8 +1404,9 @@ class SkillService:
             skills_json_path.write_text(
                 json.dumps(registry, indent=2) + "\n", encoding="utf-8"
             )
+            return True
         except OSError:
-            pass  # Don't fail the upgrade if skills.json can't be written
+            return False  # Don't fail the upgrade if skills.json can't be written
 
     def _write_registry_scaffold(self, repo_path: Path, repo_name: str) -> None:
         """Write the full skills registry scaffold with CI/CD automation.

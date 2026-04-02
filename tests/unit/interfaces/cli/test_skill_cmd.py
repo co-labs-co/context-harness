@@ -651,8 +651,9 @@ class TestSkillUpgradeRepoCommand:
         assert result.exit_code == 1
         assert "failed" in result.output.lower()
 
-    def test_upgrade_repo_default_path_is_cwd(self, tmp_path) -> None:
+    def test_upgrade_repo_default_path_is_cwd(self, tmp_path, monkeypatch) -> None:
         """Without PATH argument, defaults to current directory."""
+        monkeypatch.chdir(tmp_path)
         runner = CliRunner()
 
         result_data = Success(
@@ -669,13 +670,17 @@ class TestSkillUpgradeRepoCommand:
 
         assert result.exit_code == 0
         mock_cls.return_value.upgrade_registry_repo.assert_called_once()
+        # Verify the resolved path matches the cwd we set
+        call_args = mock_cls.return_value.upgrade_registry_repo.call_args
+        from pathlib import Path
 
-    def test_upgrade_repo_invalid_path_exits_nonzero(self) -> None:
+        assert call_args.args[0] == Path(tmp_path).resolve()
+
+    def test_upgrade_repo_invalid_path_exits_nonzero(self, tmp_path) -> None:
         """Non-existent path → Click error, exit != 0."""
         runner = CliRunner()
-        result = runner.invoke(
-            skill_group, ["upgrade-repo", "/nonexistent/path/to/repo"]
-        )
+        missing = str(tmp_path / "missing")
+        result = runner.invoke(skill_group, ["upgrade-repo", missing])
 
         assert result.exit_code != 0
 
