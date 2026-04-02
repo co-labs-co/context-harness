@@ -1238,7 +1238,9 @@ class TestSkillServiceInitRegistryRepo:
         for filepath in expected_files:
             assert (tmp_path / filepath).exists(), f"Missing: {filepath}"
 
-    def test_scaffold_llms_txt_contains_installation_instructions(self, tmp_path: Path) -> None:
+    def test_scaffold_llms_txt_contains_installation_instructions(
+        self, tmp_path: Path
+    ) -> None:
         """llms.txt contains AI agent installation protocol."""
         service = SkillService(github_client=MockGitHubClient())
         service._write_registry_scaffold(tmp_path, "test-user/my-skills")
@@ -1454,9 +1456,7 @@ class TestSkillServiceInitRegistryRepo:
         service = SkillService(github_client=MockGitHubClient())
         service._write_registry_scaffold(tmp_path, "test-user/my-skills")
 
-        content = (
-            tmp_path / ".github" / "workflows" / "auto-rebase.yml"
-        ).read_text()
+        content = (tmp_path / ".github" / "workflows" / "auto-rebase.yml").read_text()
         assert "Auto Rebase" in content
         assert "skills.json" in content
         assert "release-please-config.json" in content
@@ -1699,7 +1699,9 @@ class TestSkillServiceUpgradeRegistryRepo:
         service = SkillService(github_client=MockGitHubClient())
 
         # Create registry at current version
-        (tmp_path / ".registry-version").write_text("0.0.0")  # Will be older than CH_VERSION
+        (tmp_path / ".registry-version").write_text(
+            "0.0.0"
+        )  # Will be older than CH_VERSION
         (tmp_path / "skills.json").write_text('{"skills": []}')
         (tmp_path / "skill").mkdir()
 
@@ -1737,7 +1739,9 @@ class TestSkillServiceUpgradeRegistryRepo:
         (tmp_path / "skills.json").write_text('{"skills": []}')
         (tmp_path / "skill").mkdir()
         (tmp_path / ".github" / "workflows").mkdir(parents=True)
-        (tmp_path / ".github" / "workflows" / "release.yml").write_text("# OLD WORKFLOW")
+        (tmp_path / ".github" / "workflows" / "release.yml").write_text(
+            "# OLD WORKFLOW"
+        )
 
         result = service.upgrade_registry_repo(tmp_path, dry_run=True)
 
@@ -1921,7 +1925,9 @@ class TestSkillServiceUpgradeRegistryRepo:
         assert (tmp_path / "registry" / "nginx.conf").exists()
         assert (tmp_path / "registry" / "web" / "index.html").exists()
 
-    def test_upgrade_always_updates_critical_infrastructure(self, tmp_path: Path) -> None:
+    def test_upgrade_always_updates_critical_infrastructure(
+        self, tmp_path: Path
+    ) -> None:
         """Critical infrastructure is always updated, even without --force."""
         service = SkillService(github_client=MockGitHubClient())
 
@@ -1931,7 +1937,9 @@ class TestSkillServiceUpgradeRegistryRepo:
         (tmp_path / "skill").mkdir()
         (tmp_path / "Dockerfile").write_text("# OLD DOCKERFILE CONTENT")
         (tmp_path / ".github" / "workflows").mkdir(parents=True)
-        (tmp_path / ".github" / "workflows" / "release.yml").write_text("# OLD WORKFLOW")
+        (tmp_path / ".github" / "workflows" / "release.yml").write_text(
+            "# OLD WORKFLOW"
+        )
 
         # Without force, critical infrastructure should still be updated
         result_no_force = service.upgrade_registry_repo(tmp_path, dry_run=True)
@@ -1954,3 +1962,74 @@ class TestSkillServiceUpgradeRegistryRepo:
         # Everything is included with force
         assert "Dockerfile" in force_files
         assert ".github/workflows/release.yml" in force_files
+
+    def test_upgrade_regenerates_skills_json_with_full_metadata(
+        self, tmp_path: Path
+    ) -> None:
+        """Upgrade regenerates skills.json with name/description/version from SKILL.md."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        # Create legacy registry with old-format skills.json (id-only entries)
+        (tmp_path / "skills.json").write_text(
+            json.dumps({"skills": [{"id": "my-skill"}]})
+        )
+        (tmp_path / "skill").mkdir()
+
+        # Create a skill directory with proper SKILL.md + version.txt
+        skill_dir = tmp_path / "skill" / "my-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: my-skill\ndescription: A test skill\ntags: [testing]\n---\n# My Skill\n"
+        )
+        (skill_dir / "version.txt").write_text("1.2.3")
+
+        result = service.upgrade_registry_repo(tmp_path)
+
+        assert isinstance(result, Success)
+
+        # Verify skills.json was regenerated with full metadata
+        data = json.loads((tmp_path / "skills.json").read_text())
+        assert len(data["skills"]) == 1
+
+        skill = data["skills"][0]
+        assert skill["name"] == "my-skill"
+        assert skill["description"] == "A test skill"
+        assert skill["version"] == "1.2.3"
+        assert skill["tags"] == ["testing"]
+        assert "path" in skill
+        assert "content_hash" in skill
+
+        # Old id-only format should be gone
+        assert "id" not in skill
+
+    def test_upgrade_regenerates_skills_json_multiple_skills(
+        self, tmp_path: Path
+    ) -> None:
+        """Upgrade regenerates skills.json with all skills from skill/ directory."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        # Create legacy registry
+        (tmp_path / "skills.json").write_text('{"skills": [{"id": "old"}]}')
+        (tmp_path / "skill").mkdir()
+
+        # Create two skill directories
+        for name, desc, ver in [
+            ("alpha-skill", "First skill", "1.0.0"),
+            ("beta-skill", "Second skill", "2.0.0"),
+        ]:
+            d = tmp_path / "skill" / name
+            d.mkdir()
+            (d / "SKILL.md").write_text(
+                f"---\nname: {name}\ndescription: {desc}\n---\n# {name}\n"
+            )
+            (d / "version.txt").write_text(ver)
+
+        result = service.upgrade_registry_repo(tmp_path)
+
+        assert isinstance(result, Success)
+        data = json.loads((tmp_path / "skills.json").read_text())
+        assert len(data["skills"]) == 2
+
+        names = [s["name"] for s in data["skills"]]
+        assert "alpha-skill" in names
+        assert "beta-skill" in names

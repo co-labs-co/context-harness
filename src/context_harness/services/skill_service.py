@@ -1035,6 +1035,11 @@ class SkillService:
         self._write_scaffold_registry_version(repo_path)
         self._update_json_version_markers(repo_path)
 
+        # Regenerate skills.json with full metadata from skill/ directories
+        # This ensures the web frontend has name, description, version, tags
+        # instead of stale id-only entries from the old schema
+        self._regenerate_skills_json(repo_path)
+
         return Success(
             value={
                 "current_version": current_version,
@@ -1205,7 +1210,9 @@ class SkillService:
             # Extract owner/repo from URL
             if "github.com" in url:
                 # Handle both https and ssh URLs
-                parts = url.replace(".git", "").replace("git@github.com:", "").split("/")
+                parts = (
+                    url.replace(".git", "").replace("git@github.com:", "").split("/")
+                )
                 if len(parts) >= 2:
                     return f"{parts[-2]}/{parts[-1]}"
         except (subprocess.CalledProcessError, IndexError):
@@ -1237,10 +1244,16 @@ class SkillService:
             "scripts/validate-skills.py": self._write_scaffold_validate_skills_script,
             # HTTP registry (Docker/nginx)
             "Dockerfile": self._write_scaffold_dockerfile,
-            "docker-compose.yml": lambda p: self._write_scaffold_docker_compose(p, repo_name),
+            "docker-compose.yml": lambda p: self._write_scaffold_docker_compose(
+                p, repo_name
+            ),
             "registry/nginx.conf": self._write_scaffold_nginx_conf,
-            "registry/web/index.html": lambda p: self._write_scaffold_index_html(p, repo_name),
-            "registry/web/skill.html": lambda p: self._write_scaffold_skill_html(p, repo_name),
+            "registry/web/index.html": lambda p: self._write_scaffold_index_html(
+                p, repo_name
+            ),
+            "registry/web/skill.html": lambda p: self._write_scaffold_skill_html(
+                p, repo_name
+            ),
             # AI agent instructions
             "llms.txt": self._write_scaffold_llms_txt,
             # Release configuration
@@ -1249,10 +1262,14 @@ class SkillService:
             # Git configuration
             ".gitignore": self._write_scaffold_gitignore,
             # Marketplace manifest (requires repo_name)
-            "marketplace.json": lambda p: self._write_scaffold_marketplace_json(p, repo_name),
+            "marketplace.json": lambda p: self._write_scaffold_marketplace_json(
+                p, repo_name
+            ),
             # Documentation (requires repo_name)
             "README.md": lambda p: self._write_scaffold_readme(p, repo_name),
-            "CONTRIBUTING.md": lambda p: self._write_scaffold_contributing(p, repo_name),
+            "CONTRIBUTING.md": lambda p: self._write_scaffold_contributing(
+                p, repo_name
+            ),
             "QUICKSTART.md": lambda p: self._write_scaffold_quickstart(p, repo_name),
         }
 
@@ -1289,6 +1306,79 @@ class SkillService:
                 )
             except (json.JSONDecodeError, KeyError):
                 pass
+
+    def _regenerate_skills_json(self, repo_path: Path) -> None:
+        """Regenerate skills.json by scanning skill/ directories for metadata.
+
+        Parses SKILL.md frontmatter and version.txt for each skill directory,
+        producing the full skills.json that the web frontend requires.
+
+        This is the Python equivalent of what scripts/sync-registry.py does,
+        but runs inline during upgrade-repo so skills.json is never stale.
+
+        Args:
+            repo_path: Path to the registry repository
+        """
+        import hashlib
+
+        skills_dir = repo_path / "skill"
+        if not skills_dir.exists():
+            return
+
+        skills_json_path = repo_path / "skills.json"
+
+        # Collect skill metadata from each skill directory
+        skills = []
+        for skill_dir in sorted(skills_dir.iterdir()):
+            if not skill_dir.is_dir():
+                continue
+
+            skill_md = skill_dir / "SKILL.md"
+            if not skill_md.exists():
+                continue
+
+            # Parse frontmatter using existing method
+            try:
+                metadata = self._parse_skill_frontmatter(skill_dir)
+            except Exception:
+                # If parsing fails, use directory name as fallback
+                metadata = SkillMetadata(
+                    name=skill_dir.name,
+                    description="",
+                )
+
+            # Read version from version.txt (fall back to frontmatter or 0.1.0)
+            version = metadata.version or "0.1.0"
+            version_txt = skill_dir / "version.txt"
+            if version_txt.exists():
+                version = version_txt.read_text(encoding="utf-8").strip() or version
+
+            # Compute content hash for change detection
+            content_hash = hashlib.sha256(skill_md.read_bytes()).hexdigest()[:16]
+
+            skill_entry = {
+                "name": metadata.name or skill_dir.name,
+                "description": metadata.description or "",
+                "version": version,
+                "author": metadata.author or "",
+                "tags": metadata.tags or [],
+                "path": f"skill/{skill_dir.name}",
+                "content_hash": content_hash,
+            }
+
+            # Only include min_context_harness_version if present
+            # (future-proofing, parsed from frontmatter if available)
+            skills.append(skill_entry)
+
+        # Write the full skills.json
+        registry = {
+            "schema_version": "1.1",
+            "registry_version": CH_VERSION,
+            "skills": skills,
+        }
+        skills_json_path.write_text(
+            json.dumps(registry, indent=2) + "\n", encoding="utf-8"
+        )
 
     def _write_registry_scaffold(self, repo_path: Path, repo_name: str) -> None:
         """Write the full skills registry scaffold with CI/CD automation.
@@ -3295,9 +3385,7 @@ python scripts/validate_skills.py
 
     # -- HTTP Registry Scaffold Methods --------------------------------------
 
-    def _write_scaffold_marketplace_json(
-        self, repo_path: Path, repo_name: str
-    ) -> None:
+    def _write_scaffold_marketplace_json(self, repo_path: Path, repo_name: str) -> None:
         """Write marketplace.json — standardized manifest for plugin discovery.
 
         This format provides compatibility with future Claude Code plugin
@@ -3341,9 +3429,7 @@ python scripts/validate_skills.py
             json.dumps(marketplace, indent=2) + "\n", encoding="utf-8"
         )
 
-    def _write_scaffold_http_registry(
-        self, repo_path: Path, repo_name: str
-    ) -> None:
+    def _write_scaffold_http_registry(self, repo_path: Path, repo_name: str) -> None:
         """Write HTTP registry hosting files for Docker/nginx deployment.
 
         Creates a complete setup for hosting the skills registry via HTTP:
@@ -3398,9 +3484,7 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \\
 """
         (repo_path / "Dockerfile").write_text(content, encoding="utf-8")
 
-    def _write_scaffold_docker_compose(
-        self, repo_path: Path, repo_name: str
-    ) -> None:
+    def _write_scaffold_docker_compose(self, repo_path: Path, repo_name: str) -> None:
         """Write docker-compose.yml for easy deployment."""
         content = f"""\
 # ContextHarness Skills Registry
@@ -3562,9 +3646,7 @@ See `/skills.json` for the complete list of available skills with descriptions.
 """
         (repo_path / "llms.txt").write_text(content, encoding="utf-8")
 
-    def _write_scaffold_index_html(
-        self, repo_path: Path, repo_name: str
-    ) -> None:
+    def _write_scaffold_index_html(self, repo_path: Path, repo_name: str) -> None:
         """Write index.html - static frontend for browsing skills.
 
         A clean shadcn-inspired UI using Tailwind CSS with the project theme.
@@ -3843,9 +3925,7 @@ tags: [category]
             content, encoding="utf-8"
         )
 
-    def _write_scaffold_skill_html(
-        self, repo_path: Path, repo_name: str
-    ) -> None:
+    def _write_scaffold_skill_html(self, repo_path: Path, repo_name: str) -> None:
         """Write skill.html - individual skill detail page with file explorer."""
         content = """\
 <!DOCTYPE html>
