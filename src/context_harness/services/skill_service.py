@@ -8,6 +8,7 @@ Supports both OpenCode (.opencode/skill/) and Claude Code (.claude/skills/) tool
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
@@ -1280,20 +1281,12 @@ class SkillService:
             self._write_scaffold_registry_version(repo_path)
 
     def _update_json_version_markers(self, repo_path: Path) -> None:
-        """Update registry_version in skills.json and marketplace.json."""
-        # Update skills.json
-        skills_json_path = repo_path / "skills.json"
-        if skills_json_path.exists():
-            try:
-                data = json.loads(skills_json_path.read_text(encoding="utf-8"))
-                data["registry_version"] = CH_VERSION
-                data["schema_version"] = "1.1"
-                skills_json_path.write_text(
-                    json.dumps(data, indent=2) + "\n", encoding="utf-8"
-                )
-            except (json.JSONDecodeError, KeyError):
-                pass  # Don't fail if JSON is malformed
+        """Update registry_version in marketplace.json.
 
+        Note: skills.json is handled by _regenerate_skills_json() which
+        rewrites the file from scratch during upgrade-repo, so we skip it
+        here to avoid redundant I/O.
+        """
         # Update marketplace.json
         marketplace_path = repo_path / "marketplace.json"
         if marketplace_path.exists():
@@ -1319,8 +1312,6 @@ class SkillService:
         Args:
             repo_path: Path to the registry repository
         """
-        import hashlib
-
         skills_dir = repo_path / "skill"
         if not skills_dir.exists():
             return
@@ -1356,7 +1347,7 @@ class SkillService:
             # Compute content hash for change detection
             content_hash = hashlib.sha256(skill_md.read_bytes()).hexdigest()[:16]
 
-            skill_entry = {
+            skill_entry: dict = {
                 "name": metadata.name or skill_dir.name,
                 "description": metadata.description or "",
                 "version": version,
@@ -1366,8 +1357,19 @@ class SkillService:
                 "content_hash": content_hash,
             }
 
-            # Only include min_context_harness_version if present
-            # (future-proofing, parsed from frontmatter if available)
+            # Include min_context_harness_version if present in frontmatter
+            # to maintain parity with sync-registry.py CI output
+            try:
+                raw_fm = skill_md.read_text(encoding="utf-8")
+                fm_end = raw_fm.find("---", 3)
+                if fm_end > 0:
+                    fm_data = yaml.safe_load(raw_fm[3:fm_end].strip()) or {}
+                    min_ch = fm_data.get("min_context_harness_version")
+                    if min_ch:
+                        skill_entry["min_context_harness_version"] = str(min_ch)
+            except Exception:
+                pass  # Don't fail on optional field
+
             skills.append(skill_entry)
 
         # Write the full skills.json
@@ -1376,9 +1378,12 @@ class SkillService:
             "registry_version": CH_VERSION,
             "skills": skills,
         }
-        skills_json_path.write_text(
-            json.dumps(registry, indent=2) + "\n", encoding="utf-8"
-        )
+        try:
+            skills_json_path.write_text(
+                json.dumps(registry, indent=2) + "\n", encoding="utf-8"
+            )
+        except OSError:
+            pass  # Don't fail the upgrade if skills.json can't be written
 
     def _write_registry_scaffold(self, repo_path: Path, repo_name: str) -> None:
         """Write the full skills registry scaffold with CI/CD automation.
