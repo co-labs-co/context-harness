@@ -8,6 +8,7 @@ Supports both OpenCode (.opencode/skill/) and Claude Code (.claude/skills/) tool
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
@@ -1035,6 +1036,13 @@ class SkillService:
         self._write_scaffold_registry_version(repo_path)
         self._update_json_version_markers(repo_path)
 
+        # Regenerate skills.json with full metadata from skill/ directories
+        # This ensures the web frontend has name, description, version, tags
+        # instead of stale id-only entries from the old schema
+        if self._regenerate_skills_json(repo_path):
+            if "skills.json" not in updated_files:
+                updated_files.append("skills.json")
+
         return Success(
             value={
                 "current_version": current_version,
@@ -1205,7 +1213,9 @@ class SkillService:
             # Extract owner/repo from URL
             if "github.com" in url:
                 # Handle both https and ssh URLs
-                parts = url.replace(".git", "").replace("git@github.com:", "").split("/")
+                parts = (
+                    url.replace(".git", "").replace("git@github.com:", "").split("/")
+                )
                 if len(parts) >= 2:
                     return f"{parts[-2]}/{parts[-1]}"
         except (subprocess.CalledProcessError, IndexError):
@@ -1237,10 +1247,16 @@ class SkillService:
             "scripts/validate-skills.py": self._write_scaffold_validate_skills_script,
             # HTTP registry (Docker/nginx)
             "Dockerfile": self._write_scaffold_dockerfile,
-            "docker-compose.yml": lambda p: self._write_scaffold_docker_compose(p, repo_name),
+            "docker-compose.yml": lambda p: self._write_scaffold_docker_compose(
+                p, repo_name
+            ),
             "registry/nginx.conf": self._write_scaffold_nginx_conf,
-            "registry/web/index.html": lambda p: self._write_scaffold_index_html(p, repo_name),
-            "registry/web/skill.html": lambda p: self._write_scaffold_skill_html(p, repo_name),
+            "registry/web/index.html": lambda p: self._write_scaffold_index_html(
+                p, repo_name
+            ),
+            "registry/web/skill.html": lambda p: self._write_scaffold_skill_html(
+                p, repo_name
+            ),
             # AI agent instructions
             "llms.txt": self._write_scaffold_llms_txt,
             # Release configuration
@@ -1249,10 +1265,14 @@ class SkillService:
             # Git configuration
             ".gitignore": self._write_scaffold_gitignore,
             # Marketplace manifest (requires repo_name)
-            "marketplace.json": lambda p: self._write_scaffold_marketplace_json(p, repo_name),
+            "marketplace.json": lambda p: self._write_scaffold_marketplace_json(
+                p, repo_name
+            ),
             # Documentation (requires repo_name)
             "README.md": lambda p: self._write_scaffold_readme(p, repo_name),
-            "CONTRIBUTING.md": lambda p: self._write_scaffold_contributing(p, repo_name),
+            "CONTRIBUTING.md": lambda p: self._write_scaffold_contributing(
+                p, repo_name
+            ),
             "QUICKSTART.md": lambda p: self._write_scaffold_quickstart(p, repo_name),
         }
 
@@ -1263,20 +1283,12 @@ class SkillService:
             self._write_scaffold_registry_version(repo_path)
 
     def _update_json_version_markers(self, repo_path: Path) -> None:
-        """Update registry_version in skills.json and marketplace.json."""
-        # Update skills.json
-        skills_json_path = repo_path / "skills.json"
-        if skills_json_path.exists():
-            try:
-                data = json.loads(skills_json_path.read_text(encoding="utf-8"))
-                data["registry_version"] = CH_VERSION
-                data["schema_version"] = "1.1"
-                skills_json_path.write_text(
-                    json.dumps(data, indent=2) + "\n", encoding="utf-8"
-                )
-            except (json.JSONDecodeError, KeyError):
-                pass  # Don't fail if JSON is malformed
+        """Update registry_version in marketplace.json.
 
+        Note: skills.json is handled by _regenerate_skills_json() which
+        rewrites the file from scratch during upgrade-repo, so we skip it
+        here to avoid redundant I/O.
+        """
         # Update marketplace.json
         marketplace_path = repo_path / "marketplace.json"
         if marketplace_path.exists():
@@ -1289,6 +1301,112 @@ class SkillService:
                 )
             except (json.JSONDecodeError, KeyError):
                 pass
+
+    def _regenerate_skills_json(self, repo_path: Path) -> bool:
+        """Regenerate skills.json by scanning skill/ directories for metadata.
+
+        Parses SKILL.md frontmatter and version.txt for each skill directory,
+        producing the full skills.json that the web frontend requires
+        (name, version, description, tags, author, content_hash).
+
+        Unlike scripts/sync-registry.py, this does NOT generate per-skill
+        .listing.json files — only the top-level skills.json.
+
+        If no skill/ directory exists, falls back to updating version markers
+        in any existing skills.json without altering the skills list.
+
+        Args:
+            repo_path: Path to the registry repository
+
+        Returns:
+            True if skills.json was written, False otherwise.
+        """
+        skills_dir = repo_path / "skill"
+        if not skills_dir.exists():
+            # No skill/ dir — still update version markers in existing skills.json
+            skills_json_path = repo_path / "skills.json"
+            if skills_json_path.exists():
+                try:
+                    data = json.loads(skills_json_path.read_text(encoding="utf-8"))
+                    data["registry_version"] = CH_VERSION
+                    data["schema_version"] = "1.1"
+                    skills_json_path.write_text(
+                        json.dumps(data, indent=2) + "\n", encoding="utf-8"
+                    )
+                    return True
+                except (json.JSONDecodeError, OSError):
+                    pass
+            return False
+
+        skills_json_path = repo_path / "skills.json"
+
+        # Collect skill metadata from each skill directory
+        skills = []
+        for skill_dir in sorted(skills_dir.iterdir()):
+            if not skill_dir.is_dir():
+                continue
+
+            skill_md = skill_dir / "SKILL.md"
+            if not skill_md.exists():
+                continue
+
+            # Parse frontmatter using existing method
+            try:
+                metadata = self._parse_skill_frontmatter(skill_dir)
+            except Exception:
+                # If parsing fails, use directory name as fallback
+                metadata = SkillMetadata(
+                    name=skill_dir.name,
+                    description="",
+                )
+
+            # Read version from version.txt (fall back to frontmatter or 0.1.0)
+            version = metadata.version or "0.1.0"
+            version_txt = skill_dir / "version.txt"
+            if version_txt.exists():
+                version = version_txt.read_text(encoding="utf-8").strip() or version
+
+            # Compute content hash for change detection
+            content_hash = hashlib.sha256(skill_md.read_bytes()).hexdigest()[:16]
+
+            skill_entry: dict = {
+                "name": metadata.name or skill_dir.name,
+                "description": metadata.description or "",
+                "version": version,
+                "author": metadata.author or "",
+                "tags": metadata.tags or [],
+                "path": f"skill/{skill_dir.name}",
+                "content_hash": content_hash,
+            }
+
+            # Include min_context_harness_version if present in frontmatter
+            # to maintain parity with sync-registry.py CI output
+            try:
+                raw_fm = skill_md.read_text(encoding="utf-8")
+                fm_end = raw_fm.find("---", 3)
+                if fm_end > 0:
+                    fm_data = yaml.safe_load(raw_fm[3:fm_end].strip()) or {}
+                    min_ch = fm_data.get("min_context_harness_version")
+                    if min_ch:
+                        skill_entry["min_context_harness_version"] = str(min_ch)
+            except Exception:
+                pass  # Don't fail on optional field
+
+            skills.append(skill_entry)
+
+        # Write the full skills.json
+        registry = {
+            "schema_version": "1.1",
+            "registry_version": CH_VERSION,
+            "skills": skills,
+        }
+        try:
+            skills_json_path.write_text(
+                json.dumps(registry, indent=2) + "\n", encoding="utf-8"
+            )
+            return True
+        except OSError:
+            return False  # Don't fail the upgrade if skills.json can't be written
 
     def _write_registry_scaffold(self, repo_path: Path, repo_name: str) -> None:
         """Write the full skills registry scaffold with CI/CD automation.
@@ -3295,9 +3413,7 @@ python scripts/validate_skills.py
 
     # -- HTTP Registry Scaffold Methods --------------------------------------
 
-    def _write_scaffold_marketplace_json(
-        self, repo_path: Path, repo_name: str
-    ) -> None:
+    def _write_scaffold_marketplace_json(self, repo_path: Path, repo_name: str) -> None:
         """Write marketplace.json — standardized manifest for plugin discovery.
 
         This format provides compatibility with future Claude Code plugin
@@ -3341,9 +3457,7 @@ python scripts/validate_skills.py
             json.dumps(marketplace, indent=2) + "\n", encoding="utf-8"
         )
 
-    def _write_scaffold_http_registry(
-        self, repo_path: Path, repo_name: str
-    ) -> None:
+    def _write_scaffold_http_registry(self, repo_path: Path, repo_name: str) -> None:
         """Write HTTP registry hosting files for Docker/nginx deployment.
 
         Creates a complete setup for hosting the skills registry via HTTP:
@@ -3398,9 +3512,7 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \\
 """
         (repo_path / "Dockerfile").write_text(content, encoding="utf-8")
 
-    def _write_scaffold_docker_compose(
-        self, repo_path: Path, repo_name: str
-    ) -> None:
+    def _write_scaffold_docker_compose(self, repo_path: Path, repo_name: str) -> None:
         """Write docker-compose.yml for easy deployment."""
         content = f"""\
 # ContextHarness Skills Registry
@@ -3562,9 +3674,7 @@ See `/skills.json` for the complete list of available skills with descriptions.
 """
         (repo_path / "llms.txt").write_text(content, encoding="utf-8")
 
-    def _write_scaffold_index_html(
-        self, repo_path: Path, repo_name: str
-    ) -> None:
+    def _write_scaffold_index_html(self, repo_path: Path, repo_name: str) -> None:
         """Write index.html - static frontend for browsing skills.
 
         A clean shadcn-inspired UI using Tailwind CSS with the project theme.
@@ -3843,9 +3953,7 @@ tags: [category]
             content, encoding="utf-8"
         )
 
-    def _write_scaffold_skill_html(
-        self, repo_path: Path, repo_name: str
-    ) -> None:
+    def _write_scaffold_skill_html(self, repo_path: Path, repo_name: str) -> None:
         """Write skill.html - individual skill detail page with file explorer."""
         content = """\
 <!DOCTYPE html>

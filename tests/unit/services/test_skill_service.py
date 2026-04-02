@@ -1238,7 +1238,9 @@ class TestSkillServiceInitRegistryRepo:
         for filepath in expected_files:
             assert (tmp_path / filepath).exists(), f"Missing: {filepath}"
 
-    def test_scaffold_llms_txt_contains_installation_instructions(self, tmp_path: Path) -> None:
+    def test_scaffold_llms_txt_contains_installation_instructions(
+        self, tmp_path: Path
+    ) -> None:
         """llms.txt contains AI agent installation protocol."""
         service = SkillService(github_client=MockGitHubClient())
         service._write_registry_scaffold(tmp_path, "test-user/my-skills")
@@ -1454,9 +1456,7 @@ class TestSkillServiceInitRegistryRepo:
         service = SkillService(github_client=MockGitHubClient())
         service._write_registry_scaffold(tmp_path, "test-user/my-skills")
 
-        content = (
-            tmp_path / ".github" / "workflows" / "auto-rebase.yml"
-        ).read_text()
+        content = (tmp_path / ".github" / "workflows" / "auto-rebase.yml").read_text()
         assert "Auto Rebase" in content
         assert "skills.json" in content
         assert "release-please-config.json" in content
@@ -1699,7 +1699,9 @@ class TestSkillServiceUpgradeRegistryRepo:
         service = SkillService(github_client=MockGitHubClient())
 
         # Create registry at current version
-        (tmp_path / ".registry-version").write_text("0.0.0")  # Will be older than CH_VERSION
+        (tmp_path / ".registry-version").write_text(
+            "0.0.0"
+        )  # Will be older than CH_VERSION
         (tmp_path / "skills.json").write_text('{"skills": []}')
         (tmp_path / "skill").mkdir()
 
@@ -1737,7 +1739,9 @@ class TestSkillServiceUpgradeRegistryRepo:
         (tmp_path / "skills.json").write_text('{"skills": []}')
         (tmp_path / "skill").mkdir()
         (tmp_path / ".github" / "workflows").mkdir(parents=True)
-        (tmp_path / ".github" / "workflows" / "release.yml").write_text("# OLD WORKFLOW")
+        (tmp_path / ".github" / "workflows" / "release.yml").write_text(
+            "# OLD WORKFLOW"
+        )
 
         result = service.upgrade_registry_repo(tmp_path, dry_run=True)
 
@@ -1921,7 +1925,9 @@ class TestSkillServiceUpgradeRegistryRepo:
         assert (tmp_path / "registry" / "nginx.conf").exists()
         assert (tmp_path / "registry" / "web" / "index.html").exists()
 
-    def test_upgrade_always_updates_critical_infrastructure(self, tmp_path: Path) -> None:
+    def test_upgrade_always_updates_critical_infrastructure(
+        self, tmp_path: Path
+    ) -> None:
         """Critical infrastructure is always updated, even without --force."""
         service = SkillService(github_client=MockGitHubClient())
 
@@ -1931,7 +1937,9 @@ class TestSkillServiceUpgradeRegistryRepo:
         (tmp_path / "skill").mkdir()
         (tmp_path / "Dockerfile").write_text("# OLD DOCKERFILE CONTENT")
         (tmp_path / ".github" / "workflows").mkdir(parents=True)
-        (tmp_path / ".github" / "workflows" / "release.yml").write_text("# OLD WORKFLOW")
+        (tmp_path / ".github" / "workflows" / "release.yml").write_text(
+            "# OLD WORKFLOW"
+        )
 
         # Without force, critical infrastructure should still be updated
         result_no_force = service.upgrade_registry_repo(tmp_path, dry_run=True)
@@ -1954,3 +1962,289 @@ class TestSkillServiceUpgradeRegistryRepo:
         # Everything is included with force
         assert "Dockerfile" in force_files
         assert ".github/workflows/release.yml" in force_files
+
+    def test_upgrade_regenerates_skills_json_with_full_metadata(
+        self, tmp_path: Path
+    ) -> None:
+        """Upgrade regenerates skills.json with name/description/version from SKILL.md."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        # Create legacy registry with old-format skills.json (id-only entries)
+        (tmp_path / "skills.json").write_text(
+            json.dumps({"skills": [{"id": "my-skill"}]})
+        )
+        (tmp_path / "skill").mkdir()
+
+        # Create a skill directory with proper SKILL.md + version.txt
+        skill_dir = tmp_path / "skill" / "my-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: my-skill\ndescription: A test skill\ntags: [testing]\n---\n# My Skill\n"
+        )
+        (skill_dir / "version.txt").write_text("1.2.3")
+
+        result = service.upgrade_registry_repo(tmp_path)
+
+        assert isinstance(result, Success)
+
+        # Verify skills.json was regenerated with full metadata
+        data = json.loads((tmp_path / "skills.json").read_text())
+        assert len(data["skills"]) == 1
+
+        skill = data["skills"][0]
+        assert skill["name"] == "my-skill"
+        assert skill["description"] == "A test skill"
+        assert skill["version"] == "1.2.3"
+        assert skill["tags"] == ["testing"]
+        assert "path" in skill
+        assert "content_hash" in skill
+
+        # Old id-only format should be gone
+        assert "id" not in skill
+
+    def test_upgrade_regenerates_skills_json_multiple_skills(
+        self, tmp_path: Path
+    ) -> None:
+        """Upgrade regenerates skills.json with all skills from skill/ directory."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        # Create legacy registry
+        (tmp_path / "skills.json").write_text('{"skills": [{"id": "old"}]}')
+        (tmp_path / "skill").mkdir()
+
+        # Create two skill directories
+        for name, desc, ver in [
+            ("alpha-skill", "First skill", "1.0.0"),
+            ("beta-skill", "Second skill", "2.0.0"),
+        ]:
+            d = tmp_path / "skill" / name
+            d.mkdir()
+            (d / "SKILL.md").write_text(
+                f"---\nname: {name}\ndescription: {desc}\n---\n# {name}\n"
+            )
+            (d / "version.txt").write_text(ver)
+
+        result = service.upgrade_registry_repo(tmp_path)
+
+        assert isinstance(result, Success)
+        data = json.loads((tmp_path / "skills.json").read_text())
+        assert len(data["skills"]) == 2
+
+        names = [s["name"] for s in data["skills"]]
+        assert "alpha-skill" in names
+        assert "beta-skill" in names
+
+    def test_upgrade_regenerates_skills_json_no_version_txt(
+        self, tmp_path: Path
+    ) -> None:
+        """Upgrade falls back to frontmatter version when version.txt is missing."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        (tmp_path / "skills.json").write_text('{"skills": []}')
+        skill_dir = tmp_path / "skill" / "my-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: my-skill\ndescription: A skill\nversion: 2.5.0\n---\n# My Skill\n"
+        )
+        # No version.txt — should fall back to frontmatter version (2.5.0)
+
+        result = service.upgrade_registry_repo(tmp_path)
+        assert isinstance(result, Success)
+
+        data = json.loads((tmp_path / "skills.json").read_text())
+        assert data["skills"][0]["version"] == "2.5.0"
+
+    def test_upgrade_regenerates_skills_json_no_version_txt_no_frontmatter_version(
+        self, tmp_path: Path
+    ) -> None:
+        """Upgrade falls back to 0.1.0 when both version.txt and frontmatter version are missing."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        (tmp_path / "skills.json").write_text('{"skills": []}')
+        skill_dir = tmp_path / "skill" / "my-skill"
+        skill_dir.mkdir(parents=True)
+        # Frontmatter has no version field
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: my-skill\ndescription: A skill\n---\n# My Skill\n"
+        )
+
+        result = service.upgrade_registry_repo(tmp_path)
+        assert isinstance(result, Success)
+
+        data = json.loads((tmp_path / "skills.json").read_text())
+        assert data["skills"][0]["version"] == "0.1.0"
+
+    def test_upgrade_regenerates_skills_json_broken_frontmatter(
+        self, tmp_path: Path
+    ) -> None:
+        """Upgrade uses directory name as fallback when frontmatter is broken."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        (tmp_path / "skills.json").write_text('{"skills": []}')
+        skill_dir = tmp_path / "skill" / "bad-skill"
+        skill_dir.mkdir(parents=True)
+        # Malformed SKILL.md with no closing frontmatter delimiter
+        (skill_dir / "SKILL.md").write_text("not valid frontmatter at all")
+        (skill_dir / "version.txt").write_text("3.0.0")
+
+        result = service.upgrade_registry_repo(tmp_path)
+        assert isinstance(result, Success)
+
+        data = json.loads((tmp_path / "skills.json").read_text())
+        assert len(data["skills"]) == 1
+        skill = data["skills"][0]
+        # Should fall back to directory name
+        assert skill["name"] == "bad-skill"
+        assert skill["version"] == "3.0.0"
+
+    def test_upgrade_regenerates_skills_json_empty_skill_dir(
+        self, tmp_path: Path
+    ) -> None:
+        """Upgrade produces empty skills array when skill/ has no subdirectories."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        (tmp_path / "skills.json").write_text('{"skills": [{"id": "stale"}]}')
+        (tmp_path / "skill").mkdir()
+        # Empty skill/ directory — no subdirectories
+
+        result = service.upgrade_registry_repo(tmp_path)
+        assert isinstance(result, Success)
+
+        data = json.loads((tmp_path / "skills.json").read_text())
+        assert data["skills"] == []
+
+    def test_upgrade_regenerates_skills_json_top_level_fields(
+        self, tmp_path: Path
+    ) -> None:
+        """Upgrade sets schema_version and registry_version in skills.json."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        (tmp_path / "skills.json").write_text('{"skills": []}')
+        skill_dir = tmp_path / "skill" / "my-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: my-skill\ndescription: A skill\n---\n# My Skill\n"
+        )
+        (skill_dir / "version.txt").write_text("1.0.0")
+
+        result = service.upgrade_registry_repo(tmp_path)
+        assert isinstance(result, Success)
+
+        data = json.loads((tmp_path / "skills.json").read_text())
+        assert data["schema_version"] == "1.1"
+        assert "registry_version" in data
+        assert len(data["registry_version"]) > 0
+
+    def test_upgrade_regenerates_skills_json_content_hash_deterministic(
+        self, tmp_path: Path
+    ) -> None:
+        """Content hash is deterministic for the same SKILL.md content."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        skill_content = "---\nname: my-skill\ndescription: A skill\n---\n# My Skill\n"
+
+        (tmp_path / "skills.json").write_text('{"skills": []}')
+        skill_dir = tmp_path / "skill" / "my-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(skill_content)
+        (skill_dir / "version.txt").write_text("1.0.0")
+
+        # Run upgrade twice
+        service.upgrade_registry_repo(tmp_path)
+        data1 = json.loads((tmp_path / "skills.json").read_text())
+        hash1 = data1["skills"][0]["content_hash"]
+
+        service.upgrade_registry_repo(tmp_path)
+        data2 = json.loads((tmp_path / "skills.json").read_text())
+        hash2 = data2["skills"][0]["content_hash"]
+
+        assert hash1 == hash2
+        assert len(hash1) == 16  # SHA-256 truncated to 16 hex chars
+
+    def test_upgrade_regenerates_skills_json_with_min_ch_version(
+        self, tmp_path: Path
+    ) -> None:
+        """Upgrade includes min_context_harness_version when present in frontmatter."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        (tmp_path / "skills.json").write_text('{"skills": []}')
+        skill_dir = tmp_path / "skill" / "my-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: my-skill\ndescription: A skill\n"
+            "min_context_harness_version: 3.5.0\n---\n# My Skill\n"
+        )
+        (skill_dir / "version.txt").write_text("1.0.0")
+
+        result = service.upgrade_registry_repo(tmp_path)
+        assert isinstance(result, Success)
+
+        data = json.loads((tmp_path / "skills.json").read_text())
+        assert data["skills"][0]["min_context_harness_version"] == "3.5.0"
+
+    def test_upgrade_regenerates_skills_json_without_min_ch_version(
+        self, tmp_path: Path
+    ) -> None:
+        """Upgrade omits min_context_harness_version when not in frontmatter."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        (tmp_path / "skills.json").write_text('{"skills": []}')
+        skill_dir = tmp_path / "skill" / "my-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: my-skill\ndescription: A skill\n---\n# My Skill\n"
+        )
+        (skill_dir / "version.txt").write_text("1.0.0")
+
+        result = service.upgrade_registry_repo(tmp_path)
+        assert isinstance(result, Success)
+
+        data = json.loads((tmp_path / "skills.json").read_text())
+        assert "min_context_harness_version" not in data["skills"][0]
+
+    def test_upgrade_regenerates_skills_json_included_in_files_updated(
+        self, tmp_path: Path
+    ) -> None:
+        """Upgrade includes skills.json in the files_updated list."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        (tmp_path / "skills.json").write_text('{"skills": []}')
+        skill_dir = tmp_path / "skill" / "my-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: my-skill\ndescription: A skill\n---\n# My Skill\n"
+        )
+        (skill_dir / "version.txt").write_text("1.0.0")
+
+        result = service.upgrade_registry_repo(tmp_path)
+        assert isinstance(result, Success)
+        assert "skills.json" in result.value["files_updated"]
+
+    def test_upgrade_no_skill_dir_still_updates_skills_json_version(
+        self, tmp_path: Path
+    ) -> None:
+        """Without a skill/ directory, skills.json version markers are still updated."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        # Pre-existing skills.json with stale version markers
+        (tmp_path / "skills.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "1.0",
+                    "registry_version": "0.0.0",
+                    "skills": [{"name": "existing-skill", "version": "1.0.0"}],
+                }
+            )
+        )
+        # No skill/ directory at all
+
+        result = service.upgrade_registry_repo(tmp_path)
+        assert isinstance(result, Success)
+
+        data = json.loads((tmp_path / "skills.json").read_text())
+        # Version markers should be updated
+        assert data["schema_version"] == "1.1"
+        assert data["registry_version"] != "0.0.0"
+        # Existing skills list should be preserved (not wiped)
+        assert len(data["skills"]) == 1
+        assert data["skills"][0]["name"] == "existing-skill"

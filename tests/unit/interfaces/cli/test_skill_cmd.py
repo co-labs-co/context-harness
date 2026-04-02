@@ -1,14 +1,15 @@
-"""Unit tests for skill CLI commands: outdated and upgrade."""
+"""Unit tests for skill CLI commands: outdated, upgrade, and upgrade-repo."""
 
 from __future__ import annotations
 
 from typing import List, Optional
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 from click.testing import CliRunner
 
 from context_harness.interfaces.cli.skill_cmd import skill_group
 from context_harness.primitives import VersionStatus
+from context_harness.primitives.result import Success, Failure, ErrorCode
 from context_harness.primitives.skill import VersionComparison
 from context_harness.skills import SkillResult
 
@@ -482,3 +483,227 @@ class TestSkillInitRepoCommand:
         assert result.exit_code == 0
         mock_init.assert_called_once()
         assert mock_init.call_args.kwargs["name"] == "my-org/team-skills"
+
+
+# ---------------------------------------------------------------------------
+# skill upgrade-repo
+# ---------------------------------------------------------------------------
+
+
+class TestSkillUpgradeRepoCommand:
+    """Tests for `context-harness skill upgrade-repo`."""
+
+    def _patch_service(self, return_value):
+        """Helper to patch SkillService.upgrade_registry_repo."""
+        return patch(
+            "context_harness.services.skill_service.SkillService",
+            return_value=MagicMock(
+                upgrade_registry_repo=MagicMock(return_value=return_value)
+            ),
+        )
+
+    def test_upgrade_repo_success_upgraded(self, tmp_path) -> None:
+        """Successful upgrade → exit 0, 'upgraded' in output."""
+        runner = CliRunner()
+
+        result_data = Success(
+            value={
+                "upgraded": True,
+                "current_version": "0.0.0",
+                "latest_version": "1.1.0",
+                "files_updated": ["Dockerfile", ".registry-version"],
+            }
+        )
+
+        with self._patch_service(result_data):
+            result = runner.invoke(skill_group, ["upgrade-repo", str(tmp_path)])
+
+        assert result.exit_code == 0
+        assert "upgraded" in result.output.lower()
+
+    def test_upgrade_repo_success_shows_updated_files(self, tmp_path) -> None:
+        """Successful upgrade lists updated files in output."""
+        runner = CliRunner()
+
+        result_data = Success(
+            value={
+                "upgraded": True,
+                "current_version": "0.0.0",
+                "latest_version": "1.1.0",
+                "files_updated": ["Dockerfile", "docker-compose.yml"],
+            }
+        )
+
+        with self._patch_service(result_data):
+            result = runner.invoke(skill_group, ["upgrade-repo", str(tmp_path)])
+
+        assert result.exit_code == 0
+        assert "Dockerfile" in result.output
+        assert "docker-compose.yml" in result.output
+
+    def test_upgrade_repo_already_up_to_date(self, tmp_path) -> None:
+        """Registry already at latest version → exit 0, 'up to date' in output."""
+        runner = CliRunner()
+
+        result_data = Success(
+            value={
+                "upgraded": False,
+                "current_version": "1.1.0",
+                "latest_version": "1.1.0",
+            }
+        )
+
+        with self._patch_service(result_data):
+            result = runner.invoke(skill_group, ["upgrade-repo", str(tmp_path)])
+
+        assert result.exit_code == 0
+        assert "up to date" in result.output.lower()
+
+    def test_upgrade_repo_check_only_shows_available(self, tmp_path) -> None:
+        """--check flag shows available upgrade without applying."""
+        runner = CliRunner()
+
+        result_data = Success(
+            value={
+                "upgrade_available": True,
+                "current_version": "0.0.0",
+                "latest_version": "1.1.0",
+            }
+        )
+
+        with self._patch_service(result_data) as mock_cls:
+            result = runner.invoke(
+                skill_group, ["upgrade-repo", str(tmp_path), "--check"]
+            )
+
+        assert result.exit_code == 0
+        assert "available" in result.output.lower()
+        # Verify check_only was passed
+        mock_cls.return_value.upgrade_registry_repo.assert_called_once()
+        call_kwargs = mock_cls.return_value.upgrade_registry_repo.call_args
+        assert call_kwargs.kwargs.get("check_only") is True or (
+            len(call_kwargs.args) >= 2 and call_kwargs.args[1] is True
+        )
+
+    def test_upgrade_repo_dry_run_shows_files(self, tmp_path) -> None:
+        """--dry-run flag shows what would change without applying."""
+        runner = CliRunner()
+
+        result_data = Success(
+            value={
+                "dry_run": True,
+                "current_version": "0.0.0",
+                "latest_version": "1.1.0",
+                "files_to_update": ["Dockerfile", "registry/nginx.conf"],
+            }
+        )
+
+        with self._patch_service(result_data) as mock_cls:
+            result = runner.invoke(
+                skill_group, ["upgrade-repo", str(tmp_path), "--dry-run"]
+            )
+
+        assert result.exit_code == 0
+        assert "dry run" in result.output.lower()
+        assert "Dockerfile" in result.output
+        # Verify dry_run was passed
+        call_kwargs = mock_cls.return_value.upgrade_registry_repo.call_args
+        assert call_kwargs.kwargs.get("dry_run") is True or (
+            len(call_kwargs.args) >= 3 and call_kwargs.args[2] is True
+        )
+
+    def test_upgrade_repo_force_flag_passed(self, tmp_path) -> None:
+        """--force flag is passed through to the service."""
+        runner = CliRunner()
+
+        result_data = Success(
+            value={
+                "upgraded": True,
+                "current_version": "0.0.0",
+                "latest_version": "1.1.0",
+                "files_updated": ["Dockerfile"],
+            }
+        )
+
+        with self._patch_service(result_data) as mock_cls:
+            result = runner.invoke(
+                skill_group, ["upgrade-repo", str(tmp_path), "--force"]
+            )
+
+        assert result.exit_code == 0
+        call_kwargs = mock_cls.return_value.upgrade_registry_repo.call_args
+        assert call_kwargs.kwargs.get("force") is True or (
+            len(call_kwargs.args) >= 4 and call_kwargs.args[3] is True
+        )
+
+    def test_upgrade_repo_failure_exits_1(self, tmp_path) -> None:
+        """Service failure → exit 1, error message in output."""
+        runner = CliRunner()
+
+        result_data = Failure(
+            error="Not a valid registry directory",
+            code=ErrorCode.VALIDATION_ERROR,
+        )
+
+        with self._patch_service(result_data):
+            result = runner.invoke(skill_group, ["upgrade-repo", str(tmp_path)])
+
+        assert result.exit_code == 1
+        assert "failed" in result.output.lower()
+
+    def test_upgrade_repo_default_path_is_cwd(self, tmp_path, monkeypatch) -> None:
+        """Without PATH argument, defaults to current directory."""
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+
+        result_data = Success(
+            value={
+                "upgraded": False,
+                "current_version": "1.1.0",
+                "latest_version": "1.1.0",
+            }
+        )
+
+        with self._patch_service(result_data) as mock_cls:
+            # Invoke without a path argument — Click uses default "."
+            result = runner.invoke(skill_group, ["upgrade-repo"])
+
+        assert result.exit_code == 0
+        mock_cls.return_value.upgrade_registry_repo.assert_called_once()
+        # Verify the resolved path matches the cwd we set
+        call_args = mock_cls.return_value.upgrade_registry_repo.call_args
+        from pathlib import Path
+
+        assert call_args.args[0] == Path(tmp_path).resolve()
+
+    def test_upgrade_repo_invalid_path_exits_nonzero(self, tmp_path) -> None:
+        """Non-existent path → Click error, exit != 0."""
+        runner = CliRunner()
+        missing = str(tmp_path / "missing")
+        result = runner.invoke(skill_group, ["upgrade-repo", missing])
+
+        assert result.exit_code != 0
+
+    def test_upgrade_repo_combined_flags(self, tmp_path) -> None:
+        """--dry-run and --force can be combined."""
+        runner = CliRunner()
+
+        result_data = Success(
+            value={
+                "dry_run": True,
+                "current_version": "0.0.0",
+                "latest_version": "1.1.0",
+                "files_to_update": ["Dockerfile"],
+            }
+        )
+
+        with self._patch_service(result_data) as mock_cls:
+            result = runner.invoke(
+                skill_group,
+                ["upgrade-repo", str(tmp_path), "--dry-run", "--force"],
+            )
+
+        assert result.exit_code == 0
+        call_kwargs = mock_cls.return_value.upgrade_registry_repo.call_args
+        assert call_kwargs.kwargs.get("dry_run") is True
+        assert call_kwargs.kwargs.get("force") is True
