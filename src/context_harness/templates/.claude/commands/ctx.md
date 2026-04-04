@@ -22,8 +22,6 @@ Switch to session: $ARGUMENTS
    - If yes, create a feature branch: `feature/$ARGUMENTS`
    - Greet user as new session
 
-4. **Initialize interaction counter**: `user_interaction_count = 0`
-
 ## Flags
 
 - `--no-branch`: Skip branch creation

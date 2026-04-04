@@ -64,8 +64,6 @@ Switch to session: $ARGUMENTS
      What would you like me to work on?
      ```
 
-4. **Initialize interaction counter**: `user_interaction_count = 0`
-
 ## GitHub Integration Behavior
 
 When the user describes their task/feature:

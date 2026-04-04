@@ -60,7 +60,7 @@ Manually saves current context:
 3. Preserves decisions, file changes, documentation
 
 !!! note
-    Automatic compaction happens every 2nd user interaction, so manual `/compact` is usually not needed.
+    Use `/compact` regularly during long sessions — especially after significant progress, key decisions, or before context gets too large.
 
 ## GitHub Commands
 

@@ -21,7 +21,7 @@ This project uses the ContextHarness framework for AI-assisted development with 
 
 Sessions are stored in `.context-harness/sessions/<name>/SESSION.md`.
 
-Context is automatically compacted every 2nd user interaction to preserve continuity.
+Use `/compact` regularly during long sessions to preserve context before it's lost to context window limits.
 
 ### Subagents
 
