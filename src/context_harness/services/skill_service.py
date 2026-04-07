@@ -1043,6 +1043,17 @@ class SkillService:
             if "skills.json" not in updated_files:
                 updated_files.append("skills.json")
 
+        # Regenerate per-skill .claude-plugin/plugin.json for all skills
+        # These may be missing in registries created before Claude Code support
+        skills_dir = repo_path / "skill"
+        if skills_dir.exists():
+            for skill_dir in sorted(skills_dir.iterdir()):
+                if skill_dir.is_dir() and (skill_dir / "SKILL.md").exists():
+                    self._write_scaffold_skill_plugin_json(skill_dir)
+                    rel = f"skill/{skill_dir.name}/.claude-plugin/plugin.json"
+                    if rel not in updated_files:
+                        updated_files.append(rel)
+
         return Success(
             value={
                 "current_version": current_version,

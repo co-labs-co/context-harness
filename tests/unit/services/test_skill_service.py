@@ -2332,3 +2332,38 @@ class TestSkillServiceUpgradeRegistryRepo:
         # Existing skills list should be preserved (not wiped)
         assert len(data["skills"]) == 1
         assert data["skills"][0]["name"] == "existing-skill"
+
+    def test_upgrade_regenerates_per_skill_plugin_json(self, tmp_path: Path) -> None:
+        """Upgrade creates .claude-plugin/plugin.json for each skill."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        (tmp_path / "skills.json").write_text('{"skills": []}')
+        (tmp_path / "skill").mkdir()
+
+        # Create two skills — one with existing plugin.json, one without
+        for name, desc, ver in [
+            ("alpha-skill", "First skill", "1.0.0"),
+            ("beta-skill", "Second skill", "2.0.0"),
+        ]:
+            d = tmp_path / "skill" / name
+            d.mkdir()
+            (d / "SKILL.md").write_text(
+                f"---\nname: {name}\ndescription: {desc}\n---\n# {name}\n"
+            )
+            (d / "version.txt").write_text(ver)
+
+        result = service.upgrade_registry_repo(tmp_path)
+
+        assert isinstance(result, Success)
+
+        # Both skills should have .claude-plugin/plugin.json
+        for name in ["alpha-skill", "beta-skill"]:
+            plugin_json = tmp_path / "skill" / name / ".claude-plugin" / "plugin.json"
+            assert plugin_json.exists(), f"Missing plugin.json for {name}"
+            data = json.loads(plugin_json.read_text())
+            assert data["name"] == name
+
+        # Per-skill plugin.json files should be in updated files list
+        updated = result.value["files_updated"]
+        assert "skill/alpha-skill/.claude-plugin/plugin.json" in updated
+        assert "skill/beta-skill/.claude-plugin/plugin.json" in updated
