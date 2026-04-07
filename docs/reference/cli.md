@@ -232,6 +232,8 @@ ch skill init-repo my-org/skills -d "Team AI skills"  # With custom description
 
 ```
 my-skills/
+├── .claude-plugin/
+│   └── marketplace.json              # Claude Code plugin marketplace
 ├── .github/
 │   ├── workflows/
 │   │   ├── release.yml              # release-please per-skill versioning
@@ -245,9 +247,12 @@ my-skills/
 │   └── validate_skills.py           # Pydantic-based validation
 ├── skill/
 │   └── example-skill/
+│       ├── .claude-plugin/
+│       │   └── plugin.json          # Claude Code plugin manifest
 │       ├── SKILL.md
 │       └── version.txt              # Bootstrapped at 0.1.0
 ├── skills.json
+├── marketplace.json                 # ContextHarness marketplace manifest
 ├── release-please-config.json
 ├── .release-please-manifest.json
 ├── .gitignore
@@ -256,7 +261,7 @@ my-skills/
 └── QUICKSTART.md
 ```
 
-For details on the CI/CD automation and versioning lifecycle, see [Automated Versioning](../user-guide/skills.md#automated-versioning).
+The registry is compatible with both **ContextHarness CLI** (`ch skill install`) and **Claude Code plugin marketplace** (`/plugin marketplace add`). See [Claude Code Plugin Marketplace](../user-guide/skills.md#claude-code-plugin-marketplace) for details.
 
 **Options:**
 
@@ -366,6 +371,7 @@ ch skill upgrade-repo --force      # Overwrite all scaffold files
 | Category | Files | Behavior |
 |----------|-------|----------|
 | Critical infrastructure | Dockerfile, docker-compose.yml, nginx.conf, index.html, skill.html, llms.txt | Always updated |
+| Plugin marketplace | .claude-plugin/marketplace.json | Always updated |
 | Workflows | release.yml, sync-registry.yml, validate-skills.yml, auto-rebase.yml | Only if missing |
 | Documentation | README.md, CONTRIBUTING.md, QUICKSTART.md | Only if missing |
 

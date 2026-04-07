@@ -84,6 +84,7 @@ They are **always updated** during upgrade, even without `--force`.
 | `.release-please-manifest.json` | `_write_scaffold_release_please_manifest` | Version manifest |
 | `.gitignore` | `_write_scaffold_gitignore` | Git ignore rules |
 | `marketplace.json` | `_write_scaffold_marketplace_json` | Plugin discovery manifest |
+| `.claude-plugin/marketplace.json` | `_write_scaffold_claude_plugin_marketplace` | Claude Code plugin marketplace |
 
 ### Documentation Files (only if missing or with --force)
 | File | Writer Method | Notes |
@@ -98,6 +99,7 @@ They are **always updated** during upgrade, even without `--force`.
 | `.registry-version` | `_write_scaffold_registry_version` | Always updated |
 | `skills.json` | `_write_scaffold_skills_json` | Version markers only |
 | `skill/*` | Various | User-owned, never touched |
+| `skill/*/.claude-plugin/plugin.json` | `_write_scaffold_skill_plugin_json` | Auto-generated per skill |
 
 ## Upgrade Behavior
 

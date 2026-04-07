@@ -1113,6 +1113,8 @@ class SkillService:
             ".gitignore",
             # Marketplace manifest
             "marketplace.json",
+            # Claude Code plugin marketplace
+            ".claude-plugin/marketplace.json",
         ]
 
         # Documentation files - often customized by users
@@ -1268,6 +1270,10 @@ class SkillService:
             "marketplace.json": lambda p: self._write_scaffold_marketplace_json(
                 p, repo_name
             ),
+            # Claude Code plugin marketplace (requires repo_name)
+            ".claude-plugin/marketplace.json": lambda p: (
+                self._write_scaffold_claude_plugin_marketplace(p, repo_name)
+            ),
             # Documentation (requires repo_name)
             "README.md": lambda p: self._write_scaffold_readme(p, repo_name),
             "CONTRIBUTING.md": lambda p: self._write_scaffold_contributing(
@@ -1283,13 +1289,13 @@ class SkillService:
             self._write_scaffold_registry_version(repo_path)
 
     def _update_json_version_markers(self, repo_path: Path) -> None:
-        """Update registry_version in marketplace.json.
+        """Update registry_version in marketplace.json and .claude-plugin/marketplace.json.
 
         Note: skills.json is handled by _regenerate_skills_json() which
         rewrites the file from scratch during upgrade-repo, so we skip it
         here to avoid redundant I/O.
         """
-        # Update marketplace.json
+        # Update marketplace.json (ContextHarness-native format)
         marketplace_path = repo_path / "marketplace.json"
         if marketplace_path.exists():
             try:
@@ -1297,6 +1303,20 @@ class SkillService:
                 data["registry_version"] = CH_VERSION
                 data["schema_version"] = "1.1"
                 marketplace_path.write_text(
+                    json.dumps(data, indent=2) + "\n", encoding="utf-8"
+                )
+            except (json.JSONDecodeError, KeyError):
+                pass
+
+        # Update .claude-plugin/marketplace.json (Claude Code standard)
+        claude_mkt_path = repo_path / ".claude-plugin" / "marketplace.json"
+        if claude_mkt_path.exists():
+            try:
+                data = json.loads(claude_mkt_path.read_text(encoding="utf-8"))
+                if "metadata" not in data:
+                    data["metadata"] = {}
+                data["metadata"]["version"] = CH_VERSION
+                claude_mkt_path.write_text(
                     json.dumps(data, indent=2) + "\n", encoding="utf-8"
                 )
             except (json.JSONDecodeError, KeyError):
@@ -1471,6 +1491,15 @@ class SkillService:
 
         # --- Marketplace manifest for plugin discovery ---
         self._write_scaffold_marketplace_json(repo_path, repo_name)
+
+        # --- Claude Code plugin marketplace (per-skill plugins) ---
+        self._write_scaffold_claude_plugin_marketplace(repo_path, repo_name)
+        # Write .claude-plugin/plugin.json for each skill directory
+        skills_dir = repo_path / "skill"
+        if skills_dir.exists():
+            for skill_dir in sorted(skills_dir.iterdir()):
+                if skill_dir.is_dir() and (skill_dir / "SKILL.md").exists():
+                    self._write_scaffold_skill_plugin_json(skill_dir)
 
         # --- Registry version marker (for upgrade detection) ---
         self._write_scaffold_registry_version(repo_path)
@@ -1697,6 +1726,23 @@ context-harness skill use-registry http://localhost:8080
 context-harness skill install <skill-name> --registry http://localhost:8080
 ```
 
+## Claude Code Plugin Marketplace
+
+This registry is also a **Claude Code plugin marketplace**. Each skill is an
+individually installable plugin, so you can use either the ContextHarness CLI
+or Claude Code's built-in plugin system:
+
+```bash
+# Add as a Claude Code plugin marketplace
+/plugin marketplace add {repo_name}
+
+# Install a specific skill as a Claude Code plugin
+/plugin install <skill-name>@{repo_name.split("/")[-1]}
+```
+
+Skills installed via Claude Code are available as `/skill-name` commands
+inside Claude Code sessions.
+
 ## Commit Convention
 
 | Commit prefix | Version bump | Example |
@@ -1711,6 +1757,8 @@ context-harness skill install <skill-name> --registry http://localhost:8080
 
 ```
 {repo_name}/
+├── .claude-plugin/
+│   └── marketplace.json          # Claude Code plugin marketplace manifest
 ├── .github/
 │   └── workflows/
 │       ├── release.yml           # release-please automation
@@ -1727,13 +1775,15 @@ context-harness skill install <skill-name> --registry http://localhost:8080
 │       └── skill.html            # Individual skill pages
 ├── skill/
 │   └── example-skill/
+│       ├── .claude-plugin/
+│       │   └── plugin.json       # Claude Code plugin manifest
 │       ├── SKILL.md              # Skill content (no version field)
 │       └── version.txt           # Managed by release-please
 ├── Dockerfile                    # nginx container for HTTP hosting
 ├── docker-compose.yml            # Easy local deployment
 ├── llms.txt                      # AI agent installation instructions
 ├── skills.json                   # Auto-maintained registry manifest
-├── marketplace.json              # Plugin marketplace compatibility
+├── marketplace.json              # ContextHarness marketplace manifest
 ├── release-please-config.json    # Per-skill release configuration
 ├── .release-please-manifest.json # Current versions (CI-managed)
 ├── CONTRIBUTING.md
@@ -1819,6 +1869,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for how to add or update skills.
 
 - **Never edit `version.txt` manually** — release-please manages it
 - **Never edit `skills.json` manually** — CI rebuilds it after releases
+- **Never edit `.claude-plugin/` files manually** — CI regenerates them after releases
 - **Never add `version` to SKILL.md frontmatter** — it lives in `version.txt`
 - The `name` field in SKILL.md **must match** the directory name
 """
@@ -1908,12 +1959,24 @@ git push origin main
 
 ## Install Your Skill
 
+### Via ContextHarness CLI
+
 ```bash
 # Configure this registry (one time)
 context-harness config set skills-repo {repo_name}
 
 # Install
 context-harness skill install my-first-skill
+```
+
+### Via Claude Code Plugin Marketplace
+
+```bash
+# Add this registry as a Claude Code plugin marketplace (one time)
+/plugin marketplace add {repo_name}
+
+# Install
+/plugin install my-first-skill@{repo_name.split("/")[-1]}
 ```
 """
         (repo_path / "QUICKSTART.md").write_text(content, encoding="utf-8")
@@ -2045,7 +2108,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add skills.json marketplace.json skill/*/.listing.json
+           git add skills.json marketplace.json .claude-plugin/marketplace.json skill/*/.listing.json skill/*/.claude-plugin/plugin.json
           git diff --cached --quiet || git commit -m "chore: sync registry manifests [skip ci]"
           git push
 """
@@ -2464,8 +2527,95 @@ def update_marketplace_json(skills: list) -> None:
     print(f"Updated marketplace.json with {len(skills)} skill(s)")
 
 
+def update_claude_plugin_marketplace(skills: list) -> None:
+    """Update .claude-plugin/marketplace.json (Claude Code plugin marketplace standard).
+
+    Generates a marketplace.json conforming to the Claude Code plugin
+    marketplace specification so the registry can also be added via:
+
+        /plugin marketplace add owner/repo
+        /plugin install skill-name@marketplace-name
+
+    Each skill becomes an individually installable plugin entry.
+    """
+    import os
+
+    repo = os.environ.get("GITHUB_REPOSITORY", "")
+    parts = repo.split("/") if repo else []
+    owner = parts[0] if len(parts) == 2 else ""
+    name = parts[1] if len(parts) == 2 else ""
+
+    # Load existing .claude-plugin/marketplace.json to preserve owner metadata
+    claude_mkt_path = Path(".claude-plugin/marketplace.json")
+    if claude_mkt_path.exists():
+        try:
+            existing = json.loads(claude_mkt_path.read_text())
+        except json.JSONDecodeError:
+            existing = {}
+    else:
+        existing = {}
+
+    # Build plugin entries from skills
+    plugins = []
+    for skill in skills:
+        plugin_entry = {
+            "name": skill["name"],
+            "source": f"./skill/{skill['path'].split('/')[-1]}" if "/" in skill.get("path", "") else f"./skill/{skill['name']}",
+            "description": skill.get("description", ""),
+            "version": skill.get("version", "0.1.0"),
+        }
+        plugins.append(plugin_entry)
+
+    marketplace = {
+        "name": existing.get("name", name or repo),
+        "owner": existing.get("owner", {"name": owner or "Registry Owner"}),
+        "metadata": {
+            "description": existing.get("metadata", {}).get(
+                "description",
+                f"{name or repo} skills registry — "
+                "installable via ContextHarness CLI or Claude Code plugins",
+            ),
+            "version": get_registry_version(),
+            "pluginRoot": "./skill",
+        },
+        "plugins": plugins,
+    }
+
+    claude_mkt_path.parent.mkdir(parents=True, exist_ok=True)
+    claude_mkt_path.write_text(
+        json.dumps(marketplace, indent=2) + "\\n", encoding="utf-8"
+    )
+    print(f"Updated .claude-plugin/marketplace.json with {len(plugins)} plugin(s)")
+
+
+def update_skill_plugin_json(skills: list) -> None:
+    """Write .claude-plugin/plugin.json for each skill directory.
+
+    Each skill gets a Claude Code plugin manifest so it can be installed
+    individually via the Claude Code plugin marketplace.
+    """
+    for skill in skills:
+        skill_path = Path(skill.get("path", f"skill/{skill['name']}"))
+        if not skill_path.exists():
+            continue
+
+        plugin_manifest = {
+            "name": skill["name"],
+            "description": skill.get("description", ""),
+            "version": skill.get("version", "0.1.0"),
+        }
+
+        plugin_dir = skill_path / ".claude-plugin"
+        plugin_dir.mkdir(parents=True, exist_ok=True)
+        (plugin_dir / "plugin.json").write_text(
+            json.dumps(plugin_manifest, indent=2) + "\\n", encoding="utf-8"
+        )
+
+    print(f"Updated .claude-plugin/plugin.json for {len(skills)} skill(s)")
+
+
 def main() -> None:
-    """Rebuild and write skills.json and marketplace.json."""
+    """Rebuild and write skills.json, marketplace.json, and Claude Code plugin manifests."""
     registry = build_registry()
 
     Path("skills.json").write_text(
@@ -2476,8 +2626,12 @@ def main() -> None:
     for skill in registry["skills"]:
         print(f"  - {skill['name']} v{skill['version']}")
 
-    # Also update marketplace.json
+    # Also update marketplace.json (ContextHarness-native format)
     update_marketplace_json(registry["skills"])
+
+    # Update Claude Code plugin marketplace manifests
+    update_claude_plugin_marketplace(registry["skills"])
+    update_skill_plugin_json(registry["skills"])
 
 
 if __name__ == "__main__":
@@ -3455,6 +3609,134 @@ python scripts/validate_skills.py
         }
         (repo_path / "marketplace.json").write_text(
             json.dumps(marketplace, indent=2) + "\n", encoding="utf-8"
+        )
+
+    def _write_scaffold_claude_plugin_marketplace(
+        self, repo_path: Path, repo_name: str
+    ) -> None:
+        """Write .claude-plugin/marketplace.json — Claude Code plugin marketplace.
+
+        Generates a marketplace.json conforming to the Claude Code plugin
+        marketplace standard (https://code.claude.com/docs/en/plugin-marketplaces).
+        Each skill directory is listed as an individual plugin with a relative
+        path source, enabling per-skill installation via:
+
+            /plugin marketplace add owner/repo
+            /plugin install skill-name@marketplace-name
+
+        The marketplace is regenerated by sync-registry.py alongside the
+        ContextHarness-native marketplace.json whenever skills are updated.
+        """
+        parts = repo_name.split("/")
+        if len(parts) == 2:
+            owner, name = parts
+        else:
+            owner = repo_name
+            name = repo_name
+
+        # Build plugin entries from existing skill directories
+        plugins: list[dict[str, Any]] = []
+        skills_dir = repo_path / "skill"
+        if skills_dir.exists():
+            for skill_dir in sorted(skills_dir.iterdir()):
+                if not skill_dir.is_dir():
+                    continue
+                skill_md = skill_dir / "SKILL.md"
+                if not skill_md.exists():
+                    continue
+
+                # Parse skill metadata from SKILL.md frontmatter
+                description = ""
+                skill_name = skill_dir.name
+                version = "0.1.0"
+                try:
+                    content = skill_md.read_text(encoding="utf-8")
+                    if content.startswith("---"):
+                        end = content.index("---", 3)
+                        import yaml
+
+                        fm = yaml.safe_load(content[3:end])
+                        if isinstance(fm, dict):
+                            description = fm.get("description", "")
+                            skill_name = fm.get("name", skill_dir.name)
+                except Exception:
+                    pass
+
+                version_txt = skill_dir / "version.txt"
+                if version_txt.exists():
+                    version = version_txt.read_text(encoding="utf-8").strip()
+
+                plugin_entry: dict[str, Any] = {
+                    "name": skill_name,
+                    "source": f"./skill/{skill_dir.name}",
+                    "description": description,
+                    "version": version,
+                }
+                plugins.append(plugin_entry)
+
+        marketplace = {
+            "name": name,
+            "owner": {
+                "name": owner,
+            },
+            "metadata": {
+                "description": f"{name} skills registry — "
+                f"installable via ContextHarness CLI or Claude Code plugins",
+                "version": CH_VERSION,
+                "pluginRoot": "./skill",
+            },
+            "plugins": plugins,
+        }
+
+        claude_plugin_dir = repo_path / ".claude-plugin"
+        claude_plugin_dir.mkdir(parents=True, exist_ok=True)
+        (claude_plugin_dir / "marketplace.json").write_text(
+            json.dumps(marketplace, indent=2) + "\n", encoding="utf-8"
+        )
+
+    def _write_scaffold_skill_plugin_json(self, skill_path: Path) -> None:
+        """Write .claude-plugin/plugin.json for a skill directory.
+
+        Each skill directory gets a Claude Code plugin manifest so it can
+        be installed individually via the Claude Code plugin marketplace.
+        The plugin exposes the skill's SKILL.md as a Claude Code skill.
+
+        Args:
+            skill_path: Path to the skill directory (e.g., skill/example-skill/)
+        """
+        skill_md = skill_path / "SKILL.md"
+
+        # Extract metadata from SKILL.md frontmatter
+        skill_name = skill_path.name
+        description = ""
+        try:
+            content = skill_md.read_text(encoding="utf-8")
+            if content.startswith("---"):
+                end = content.index("---", 3)
+                import yaml
+
+                fm = yaml.safe_load(content[3:end])
+                if isinstance(fm, dict):
+                    skill_name = fm.get("name", skill_path.name)
+                    description = fm.get("description", "")
+        except Exception:
+            pass
+
+        version = "0.1.0"
+        version_txt = skill_path / "version.txt"
+        if version_txt.exists():
+            version = version_txt.read_text(encoding="utf-8").strip()
+
+        plugin_manifest = {
+            "name": skill_name,
+            "description": description,
+            "version": version,
+        }
+
+        plugin_dir = skill_path / ".claude-plugin"
+        plugin_dir.mkdir(parents=True, exist_ok=True)
+        (plugin_dir / "plugin.json").write_text(
+            json.dumps(plugin_manifest, indent=2) + "\n", encoding="utf-8"
         )
 
     def _write_scaffold_http_registry(self, repo_path: Path, repo_name: str) -> None:

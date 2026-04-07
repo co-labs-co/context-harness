@@ -1287,6 +1287,87 @@ class TestSkillServiceInitRegistryRepo:
         assert "registry_version" in content
         assert content["schema_version"] == "1.1"
 
+    def test_scaffold_claude_plugin_marketplace_created(self, tmp_path: Path) -> None:
+        """Scaffold creates .claude-plugin/marketplace.json conforming to Claude Code standard."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        mkt_path = tmp_path / ".claude-plugin" / "marketplace.json"
+        assert mkt_path.exists()
+
+        content = json.loads(mkt_path.read_text())
+        # Required fields per Claude Code plugin marketplace standard
+        assert "name" in content
+        assert "owner" in content
+        assert "plugins" in content
+        assert isinstance(content["plugins"], list)
+        assert content["name"] == "my-skills"
+        assert content["owner"]["name"] == "test-user"
+
+    def test_scaffold_claude_plugin_marketplace_has_plugin_entries(
+        self, tmp_path: Path
+    ) -> None:
+        """Each skill directory becomes a plugin entry in .claude-plugin/marketplace.json."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        content = json.loads(
+            (tmp_path / ".claude-plugin" / "marketplace.json").read_text()
+        )
+        plugins = content["plugins"]
+        # Should have at least the example-skill
+        plugin_names = [p["name"] for p in plugins]
+        assert "example-skill" in plugin_names
+
+        # Each plugin must have name and source (Claude Code standard)
+        for plugin in plugins:
+            assert "name" in plugin
+            assert "source" in plugin
+            assert plugin["source"].startswith("./skill/")
+
+    def test_scaffold_claude_plugin_marketplace_metadata(self, tmp_path: Path) -> None:
+        """.claude-plugin/marketplace.json includes optional metadata fields."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        content = json.loads(
+            (tmp_path / ".claude-plugin" / "marketplace.json").read_text()
+        )
+        assert "metadata" in content
+        assert "description" in content["metadata"]
+        assert "version" in content["metadata"]
+        assert "pluginRoot" in content["metadata"]
+        assert content["metadata"]["pluginRoot"] == "./skill"
+
+    def test_scaffold_skill_plugin_json_created(self, tmp_path: Path) -> None:
+        """Each skill directory gets a .claude-plugin/plugin.json manifest."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        plugin_json = (
+            tmp_path / "skill" / "example-skill" / ".claude-plugin" / "plugin.json"
+        )
+        assert plugin_json.exists()
+
+        content = json.loads(plugin_json.read_text())
+        assert content["name"] == "example-skill"
+        assert "description" in content
+        assert "version" in content
+        assert content["version"] == "0.1.0"
+
+    def test_scaffold_claude_plugin_marketplace_kebab_case_name(
+        self, tmp_path: Path
+    ) -> None:
+        """Marketplace name uses kebab-case (repo name) per Claude Code standard."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "my-org/team-skills")
+
+        content = json.loads(
+            (tmp_path / ".claude-plugin" / "marketplace.json").read_text()
+        )
+        # name should be the repo name part (kebab-case)
+        assert content["name"] == "team-skills"
+
     def test_scaffold_readme_contains_repo_name(self, tmp_path: Path) -> None:
         """README.md references the repository name."""
         service = SkillService(github_client=MockGitHubClient())
@@ -1838,6 +1919,9 @@ class TestSkillServiceUpgradeRegistryRepo:
 
         # Marketplace manifest
         assert "marketplace.json" in files
+
+        # Claude Code plugin marketplace
+        assert ".claude-plugin/marketplace.json" in files
 
         # Version marker (always included)
         assert ".registry-version" in files
