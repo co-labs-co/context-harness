@@ -1035,6 +1035,16 @@ class SkillService:
             repo_path, files_to_update, force=force
         )
 
+        # Remove obsolete scaffold files replaced by newer equivalents
+        obsolete_files = [
+            ".github/workflows/auto-rebase.yml",  # Replaced by skill-onboarding.md
+        ]
+        for obsolete in obsolete_files:
+            obsolete_path = repo_path / obsolete
+            if obsolete_path.exists():
+                obsolete_path.unlink()
+                updated_files.append(f"(removed) {obsolete}")
+
         # Attempt to compile agentic workflows if the .md file was updated
         if any(f.endswith(".md") and "workflows" in f for f in updated_files):
             self._try_compile_agentic_workflows(repo_path)
@@ -1191,6 +1201,7 @@ class SkillService:
             "registry/web/index.html",  # AI agent instructions are updated regularly
             "registry/web/skill.html",  # Skill detail page format may change
             "llms.txt",  # AI agent installation protocol (emerging standard)
+            ".github/workflows/skill-onboarding.md",  # Agentic workflow instructions updated regularly
         }
 
         updated_files = []

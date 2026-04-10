@@ -2054,6 +2054,60 @@ class TestSkillServiceUpgradeRegistryRepo:
         assert "Dockerfile" in force_files
         assert ".github/workflows/release.yml" in force_files
 
+    def test_upgrade_removes_obsolete_auto_rebase_workflow(
+        self, tmp_path: Path
+    ) -> None:
+        """Upgrade removes auto-rebase.yml which was replaced by skill-onboarding.md."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        # Create registry with old auto-rebase.yml
+        (tmp_path / ".registry-version").write_text("0.1.0")
+        (tmp_path / "skills.json").write_text('{"skills": []}')
+        (tmp_path / "skill").mkdir()
+        (tmp_path / ".github" / "workflows").mkdir(parents=True)
+        (tmp_path / ".github" / "workflows" / "auto-rebase.yml").write_text(
+            "# OLD AUTO REBASE WORKFLOW"
+        )
+
+        result = service.upgrade_registry_repo(tmp_path)
+        assert isinstance(result, Success)
+
+        # auto-rebase.yml should be deleted
+        assert not (tmp_path / ".github" / "workflows" / "auto-rebase.yml").exists()
+
+        # Removal should be reported in updated files
+        updated = result.value["files_updated"]
+        assert "(removed) .github/workflows/auto-rebase.yml" in updated
+
+    def test_upgrade_overwrites_existing_skill_onboarding_workflow(
+        self, tmp_path: Path
+    ) -> None:
+        """skill-onboarding.md is critical infrastructure and always overwritten."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        # Create registry with old skill-onboarding.md content
+        (tmp_path / ".registry-version").write_text("0.1.0")
+        (tmp_path / "skills.json").write_text('{"skills": []}')
+        (tmp_path / "skill").mkdir()
+        (tmp_path / ".github" / "workflows").mkdir(parents=True)
+        (tmp_path / ".github" / "workflows" / "skill-onboarding.md").write_text(
+            "# OLD CONTENT"
+        )
+
+        result = service.upgrade_registry_repo(tmp_path)
+        assert isinstance(result, Success)
+
+        # File should be overwritten with new content
+        updated = result.value["files_updated"]
+        assert ".github/workflows/skill-onboarding.md" in updated
+
+        # Content should no longer be the old content
+        content = (
+            tmp_path / ".github" / "workflows" / "skill-onboarding.md"
+        ).read_text()
+        assert "# OLD CONTENT" not in content
+        assert "Skill Onboarding" in content
+
     def test_upgrade_regenerates_skills_json_with_full_metadata(
         self, tmp_path: Path
     ) -> None:
