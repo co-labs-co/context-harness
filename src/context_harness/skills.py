@@ -112,7 +112,9 @@ def check_gh_auth(quiet: bool = False) -> bool:
                 console.print("[dim]Run 'gh auth login' to authenticate.[/dim]")
             else:
                 console.print("[red]Error: Registry authentication failed.[/red]")
-                console.print("[dim]Check your CONTEXT_HARNESS_REGISTRY_TOKEN environment variable.[/dim]")
+                console.print(
+                    "[dim]Check your CONTEXT_HARNESS_REGISTRY_TOKEN environment variable.[/dim]"
+                )
         return False
     return True
 
@@ -133,9 +135,7 @@ def check_repo_access(repo: Optional[str] = None, quiet: bool = False) -> bool:
         if not quiet:
             registry_url = get_current_skills_repo()
             console.print(f"[red]Error: Cannot access registry '{registry_url}'[/red]")
-            console.print(
-                "[dim]Make sure you have access to the registry.[/dim]"
-            )
+            console.print("[dim]Make sure you have access to the registry.[/dim]")
         return False
     return True
 
@@ -272,9 +272,7 @@ def get_skill_info(skill_name: str, quiet: bool = False) -> Optional[SkillInfo]:
     return None
 
 
-def _fetch_directory_recursive(
-    path: str, dest: Path, quiet: bool = False
-) -> bool:
+def _fetch_directory_recursive(path: str, dest: Path, quiet: bool = False) -> bool:
     """Recursively fetch a directory from the registry.
 
     Supports both GitHub and HTTP registries.
@@ -460,14 +458,20 @@ def init_repo(
         if not quiet:
             console.print(f"\n[green]✅ {result.message}[/green]")
             console.print(f"[dim]URL: {repo.url}[/dim]")
+            console.print("\n[yellow]⚠️  Next steps:[/yellow]")
+            console.print("[yellow]1. Configure GitHub Actions permissions[/yellow]")
             console.print(
-                "\n[yellow]⚠️  Next: Configure GitHub Actions permissions[/yellow]"
+                "[dim]   Settings → Actions → General → Workflow permissions[/dim]"
             )
             console.print(
-                "[dim]Settings → Actions → General → Workflow permissions[/dim]"
+                "[dim]   Select 'Read and write' + 'Allow Actions to create PRs'[/dim]"
             )
             console.print(
-                "[dim]Select 'Read and write' + 'Allow Actions to create PRs'[/dim]"
+                "[yellow]2. Set up Agentic Workflows (for automated skill onboarding)[/yellow]"
+            )
+            console.print("[dim]   Install: gh extension install github/gh-aw[/dim]")
+            console.print(
+                "[dim]   Compile: gh aw compile (in the repo directory)[/dim]"
             )
         return SkillResult.SUCCESS, repo.url
 
@@ -534,23 +538,31 @@ def upgrade_repo(
 
         if not quiet:
             if data.get("upgraded"):
-                console.print(f"\n[green]✅ Registry upgraded: {current} → {latest}[/green]")
+                console.print(
+                    f"\n[green]✅ Registry upgraded: {current} → {latest}[/green]"
+                )
                 updated = data.get("files_updated", [])
                 if updated:
                     console.print("[dim]Updated files:[/dim]")
                     for f in updated:
                         console.print(f"[dim]  - {f}[/dim]")
             elif data.get("dry_run"):
-                console.print(f"\n[yellow]Dry run: would upgrade {current} → {latest}[/yellow]")
+                console.print(
+                    f"\n[yellow]Dry run: would upgrade {current} → {latest}[/yellow]"
+                )
                 to_update = data.get("files_to_update", [])
                 if to_update:
                     console.print("[dim]Files to update:[/dim]")
                     for f in to_update:
                         console.print(f"[dim]  - {f}[/dim]")
             elif data.get("upgrade_available"):
-                console.print(f"\n[yellow]Upgrade available: {current} → {latest}[/yellow]")
+                console.print(
+                    f"\n[yellow]Upgrade available: {current} → {latest}[/yellow]"
+                )
             else:
-                console.print(f"\n[green]✅ Registry is up to date (version {current})[/green]")
+                console.print(
+                    f"\n[green]✅ Registry is up to date (version {current})[/green]"
+                )
 
         return SkillResult.SUCCESS, data
 
@@ -794,13 +806,17 @@ def extract_skill(
                 initial_version = frontmatter.get("version", "0.1.0")
                 version_file.write_text(initial_version + "\n", encoding="utf-8")
                 if not quiet:
-                    console.print(f"[dim]Created version.txt with {initial_version}[/dim]")
+                    console.print(
+                        f"[dim]Created version.txt with {initial_version}[/dim]"
+                    )
 
             # Generate .listing.json for frontend file discovery
             _generate_skill_listing(skill_dest)
 
             # Update release-please config to register the new skill
-            _update_release_please_config(tmppath, skill_name, frontmatter.get("version", "0.1.0"))
+            _update_release_please_config(
+                tmppath, skill_name, frontmatter.get("version", "0.1.0")
+            )
 
             # Update or create skills.json registry
             registry_path = tmppath / SKILLS_REGISTRY_PATH
@@ -1142,7 +1158,9 @@ def _generate_skill_listing(skill_path: Path) -> None:
     listing_path.write_text(json.dumps(listing, indent=2) + "\n", encoding="utf-8")
 
 
-def _update_release_please_config(repo_path: Path, skill_name: str, version: str) -> None:
+def _update_release_please_config(
+    repo_path: Path, skill_name: str, version: str
+) -> None:
     """Update release-please config files to register a new skill.
 
     Args:
@@ -1193,7 +1211,9 @@ def _update_release_please_config(repo_path: Path, skill_name: str, version: str
     # Add the skill version if not already present
     if skill_path not in manifest:
         manifest[skill_path] = version
-        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+        manifest_path.write_text(
+            json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+        )
 
 
 def _get_github_username() -> str:

@@ -1219,7 +1219,7 @@ class TestSkillServiceInitRegistryRepo:
             ".github/workflows/release.yml",
             ".github/workflows/sync-registry.yml",
             ".github/workflows/validate-skills.yml",
-            ".github/workflows/auto-rebase.yml",
+            ".github/workflows/skill-onboarding.md",
             "scripts/sync-registry.py",
             "scripts/validate_skills.py",
             "skill/example-skill/SKILL.md",
@@ -1532,18 +1532,21 @@ class TestSkillServiceInitRegistryRepo:
         assert "marocchino/sticky-pull-request-comment@v2" in content
         assert "contents: read" in content
 
-    def test_scaffold_auto_rebase_workflow(self, tmp_path: Path) -> None:
-        """auto-rebase.yml automatically rebases PRs when shared files change."""
+    def test_scaffold_skill_onboarding_workflow(self, tmp_path: Path) -> None:
+        """skill-onboarding.md agentic workflow auto-registers new skills."""
         service = SkillService(github_client=MockGitHubClient())
         service._write_registry_scaffold(tmp_path, "test-user/my-skills")
 
-        content = (tmp_path / ".github" / "workflows" / "auto-rebase.yml").read_text()
-        assert "Auto Rebase" in content
-        assert "skills.json" in content
+        content = (
+            tmp_path / ".github" / "workflows" / "skill-onboarding.md"
+        ).read_text()
+        assert "Skill Onboarding" in content
         assert "release-please-config.json" in content
         assert ".release-please-manifest.json" in content
-        assert "git rebase origin/main" in content
-        assert "force-with-lease" in content
+        assert "version.txt" in content
+        assert "push-to-pull-request-branch" in content
+        assert "pull_request" in content
+        assert "skill/**" in content
 
     def test_scaffold_sync_registry_script(self, tmp_path: Path) -> None:
         """sync-registry.py parses frontmatter and version.txt."""
@@ -1701,7 +1704,7 @@ class TestSkillServiceInitRegistryRepo:
     # -- Subprocess call verification ----------------------------------------
 
     def test_init_repo_calls_clone_add_commit_push(self) -> None:
-        """Subprocess calls are made in correct order: clone, add, commit, push."""
+        """Subprocess calls are made in correct order: clone, compile, add, commit, push."""
         client = MockGitHubClient(
             has_repo_access=False,
             create_repo_url="https://github.com/test-user/my-skills",
@@ -1712,22 +1715,25 @@ class TestSkillServiceInitRegistryRepo:
             mock_run.return_value.returncode = 0
             service.init_registry_repo("my-skills")
 
-        # Should have 4 subprocess calls: clone, add, commit, push
-        assert mock_run.call_count == 4
+        # Should have 5 subprocess calls: clone, gh aw compile, add, commit, push
+        assert mock_run.call_count == 5
 
         calls = [c.args[0] for c in mock_run.call_args_list]
         # First call: gh repo clone
         assert calls[0][0] == "gh"
         assert "clone" in calls[0]
-        # Second call: git add
-        assert calls[1][0] == "git"
-        assert "add" in calls[1]
-        # Third call: git commit
+        # Second call: gh aw compile (best-effort)
+        assert calls[1][0] == "gh"
+        assert "aw" in calls[1]
+        # Third call: git add
         assert calls[2][0] == "git"
-        assert "commit" in calls[2]
-        # Fourth call: git push
+        assert "add" in calls[2]
+        # Fourth call: git commit
         assert calls[3][0] == "git"
-        assert "push" in calls[3]
+        assert "commit" in calls[3]
+        # Fifth call: git push
+        assert calls[4][0] == "git"
+        assert "push" in calls[4]
 
     def test_init_repo_private_flag_passed_to_create(self) -> None:
         """Private=True is passed through to create_repo."""
@@ -1893,7 +1899,7 @@ class TestSkillServiceUpgradeRegistryRepo:
         assert ".github/workflows/release.yml" in files
         assert ".github/workflows/sync-registry.yml" in files
         assert ".github/workflows/validate-skills.yml" in files
-        assert ".github/workflows/auto-rebase.yml" in files
+        assert ".github/workflows/skill-onboarding.md" in files
 
         # GitHub templates
         assert ".github/ISSUE_TEMPLATE/new-skill.md" in files
@@ -2034,6 +2040,7 @@ class TestSkillServiceUpgradeRegistryRepo:
         assert "Dockerfile" in files
         assert "docker-compose.yml" in files
         assert "registry/nginx.conf" in files
+        assert ".github/workflows/skill-onboarding.md" in files
 
         # Non-critical existing files are NOT included without force
         assert ".github/workflows/release.yml" not in files
