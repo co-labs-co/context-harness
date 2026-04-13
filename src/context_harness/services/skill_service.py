@@ -2246,6 +2246,7 @@ on:
       - "skill/**"
 tools:
   github:
+    toolsets: [context, repos, pull_requests]
   edit:
   bash: true
 safe-outputs:
