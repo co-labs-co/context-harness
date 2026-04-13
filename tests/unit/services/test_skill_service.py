@@ -1219,7 +1219,7 @@ class TestSkillServiceInitRegistryRepo:
             ".github/workflows/release.yml",
             ".github/workflows/sync-registry.yml",
             ".github/workflows/validate-skills.yml",
-            ".github/workflows/auto-rebase.yml",
+            ".github/workflows/skill-onboarding.md",
             "scripts/sync-registry.py",
             "scripts/validate_skills.py",
             "skill/example-skill/SKILL.md",
@@ -1286,6 +1286,87 @@ class TestSkillServiceInitRegistryRepo:
         content = json.loads((tmp_path / "marketplace.json").read_text())
         assert "registry_version" in content
         assert content["schema_version"] == "1.1"
+
+    def test_scaffold_claude_plugin_marketplace_created(self, tmp_path: Path) -> None:
+        """Scaffold creates .claude-plugin/marketplace.json conforming to Claude Code standard."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        mkt_path = tmp_path / ".claude-plugin" / "marketplace.json"
+        assert mkt_path.exists()
+
+        content = json.loads(mkt_path.read_text())
+        # Required fields per Claude Code plugin marketplace standard
+        assert "name" in content
+        assert "owner" in content
+        assert "plugins" in content
+        assert isinstance(content["plugins"], list)
+        assert content["name"] == "my-skills"
+        assert content["owner"]["name"] == "test-user"
+
+    def test_scaffold_claude_plugin_marketplace_has_plugin_entries(
+        self, tmp_path: Path
+    ) -> None:
+        """Each skill directory becomes a plugin entry in .claude-plugin/marketplace.json."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        content = json.loads(
+            (tmp_path / ".claude-plugin" / "marketplace.json").read_text()
+        )
+        plugins = content["plugins"]
+        # Should have at least the example-skill
+        plugin_names = [p["name"] for p in plugins]
+        assert "example-skill" in plugin_names
+
+        # Each plugin must have name and source (Claude Code standard)
+        for plugin in plugins:
+            assert "name" in plugin
+            assert "source" in plugin
+            assert plugin["source"].startswith("./skill/")
+
+    def test_scaffold_claude_plugin_marketplace_metadata(self, tmp_path: Path) -> None:
+        """.claude-plugin/marketplace.json includes optional metadata fields."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        content = json.loads(
+            (tmp_path / ".claude-plugin" / "marketplace.json").read_text()
+        )
+        assert "metadata" in content
+        assert "description" in content["metadata"]
+        assert "version" in content["metadata"]
+        assert "pluginRoot" in content["metadata"]
+        assert content["metadata"]["pluginRoot"] == "./skill"
+
+    def test_scaffold_skill_plugin_json_created(self, tmp_path: Path) -> None:
+        """Each skill directory gets a .claude-plugin/plugin.json manifest."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "test-user/my-skills")
+
+        plugin_json = (
+            tmp_path / "skill" / "example-skill" / ".claude-plugin" / "plugin.json"
+        )
+        assert plugin_json.exists()
+
+        content = json.loads(plugin_json.read_text())
+        assert content["name"] == "example-skill"
+        assert "description" in content
+        assert "version" in content
+        assert content["version"] == "0.1.0"
+
+    def test_scaffold_claude_plugin_marketplace_kebab_case_name(
+        self, tmp_path: Path
+    ) -> None:
+        """Marketplace name uses kebab-case (repo name) per Claude Code standard."""
+        service = SkillService(github_client=MockGitHubClient())
+        service._write_registry_scaffold(tmp_path, "my-org/team-skills")
+
+        content = json.loads(
+            (tmp_path / ".claude-plugin" / "marketplace.json").read_text()
+        )
+        # name should be the repo name part (kebab-case)
+        assert content["name"] == "team-skills"
 
     def test_scaffold_readme_contains_repo_name(self, tmp_path: Path) -> None:
         """README.md references the repository name."""
@@ -1451,18 +1532,21 @@ class TestSkillServiceInitRegistryRepo:
         assert "marocchino/sticky-pull-request-comment@v2" in content
         assert "contents: read" in content
 
-    def test_scaffold_auto_rebase_workflow(self, tmp_path: Path) -> None:
-        """auto-rebase.yml automatically rebases PRs when shared files change."""
+    def test_scaffold_skill_onboarding_workflow(self, tmp_path: Path) -> None:
+        """skill-onboarding.md agentic workflow auto-registers new skills."""
         service = SkillService(github_client=MockGitHubClient())
         service._write_registry_scaffold(tmp_path, "test-user/my-skills")
 
-        content = (tmp_path / ".github" / "workflows" / "auto-rebase.yml").read_text()
-        assert "Auto Rebase" in content
-        assert "skills.json" in content
+        content = (
+            tmp_path / ".github" / "workflows" / "skill-onboarding.md"
+        ).read_text()
+        assert "Skill Onboarding" in content
         assert "release-please-config.json" in content
         assert ".release-please-manifest.json" in content
-        assert "git rebase origin/main" in content
-        assert "force-with-lease" in content
+        assert "version.txt" in content
+        assert "push-to-pull-request-branch" in content
+        assert "pull_request" in content
+        assert "skill/**" in content
 
     def test_scaffold_sync_registry_script(self, tmp_path: Path) -> None:
         """sync-registry.py parses frontmatter and version.txt."""
@@ -1620,7 +1704,7 @@ class TestSkillServiceInitRegistryRepo:
     # -- Subprocess call verification ----------------------------------------
 
     def test_init_repo_calls_clone_add_commit_push(self) -> None:
-        """Subprocess calls are made in correct order: clone, add, commit, push."""
+        """Subprocess calls are made in correct order: clone, compile, add, commit, push."""
         client = MockGitHubClient(
             has_repo_access=False,
             create_repo_url="https://github.com/test-user/my-skills",
@@ -1631,22 +1715,25 @@ class TestSkillServiceInitRegistryRepo:
             mock_run.return_value.returncode = 0
             service.init_registry_repo("my-skills")
 
-        # Should have 4 subprocess calls: clone, add, commit, push
-        assert mock_run.call_count == 4
+        # Should have 5 subprocess calls: clone, gh aw compile, add, commit, push
+        assert mock_run.call_count == 5
 
         calls = [c.args[0] for c in mock_run.call_args_list]
         # First call: gh repo clone
         assert calls[0][0] == "gh"
         assert "clone" in calls[0]
-        # Second call: git add
-        assert calls[1][0] == "git"
-        assert "add" in calls[1]
-        # Third call: git commit
+        # Second call: gh aw compile (best-effort)
+        assert calls[1][0] == "gh"
+        assert "aw" in calls[1]
+        # Third call: git add
         assert calls[2][0] == "git"
-        assert "commit" in calls[2]
-        # Fourth call: git push
+        assert "add" in calls[2]
+        # Fourth call: git commit
         assert calls[3][0] == "git"
-        assert "push" in calls[3]
+        assert "commit" in calls[3]
+        # Fifth call: git push
+        assert calls[4][0] == "git"
+        assert "push" in calls[4]
 
     def test_init_repo_private_flag_passed_to_create(self) -> None:
         """Private=True is passed through to create_repo."""
@@ -1812,7 +1899,7 @@ class TestSkillServiceUpgradeRegistryRepo:
         assert ".github/workflows/release.yml" in files
         assert ".github/workflows/sync-registry.yml" in files
         assert ".github/workflows/validate-skills.yml" in files
-        assert ".github/workflows/auto-rebase.yml" in files
+        assert ".github/workflows/skill-onboarding.md" in files
 
         # GitHub templates
         assert ".github/ISSUE_TEMPLATE/new-skill.md" in files
@@ -1838,6 +1925,9 @@ class TestSkillServiceUpgradeRegistryRepo:
 
         # Marketplace manifest
         assert "marketplace.json" in files
+
+        # Claude Code plugin marketplace
+        assert ".claude-plugin/marketplace.json" in files
 
         # Version marker (always included)
         assert ".registry-version" in files
@@ -1950,6 +2040,7 @@ class TestSkillServiceUpgradeRegistryRepo:
         assert "Dockerfile" in files
         assert "docker-compose.yml" in files
         assert "registry/nginx.conf" in files
+        assert ".github/workflows/skill-onboarding.md" in files
 
         # Non-critical existing files are NOT included without force
         assert ".github/workflows/release.yml" not in files
@@ -1962,6 +2053,60 @@ class TestSkillServiceUpgradeRegistryRepo:
         # Everything is included with force
         assert "Dockerfile" in force_files
         assert ".github/workflows/release.yml" in force_files
+
+    def test_upgrade_removes_obsolete_auto_rebase_workflow(
+        self, tmp_path: Path
+    ) -> None:
+        """Upgrade removes auto-rebase.yml which was replaced by skill-onboarding.md."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        # Create registry with old auto-rebase.yml
+        (tmp_path / ".registry-version").write_text("0.1.0")
+        (tmp_path / "skills.json").write_text('{"skills": []}')
+        (tmp_path / "skill").mkdir()
+        (tmp_path / ".github" / "workflows").mkdir(parents=True)
+        (tmp_path / ".github" / "workflows" / "auto-rebase.yml").write_text(
+            "# OLD AUTO REBASE WORKFLOW"
+        )
+
+        result = service.upgrade_registry_repo(tmp_path)
+        assert isinstance(result, Success)
+
+        # auto-rebase.yml should be deleted
+        assert not (tmp_path / ".github" / "workflows" / "auto-rebase.yml").exists()
+
+        # Removal should be reported in updated files
+        updated = result.value["files_updated"]
+        assert "(removed) .github/workflows/auto-rebase.yml" in updated
+
+    def test_upgrade_overwrites_existing_skill_onboarding_workflow(
+        self, tmp_path: Path
+    ) -> None:
+        """skill-onboarding.md is critical infrastructure and always overwritten."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        # Create registry with old skill-onboarding.md content
+        (tmp_path / ".registry-version").write_text("0.1.0")
+        (tmp_path / "skills.json").write_text('{"skills": []}')
+        (tmp_path / "skill").mkdir()
+        (tmp_path / ".github" / "workflows").mkdir(parents=True)
+        (tmp_path / ".github" / "workflows" / "skill-onboarding.md").write_text(
+            "# OLD CONTENT"
+        )
+
+        result = service.upgrade_registry_repo(tmp_path)
+        assert isinstance(result, Success)
+
+        # File should be overwritten with new content
+        updated = result.value["files_updated"]
+        assert ".github/workflows/skill-onboarding.md" in updated
+
+        # Content should no longer be the old content
+        content = (
+            tmp_path / ".github" / "workflows" / "skill-onboarding.md"
+        ).read_text()
+        assert "# OLD CONTENT" not in content
+        assert "Skill Onboarding" in content
 
     def test_upgrade_regenerates_skills_json_with_full_metadata(
         self, tmp_path: Path
@@ -2248,3 +2393,38 @@ class TestSkillServiceUpgradeRegistryRepo:
         # Existing skills list should be preserved (not wiped)
         assert len(data["skills"]) == 1
         assert data["skills"][0]["name"] == "existing-skill"
+
+    def test_upgrade_regenerates_per_skill_plugin_json(self, tmp_path: Path) -> None:
+        """Upgrade creates .claude-plugin/plugin.json for each skill."""
+        service = SkillService(github_client=MockGitHubClient())
+
+        (tmp_path / "skills.json").write_text('{"skills": []}')
+        (tmp_path / "skill").mkdir()
+
+        # Create two skills — one with existing plugin.json, one without
+        for name, desc, ver in [
+            ("alpha-skill", "First skill", "1.0.0"),
+            ("beta-skill", "Second skill", "2.0.0"),
+        ]:
+            d = tmp_path / "skill" / name
+            d.mkdir()
+            (d / "SKILL.md").write_text(
+                f"---\nname: {name}\ndescription: {desc}\n---\n# {name}\n"
+            )
+            (d / "version.txt").write_text(ver)
+
+        result = service.upgrade_registry_repo(tmp_path)
+
+        assert isinstance(result, Success)
+
+        # Both skills should have .claude-plugin/plugin.json
+        for name in ["alpha-skill", "beta-skill"]:
+            plugin_json = tmp_path / "skill" / name / ".claude-plugin" / "plugin.json"
+            assert plugin_json.exists(), f"Missing plugin.json for {name}"
+            data = json.loads(plugin_json.read_text())
+            assert data["name"] == name
+
+        # Per-skill plugin.json files should be in updated files list
+        updated = result.value["files_updated"]
+        assert "skill/alpha-skill/.claude-plugin/plugin.json" in updated
+        assert "skill/beta-skill/.claude-plugin/plugin.json" in updated

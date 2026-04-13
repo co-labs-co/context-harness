@@ -4,7 +4,6 @@ import base64
 import hashlib
 import json
 import os
-import tempfile
 import threading
 import time
 from pathlib import Path
@@ -41,6 +40,16 @@ from context_harness.oauth import (
     check_mcp_auth_required,
     get_mcp_bearer_token,
 )
+
+
+@pytest.fixture
+def fake_home(tmp_path, monkeypatch):
+    """Redirect Path.home() to a temp directory for isolated token storage.
+
+    Yields the tmp_path so tests can inspect the filesystem if needed.
+    """
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    return tmp_path
 
 
 class TestGeneratePKCE:
@@ -237,94 +246,76 @@ class TestAtlassianResource:
 class TestTokenStorage:
     """Tests for TokenStorage class."""
 
-    def test_storage_uses_file_fallback(self):
+    def test_storage_uses_file_fallback(self, fake_home):
         """Test that storage falls back to file when keyring unavailable."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with mock.patch.object(Path, "home", return_value=Path(tmpdir)):
-                storage = TokenStorage(use_keyring=False)
+        storage = TokenStorage(use_keyring=False)
 
-                tokens = OAuthTokens(access_token="test_token", expires_in=3600)
-                storage.save_tokens("atlassian", tokens)
+        tokens = OAuthTokens(access_token="test_token", expires_in=3600)
+        storage.save_tokens("atlassian", tokens)
 
-                loaded = storage.load_tokens("atlassian")
-                assert loaded is not None
-                assert loaded.access_token == "test_token"
+        loaded = storage.load_tokens("atlassian")
+        assert loaded is not None
+        assert loaded.access_token == "test_token"
 
-    def test_storage_delete_tokens(self):
+    def test_storage_delete_tokens(self, fake_home):
         """Test that tokens can be deleted."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with mock.patch.object(Path, "home", return_value=Path(tmpdir)):
-                storage = TokenStorage(use_keyring=False)
+        storage = TokenStorage(use_keyring=False)
 
-                tokens = OAuthTokens(access_token="test_token")
-                storage.save_tokens("atlassian", tokens)
+        tokens = OAuthTokens(access_token="test_token")
+        storage.save_tokens("atlassian", tokens)
 
-                assert storage.delete_tokens("atlassian")
-                assert storage.load_tokens("atlassian") is None
+        assert storage.delete_tokens("atlassian")
+        assert storage.load_tokens("atlassian") is None
 
-    def test_storage_delete_nonexistent_returns_false(self):
+    def test_storage_delete_nonexistent_returns_false(self, fake_home):
         """Test that deleting nonexistent tokens returns False."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with mock.patch.object(Path, "home", return_value=Path(tmpdir)):
-                storage = TokenStorage(use_keyring=False)
-                assert not storage.delete_tokens("nonexistent")
+        storage = TokenStorage(use_keyring=False)
+        assert not storage.delete_tokens("nonexistent")
 
-    def test_storage_auth_status_not_authenticated(self):
+    def test_storage_auth_status_not_authenticated(self, fake_home):
         """Test auth status when no tokens stored."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with mock.patch.object(Path, "home", return_value=Path(tmpdir)):
-                storage = TokenStorage(use_keyring=False)
-                assert (
-                    storage.get_auth_status("atlassian") == AuthStatus.NOT_AUTHENTICATED
-                )
+        storage = TokenStorage(use_keyring=False)
+        assert storage.get_auth_status("atlassian") == AuthStatus.NOT_AUTHENTICATED
 
-    def test_storage_auth_status_authenticated(self):
+    def test_storage_auth_status_authenticated(self, fake_home):
         """Test auth status when valid tokens stored."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with mock.patch.object(Path, "home", return_value=Path(tmpdir)):
-                storage = TokenStorage(use_keyring=False)
-                tokens = OAuthTokens(access_token="test", expires_in=3600)
-                storage.save_tokens("atlassian", tokens)
+        storage = TokenStorage(use_keyring=False)
+        tokens = OAuthTokens(access_token="test", expires_in=3600)
+        storage.save_tokens("atlassian", tokens)
 
-                assert storage.get_auth_status("atlassian") == AuthStatus.AUTHENTICATED
+        assert storage.get_auth_status("atlassian") == AuthStatus.AUTHENTICATED
 
-    def test_storage_auth_status_expired(self):
+    def test_storage_auth_status_expired(self, fake_home):
         """Test auth status when tokens expired."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with mock.patch.object(Path, "home", return_value=Path(tmpdir)):
-                storage = TokenStorage(use_keyring=False)
-                tokens = OAuthTokens(
-                    access_token="test",
-                    expires_in=3600,
-                    issued_at=time.time() - 4000,
-                )
-                storage.save_tokens("atlassian", tokens)
+        storage = TokenStorage(use_keyring=False)
+        tokens = OAuthTokens(
+            access_token="test",
+            expires_in=3600,
+            issued_at=time.time() - 4000,
+        )
+        storage.save_tokens("atlassian", tokens)
 
-                assert storage.get_auth_status("atlassian") == AuthStatus.TOKEN_EXPIRED
+        assert storage.get_auth_status("atlassian") == AuthStatus.TOKEN_EXPIRED
 
-    def test_storage_creates_token_directory(self):
+    def test_storage_creates_token_directory(self, fake_home):
         """Test that storage creates the token directory."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with mock.patch.object(Path, "home", return_value=Path(tmpdir)):
-                storage = TokenStorage(use_keyring=False)
-                tokens = OAuthTokens(access_token="test")
-                storage.save_tokens("atlassian", tokens)
+        storage = TokenStorage(use_keyring=False)
+        tokens = OAuthTokens(access_token="test")
+        storage.save_tokens("atlassian", tokens)
 
-                token_dir = Path(tmpdir) / ".context-harness/tokens"
-                assert token_dir.exists()
+        token_dir = fake_home / ".context-harness/tokens"
+        assert token_dir.exists()
 
-    def test_storage_load_invalid_json_returns_none(self):
+    def test_storage_load_invalid_json_returns_none(self, fake_home):
         """Test that loading invalid JSON returns None."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with mock.patch.object(Path, "home", return_value=Path(tmpdir)):
-                storage = TokenStorage(use_keyring=False)
+        storage = TokenStorage(use_keyring=False)
 
-                # Create invalid token file
-                token_dir = Path(tmpdir) / ".context-harness/tokens"
-                token_dir.mkdir(parents=True)
-                (token_dir / "atlassian.json").write_text("invalid json")
+        # Create invalid token file
+        token_dir = fake_home / ".context-harness/tokens"
+        token_dir.mkdir(parents=True)
+        (token_dir / "atlassian.json").write_text("invalid json")
 
-                assert storage.load_tokens("atlassian") is None
+        assert storage.load_tokens("atlassian") is None
 
 
 class TestOAuthCallbackHandler:
@@ -432,29 +423,25 @@ class TestAtlassianOAuthFlow:
         assert "state=" in url
         assert "audience=api.atlassian.com" in url
 
-    def test_flow_get_auth_status(self):
+    def test_flow_get_auth_status(self, fake_home):
         """Test flow auth status check."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with mock.patch.object(Path, "home", return_value=Path(tmpdir)):
-                config = AtlassianOAuthConfig(client_id="test")
-                storage = TokenStorage(use_keyring=False)
-                flow = AtlassianOAuthFlow(config, token_storage=storage)
+        config = AtlassianOAuthConfig(client_id="test")
+        storage = TokenStorage(use_keyring=False)
+        flow = AtlassianOAuthFlow(config, token_storage=storage)
 
-                assert flow.get_auth_status() == AuthStatus.NOT_AUTHENTICATED
+        assert flow.get_auth_status() == AuthStatus.NOT_AUTHENTICATED
 
-    def test_flow_logout(self):
+    def test_flow_logout(self, fake_home):
         """Test flow logout."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with mock.patch.object(Path, "home", return_value=Path(tmpdir)):
-                config = AtlassianOAuthConfig(client_id="test")
-                storage = TokenStorage(use_keyring=False)
-                flow = AtlassianOAuthFlow(config, token_storage=storage)
+        config = AtlassianOAuthConfig(client_id="test")
+        storage = TokenStorage(use_keyring=False)
+        flow = AtlassianOAuthFlow(config, token_storage=storage)
 
-                # Save some tokens first
-                storage.save_tokens("atlassian", OAuthTokens(access_token="test"))
+        # Save some tokens first
+        storage.save_tokens("atlassian", OAuthTokens(access_token="test"))
 
-                assert flow.logout()  # Should succeed
-                assert not flow.logout()  # Should fail - already logged out
+        assert flow.logout()  # Should succeed
+        assert not flow.logout()  # Should fail - already logged out
 
 
 class TestGetAtlassianOAuthFlow:
@@ -567,38 +554,32 @@ class TestMCPOAuthDiscovery:
 class TestGetMCPBearerToken:
     """Tests for get_mcp_bearer_token function."""
 
-    def test_returns_none_when_not_authenticated(self):
+    def test_returns_none_when_not_authenticated(self, fake_home):
         """Test returns None when no tokens stored."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with mock.patch.object(Path, "home", return_value=Path(tmpdir)):
-                result = get_mcp_bearer_token("atlassian")
-                assert result is None
+        result = get_mcp_bearer_token("atlassian")
+        assert result is None
 
-    def test_returns_token_when_authenticated(self):
+    def test_returns_token_when_authenticated(self, fake_home):
         """Test returns token when valid tokens stored."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with mock.patch.object(Path, "home", return_value=Path(tmpdir)):
-                storage = TokenStorage(use_keyring=False)
-                tokens = OAuthTokens(access_token="test_token", expires_in=3600)
-                storage.save_tokens("atlassian", tokens)
+        storage = TokenStorage(use_keyring=False)
+        tokens = OAuthTokens(access_token="test_token", expires_in=3600)
+        storage.save_tokens("atlassian", tokens)
 
-                result = get_mcp_bearer_token("atlassian")
-                assert result == "test_token"
+        result = get_mcp_bearer_token("atlassian")
+        assert result == "test_token"
 
-    def test_returns_none_when_token_expired(self):
+    def test_returns_none_when_token_expired(self, fake_home):
         """Test returns None when tokens expired."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with mock.patch.object(Path, "home", return_value=Path(tmpdir)):
-                storage = TokenStorage(use_keyring=False)
-                tokens = OAuthTokens(
-                    access_token="test_token",
-                    expires_in=3600,
-                    issued_at=time.time() - 4000,  # Expired
-                )
-                storage.save_tokens("atlassian", tokens)
+        storage = TokenStorage(use_keyring=False)
+        tokens = OAuthTokens(
+            access_token="test_token",
+            expires_in=3600,
+            issued_at=time.time() - 4000,  # Expired
+        )
+        storage.save_tokens("atlassian", tokens)
 
-                result = get_mcp_bearer_token("atlassian")
-                assert result is None
+        result = get_mcp_bearer_token("atlassian")
+        assert result is None
 
 
 class TestMCPAuthCLI:
@@ -843,54 +824,48 @@ class TestMCPOAuthFlow:
         assert "prompt=consent" in url
         assert "custom=value" in url
 
-    def test_flow_get_auth_status(self):
+    def test_flow_get_auth_status(self, fake_home):
         """Test flow auth status check."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with mock.patch.object(Path, "home", return_value=Path(tmpdir)):
-                config = OAuthConfig(
-                    service_name="test-service",
-                    client_id="test_client",
-                    auth_url="https://auth.example.com/authorize",
-                    token_url="https://auth.example.com/token",
-                )
-                storage = TokenStorage(use_keyring=False)
-                flow = MCPOAuthFlow(config, token_storage=storage)
+        config = OAuthConfig(
+            service_name="test-service",
+            client_id="test_client",
+            auth_url="https://auth.example.com/authorize",
+            token_url="https://auth.example.com/token",
+        )
+        storage = TokenStorage(use_keyring=False)
+        flow = MCPOAuthFlow(config, token_storage=storage)
 
-                assert flow.get_auth_status() == AuthStatus.NOT_AUTHENTICATED
+        assert flow.get_auth_status() == AuthStatus.NOT_AUTHENTICATED
 
-    def test_flow_get_tokens_returns_none_when_not_authenticated(self):
+    def test_flow_get_tokens_returns_none_when_not_authenticated(self, fake_home):
         """Test that get_tokens returns None when not authenticated."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with mock.patch.object(Path, "home", return_value=Path(tmpdir)):
-                config = OAuthConfig(
-                    service_name="test-service",
-                    client_id="test_client",
-                    auth_url="https://auth.example.com/authorize",
-                    token_url="https://auth.example.com/token",
-                )
-                storage = TokenStorage(use_keyring=False)
-                flow = MCPOAuthFlow(config, token_storage=storage)
+        config = OAuthConfig(
+            service_name="test-service",
+            client_id="test_client",
+            auth_url="https://auth.example.com/authorize",
+            token_url="https://auth.example.com/token",
+        )
+        storage = TokenStorage(use_keyring=False)
+        flow = MCPOAuthFlow(config, token_storage=storage)
 
-                assert flow.get_tokens() is None
+        assert flow.get_tokens() is None
 
-    def test_flow_logout(self):
+    def test_flow_logout(self, fake_home):
         """Test flow logout."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with mock.patch.object(Path, "home", return_value=Path(tmpdir)):
-                config = OAuthConfig(
-                    service_name="test-service",
-                    client_id="test_client",
-                    auth_url="https://auth.example.com/authorize",
-                    token_url="https://auth.example.com/token",
-                )
-                storage = TokenStorage(use_keyring=False)
-                flow = MCPOAuthFlow(config, token_storage=storage)
+        config = OAuthConfig(
+            service_name="test-service",
+            client_id="test_client",
+            auth_url="https://auth.example.com/authorize",
+            token_url="https://auth.example.com/token",
+        )
+        storage = TokenStorage(use_keyring=False)
+        flow = MCPOAuthFlow(config, token_storage=storage)
 
-                # Save some tokens first
-                storage.save_tokens("test-service", OAuthTokens(access_token="test"))
+        # Save some tokens first
+        storage.save_tokens("test-service", OAuthTokens(access_token="test"))
 
-                assert flow.logout()  # Should succeed
-                assert not flow.logout()  # Should fail - already logged out
+        assert flow.logout()  # Should succeed
+        assert not flow.logout()  # Should fail - already logged out
 
 
 class TestGetOAuthFlow:
@@ -959,58 +934,48 @@ class TestAtlassianOAuthConfigToGeneric:
 class TestTokenStorageMultipleServices:
     """Tests for TokenStorage with multiple services."""
 
-    def test_storage_isolates_services(self):
+    def test_storage_isolates_services(self, fake_home):
         """Test that tokens are isolated per service."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with mock.patch.object(Path, "home", return_value=Path(tmpdir)):
-                storage = TokenStorage(use_keyring=False)
+        storage = TokenStorage(use_keyring=False)
 
-                # Store tokens for different services
-                storage.save_tokens(
-                    "atlassian", OAuthTokens(access_token="atlassian_token")
-                )
-                storage.save_tokens("github", OAuthTokens(access_token="github_token"))
+        # Store tokens for different services
+        storage.save_tokens("atlassian", OAuthTokens(access_token="atlassian_token"))
+        storage.save_tokens("github", OAuthTokens(access_token="github_token"))
 
-                # Verify isolation
-                atlassian = storage.load_tokens("atlassian")
-                github = storage.load_tokens("github")
+        # Verify isolation
+        atlassian = storage.load_tokens("atlassian")
+        github = storage.load_tokens("github")
 
-                assert atlassian is not None
-                assert atlassian.access_token == "atlassian_token"
-                assert github is not None
-                assert github.access_token == "github_token"
+        assert atlassian is not None
+        assert atlassian.access_token == "atlassian_token"
+        assert github is not None
+        assert github.access_token == "github_token"
 
-    def test_deleting_one_service_doesnt_affect_others(self):
+    def test_deleting_one_service_doesnt_affect_others(self, fake_home):
         """Test that deleting tokens for one service doesn't affect others."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with mock.patch.object(Path, "home", return_value=Path(tmpdir)):
-                storage = TokenStorage(use_keyring=False)
+        storage = TokenStorage(use_keyring=False)
 
-                storage.save_tokens(
-                    "atlassian", OAuthTokens(access_token="atlassian_token")
-                )
-                storage.save_tokens("github", OAuthTokens(access_token="github_token"))
+        storage.save_tokens("atlassian", OAuthTokens(access_token="atlassian_token"))
+        storage.save_tokens("github", OAuthTokens(access_token="github_token"))
 
-                # Delete one service
-                storage.delete_tokens("atlassian")
+        # Delete one service
+        storage.delete_tokens("atlassian")
 
-                # Verify other service is unaffected
-                assert storage.load_tokens("atlassian") is None
-                github = storage.load_tokens("github")
-                assert github is not None
-                assert github.access_token == "github_token"
+        # Verify other service is unaffected
+        assert storage.load_tokens("atlassian") is None
+        github = storage.load_tokens("github")
+        assert github is not None
+        assert github.access_token == "github_token"
 
 
 class TestGetMCPBearerTokenGeneric:
     """Tests for get_mcp_bearer_token with multiple services."""
 
-    def test_returns_token_for_any_service(self):
+    def test_returns_token_for_any_service(self, fake_home):
         """Test returns token for any registered service."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with mock.patch.object(Path, "home", return_value=Path(tmpdir)):
-                storage = TokenStorage(use_keyring=False)
-                tokens = OAuthTokens(access_token="custom_token", expires_in=3600)
-                storage.save_tokens("custom-service", tokens)
+        storage = TokenStorage(use_keyring=False)
+        tokens = OAuthTokens(access_token="custom_token", expires_in=3600)
+        storage.save_tokens("custom-service", tokens)
 
-                result = get_mcp_bearer_token("custom-service")
-                assert result == "custom_token"
+        result = get_mcp_bearer_token("custom-service")
+        assert result == "custom_token"

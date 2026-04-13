@@ -50,36 +50,25 @@ Your skill content here...
 - `description` is required and should explain both what the skill does AND when to use it
 - Do NOT include a `version` field
 
-### Step 3 - Bootstrap version.txt
+### Step 3 - Open a Pull Request
 
 ```bash
-echo "0.1.0" > skill/<skill-name>/version.txt
-```
-
-### Step 4 - Register with release-please
-
-Add to `release-please-config.json` under `"packages"`:
-
-```json
-"skill/<skill-name>": {
-  "release-type": "simple",
-  "component": "<skill-name>"
-}
-```
-
-Add to `.release-please-manifest.json`:
-
-```json
-"skill/<skill-name>": "0.1.0"
-```
-
-### Step 5 - Commit with feat: prefix
-
-```bash
-git add skill/<skill-name>/ release-please-config.json .release-please-manifest.json
+git checkout -b add-<skill-name>
+git add skill/<skill-name>/
 git commit -m "feat: add <skill-name>"
-git push origin main
+git push origin add-<skill-name>
+gh pr create --title "feat: add <skill-name>" --body "Adds <skill-name>"
 ```
+
+The **Skill Onboarding** agentic workflow will automatically:
+- Create `version.txt` with `0.1.0`
+- Register the skill in `release-please-config.json`
+- Register the skill in `.release-please-manifest.json`
+- Push the generated files to your PR branch
+
+### Step 4 - Merge
+
+Once CI passes, merge your PR.
 
 The `feat:` prefix is critical - it is a releasable commit type that triggers release-please to create the initial release PR.
 
@@ -141,11 +130,9 @@ git commit --allow-empty -m "chore: release 2.0.0" -m "Release-As: 2.0.0"
 |---------|---------|-----|
 | Using `docs:` for skill edits | No release PR created | Use `feat:` or `fix:` for any SKILL.md change |
 | Adding `version` to frontmatter | Validation failure on PR | Remove it; version lives in `version.txt` only |
-| Forgetting release-please registration | No release PR for new skill | Add to both config and manifest JSON files |
 | Editing `version.txt` manually | Version conflict with release-please | Revert; let release-please manage it |
 | Editing `skills.json` manually | Overwritten on next release | Let sync-registry.yml rebuild it |
 | `name` != directory name | Validation failure | Ensure frontmatter `name` matches exactly |
-| Missing `version.txt` for new skill | release-please cannot bootstrap | Create with `echo "0.1.0" > skill/<name>/version.txt` |
 
 ## Multi-Skill Commits
 
@@ -169,8 +156,8 @@ These files in the registry repo are relevant to the release process:
 | `skill/<name>/SKILL.md` | Author | Skill content (no version field) |
 | `skill/<name>/version.txt` | release-please | Current version (CI-managed) |
 | `skill/<name>/CHANGELOG.md` | release-please | Generated changelog |
-| `release-please-config.json` | Author (add only) | Per-skill release config |
-| `.release-please-manifest.json` | release-please | Current versions (CI-managed after bootstrap) |
+| `release-please-config.json` | Skill Onboarding workflow | Per-skill release config (auto-registered) |
+| `.release-please-manifest.json` | release-please | Current versions (auto-bootstrapped) |
 | `skills.json` | CI | Auto-rebuilt registry manifest |
 | `CONTRIBUTING.md` | Reference | Full authoring guidelines |
 | `QUICKSTART.md` | Reference | First-skill tutorial |

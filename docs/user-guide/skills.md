@@ -247,6 +247,8 @@ The command creates a fully scaffolded repository with CI/CD automation for per-
 
 ```
 my-skills/
+├── .claude-plugin/
+│   └── marketplace.json               # Claude Code plugin marketplace manifest
 ├── .github/
 │   ├── workflows/
 │   │   ├── release.yml                # release-please per-skill versioning
@@ -260,9 +262,12 @@ my-skills/
 │   └── validate_skills.py             # Pydantic-based schema validation
 ├── skill/
 │   └── example-skill/
+│       ├── .claude-plugin/
+│       │   └── plugin.json            # Claude Code plugin manifest
 │       ├── SKILL.md                   # Example skill (no version in frontmatter)
 │       └── version.txt                # Bootstrapped at 0.1.0
 ├── skills.json                        # Registry manifest (auto-updated by CI)
+├── marketplace.json                   # ContextHarness marketplace manifest
 ├── release-please-config.json         # release-please configuration
 ├── .release-please-manifest.json      # Current versions (managed by CI)
 ├── .gitignore
@@ -271,8 +276,8 @@ my-skills/
 └── QUICKSTART.md                      # Quick-start for adding your first skill
 ```
 
-!!! info "16 Files, Zero Manual Setup"
-    The scaffold creates 16 files — a complete GitHub repository with CI/CD that handles versioning, validation, and registry updates automatically. You just write skill content and use conventional commits.
+!!! info "Dual Marketplace Format"
+    The scaffold creates both a ContextHarness-native `marketplace.json` (for `ch skill install`) and a Claude Code plugin marketplace at `.claude-plugin/marketplace.json` (for `/plugin marketplace add`). Users can install skills via either tool. See [Claude Code Plugin Marketplace](#claude-code-plugin-marketplace) below.
 
 Once created, you can start adding skills to the repository. See [Adding Skills to Your Registry](#adding-skills-to-your-registry) below for the complete workflow.
 
@@ -322,6 +327,8 @@ A skills registry repository follows this structure:
 
 ```
 my-skills-repo/
+├── .claude-plugin/
+│   └── marketplace.json             # Claude Code plugin marketplace
 ├── .github/
 │   └── workflows/
 │       ├── release.yml              # Automated per-skill releases
@@ -332,12 +339,17 @@ my-skills-repo/
 │   └── validate_skills.py           # Validation script
 ├── skill/                           # All skills live here
 │   ├── my-skill/
+│   │   ├── .claude-plugin/
+│   │   │   └── plugin.json          # Claude Code plugin manifest
 │   │   ├── SKILL.md                 # Skill content (no version in frontmatter)
 │   │   └── version.txt              # Current version (managed by release-please)
 │   └── another-skill/
+│       ├── .claude-plugin/
+│       │   └── plugin.json
 │       ├── SKILL.md
 │       └── version.txt
 ├── skills.json                      # Registry manifest (auto-generated)
+├── marketplace.json                 # ContextHarness marketplace manifest
 ├── release-please-config.json       # Versioning configuration
 ├── .release-please-manifest.json    # Version state
 ├── README.md
@@ -478,7 +490,9 @@ Fires after a release is published. Runs `scripts/sync-registry.py` to:
 2. Read `version.txt` from each skill directory
 3. Compute content hashes for change detection
 4. Write the consolidated `skills.json`
-5. Commit with `[skip ci]` to prevent infinite loops
+5. Update `.claude-plugin/marketplace.json` with current plugin entries
+6. Update per-skill `.claude-plugin/plugin.json` manifests
+7. Commit with `[skip ci]` to prevent infinite loops
 
 #### `validate-skills.yml` — PR Validation
 
@@ -625,6 +639,106 @@ Use `--force` to bypass the check if needed:
 ch skill upgrade react-forms --force
 ```
 
+## Claude Code Plugin Marketplace
+
+Skills registries created or upgraded with ContextHarness are fully compatible with the [Claude Code plugin marketplace standard](https://code.claude.com/docs/en/plugin-marketplaces). Each skill is an individually installable plugin, giving users a choice between the ContextHarness CLI or Claude Code's built-in plugin system.
+
+### How It Works
+
+Every registry includes two marketplace formats:
+
+| File | Format | Used By |
+|------|--------|---------|
+| `marketplace.json` | ContextHarness-native | `ch skill install` |
+| `.claude-plugin/marketplace.json` | Claude Code standard | `/plugin marketplace add` |
+
+Each skill directory also includes `.claude-plugin/plugin.json` — a Claude Code plugin manifest that enables individual skill installation.
+
+Both formats are automatically kept in sync by the `sync-registry.yml` CI workflow after each release.
+
+### Installing via Claude Code
+
+Add the registry as a Claude Code plugin marketplace:
+
+```bash
+# Add the marketplace (one time)
+/plugin marketplace add owner/repo
+
+# Browse available plugins
+/plugin list
+
+# Install a specific skill as a plugin
+/plugin install my-skill@repo-name
+```
+
+Skills installed this way are available as `/my-skill` commands inside Claude Code sessions.
+
+### Installing via ContextHarness CLI
+
+The traditional CLI workflow also continues to work:
+
+```bash
+# Configure the registry
+ch config set skills-repo owner/repo
+
+# Install a skill
+ch skill install my-skill
+```
+
+### Marketplace Schema
+
+The `.claude-plugin/marketplace.json` follows the Claude Code plugin marketplace specification:
+
+```json
+{
+  "name": "repo-name",
+  "owner": {
+    "name": "owner"
+  },
+  "metadata": {
+    "description": "repo-name skills registry",
+    "version": "0.8.0",
+    "pluginRoot": "./skill"
+  },
+  "plugins": [
+    {
+      "name": "my-skill",
+      "source": "./skill/my-skill",
+      "description": "What this skill does",
+      "version": "1.2.0"
+    }
+  ]
+}
+```
+
+Each skill's `.claude-plugin/plugin.json` contains:
+
+```json
+{
+  "name": "my-skill",
+  "description": "What this skill does",
+  "version": "1.2.0"
+}
+```
+
+!!! tip "Team Distribution"
+    For team-wide distribution, add the marketplace to your project's `.claude/settings.json`:
+
+    ```json
+    {
+      "extraKnownMarketplaces": {
+        "repo-name": {
+          "source": {
+            "source": "github",
+            "repo": "your-org/your-skills"
+          }
+        }
+      }
+    }
+    ```
+
+    Team members will be prompted to install the marketplace when they trust the project folder.
+
 ## HTTP Registry Hosting
 
 Skills registries can be hosted via HTTP (no Git required) using Docker and nginx. This is useful for:
@@ -700,6 +814,7 @@ ch skill upgrade-repo --force
 The command updates:
 
 - **Critical infrastructure** - Always updated: Dockerfile, nginx.conf, index.html, skill.html, llms.txt
+- **Claude Code plugin marketplace** - Always updated: `.claude-plugin/marketplace.json`
 - **Documentation** - Only if missing (use `--force` to overwrite)
 - **Workflows** - Only if missing (use `--force` to overwrite)
 

@@ -66,6 +66,10 @@ They are **always updated** during upgrade, even without `--force`.
 | `Dockerfile` | `_write_scaffold_dockerfile` | Contains COPY paths that must match file locations |
 | `docker-compose.yml` | `_write_scaffold_docker_compose` | Volume mounts and service config |
 | `registry/nginx.conf` | `_write_scaffold_nginx_conf` | Nginx config for serving files |
+| `registry/web/index.html` | `_write_scaffold_index_html` | AI agent instructions updated regularly |
+| `registry/web/skill.html` | `_write_scaffold_skill_html` | Skill detail page format may change |
+| `llms.txt` | `_write_scaffold_llms_txt` | AI agent installation protocol |
+| `.github/workflows/skill-onboarding.md` | `_write_scaffold_skill_onboarding_workflow` | Agentic workflow instructions updated regularly |
 
 ### Infrastructure Files (added if missing, or with --force)
 | File | Writer Method | Notes |
@@ -73,7 +77,6 @@ They are **always updated** during upgrade, even without `--force`.
 | `.github/workflows/release.yml` | `_write_scaffold_release_workflow` | Release automation |
 | `.github/workflows/sync-registry.yml` | `_write_scaffold_sync_registry_workflow` | Post-release sync |
 | `.github/workflows/validate-skills.yml` | `_write_scaffold_validate_skills_workflow` | Skill validation |
-| `.github/workflows/auto-rebase.yml` | `_write_scaffold_auto_rebase_workflow` | Auto PR rebase |
 | `.github/ISSUE_TEMPLATE/new-skill.md` | `_write_scaffold_issue_template` | Skill request template |
 | `.github/PULL_REQUEST_TEMPLATE.md` | `_write_scaffold_pr_template` | PR template |
 | `scripts/sync-registry.py` | `_write_scaffold_sync_registry_script` | Registry sync script |
@@ -84,6 +87,7 @@ They are **always updated** during upgrade, even without `--force`.
 | `.release-please-manifest.json` | `_write_scaffold_release_please_manifest` | Version manifest |
 | `.gitignore` | `_write_scaffold_gitignore` | Git ignore rules |
 | `marketplace.json` | `_write_scaffold_marketplace_json` | Plugin discovery manifest |
+| `.claude-plugin/marketplace.json` | `_write_scaffold_claude_plugin_marketplace` | Claude Code plugin marketplace |
 
 ### Documentation Files (only if missing or with --force)
 | File | Writer Method | Notes |
@@ -98,6 +102,7 @@ They are **always updated** during upgrade, even without `--force`.
 | `.registry-version` | `_write_scaffold_registry_version` | Always updated |
 | `skills.json` | `_write_scaffold_skills_json` | Version markers only |
 | `skill/*` | Various | User-owned, never touched |
+| `skill/*/.claude-plugin/plugin.json` | `_write_scaffold_skill_plugin_json` | Auto-generated per skill |
 
 ## Upgrade Behavior
 

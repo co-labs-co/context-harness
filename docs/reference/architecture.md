@@ -353,7 +353,7 @@ All agent behaviors are defined in markdown files:
 
 ### Skills Registry Architecture
 
-The skills system uses a distributed registry model where repositories host skills and a CLI fetches them:
+The skills system uses a distributed registry model where repositories host skills and clients fetch them via multiple channels:
 
 ```
 ┌──────────────────────┐     ┌──────────────────────────────────────┐
@@ -363,14 +363,23 @@ The skills system uses a distributed registry model where repositories host skil
 │  • skill install     │     │  skill/*/SKILL.md                    │
 │  • skill outdated    │     │  skill/*/version.txt ◀── release.yml │
 │  • skill upgrade     │     │                                      │
-└──────────────────────┘     └──────────────────────────────────────┘
+└──────────────────────┘     │  .claude-plugin/marketplace.json     │
+                             │  skill/*/.claude-plugin/plugin.json  │
+┌──────────────────────┐     │                                      │
+│  Claude Code          │────▶│  (Claude Code plugin marketplace     │
+│                      │     │   standard for /plugin install)      │
+│  • /plugin add       │     │                                      │
+│  • /plugin install   │     └──────────────────────────────────────┘
+└──────────────────────┘
 ```
 
 Repositories scaffolded by `ch skill init-repo` include CI/CD automation:
 
 - **release-please** manages per-skill `version.txt` and `CHANGELOG.md` via conventional commits
-- **sync-registry** rebuilds `skills.json` from frontmatter + `version.txt` after each release
+- **sync-registry** rebuilds `skills.json`, `.claude-plugin/marketplace.json`, and per-skill `plugin.json` after each release
 - **validate-skills** checks PR changes for schema compliance
+
+The dual-format marketplace enables installation via either `ch skill install <name>` (ContextHarness CLI) or `/plugin marketplace add owner/repo` followed by `/plugin install <name>@marketplace` (Claude Code).
 
 See [Skills Guide](../user-guide/skills.md#automated-versioning) for the full versioning lifecycle.
 

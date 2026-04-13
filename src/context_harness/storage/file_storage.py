@@ -152,7 +152,8 @@ class FileStorage:
             return True
         except FileNotFoundError:
             return False
-        except IsADirectoryError:
+        except (IsADirectoryError, PermissionError):
+            # IsADirectoryError on Linux, PermissionError on macOS
             return False
 
     def exists(self, path: PathLike) -> bool:

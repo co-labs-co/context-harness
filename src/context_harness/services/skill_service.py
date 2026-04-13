@@ -880,6 +880,9 @@ class SkillService:
                 # Write scaffold files
                 self._write_registry_scaffold(tmppath, name)
 
+                # Attempt to compile the agentic workflow (requires gh-aw extension)
+                self._try_compile_agentic_workflows(tmppath)
+
                 # Stage, commit, and push
                 subprocess.run(
                     ["git", "-C", tmpdir, "add", "."],
@@ -1032,6 +1035,20 @@ class SkillService:
             repo_path, files_to_update, force=force
         )
 
+        # Remove obsolete scaffold files replaced by newer equivalents
+        obsolete_files = [
+            ".github/workflows/auto-rebase.yml",  # Replaced by skill-onboarding.md
+        ]
+        for obsolete in obsolete_files:
+            obsolete_path = repo_path / obsolete
+            if obsolete_path.exists():
+                obsolete_path.unlink()
+                updated_files.append(f"(removed) {obsolete}")
+
+        # Attempt to compile agentic workflows if the .md file was updated
+        if any(f.endswith(".md") and "workflows" in f for f in updated_files):
+            self._try_compile_agentic_workflows(repo_path)
+
         # Update version markers
         self._write_scaffold_registry_version(repo_path)
         self._update_json_version_markers(repo_path)
@@ -1042,6 +1059,17 @@ class SkillService:
         if self._regenerate_skills_json(repo_path):
             if "skills.json" not in updated_files:
                 updated_files.append("skills.json")
+
+        # Regenerate per-skill .claude-plugin/plugin.json for all skills
+        # These may be missing in registries created before Claude Code support
+        skills_dir = repo_path / "skill"
+        if skills_dir.exists():
+            for skill_dir in sorted(skills_dir.iterdir()):
+                if skill_dir.is_dir() and (skill_dir / "SKILL.md").exists():
+                    self._write_scaffold_skill_plugin_json(skill_dir)
+                    rel = f"skill/{skill_dir.name}/.claude-plugin/plugin.json"
+                    if rel not in updated_files:
+                        updated_files.append(rel)
 
         return Success(
             value={
@@ -1091,6 +1119,7 @@ class SkillService:
             "registry/web/index.html",  # AI agent instructions are updated regularly
             "registry/web/skill.html",  # Skill detail page format may change
             "llms.txt",  # AI agent installation protocol (emerging standard)
+            ".github/workflows/skill-onboarding.md",  # Agentic workflow instructions updated regularly
         ]
 
         # Infrastructure files - added if missing, or with --force
@@ -1099,7 +1128,6 @@ class SkillService:
             ".github/workflows/release.yml",
             ".github/workflows/sync-registry.yml",
             ".github/workflows/validate-skills.yml",
-            ".github/workflows/auto-rebase.yml",
             # GitHub templates
             ".github/ISSUE_TEMPLATE/new-skill.md",
             ".github/PULL_REQUEST_TEMPLATE.md",
@@ -1113,6 +1141,8 @@ class SkillService:
             ".gitignore",
             # Marketplace manifest
             "marketplace.json",
+            # Claude Code plugin marketplace
+            ".claude-plugin/marketplace.json",
         ]
 
         # Documentation files - often customized by users
@@ -1171,6 +1201,7 @@ class SkillService:
             "registry/web/index.html",  # AI agent instructions are updated regularly
             "registry/web/skill.html",  # Skill detail page format may change
             "llms.txt",  # AI agent installation protocol (emerging standard)
+            ".github/workflows/skill-onboarding.md",  # Agentic workflow instructions updated regularly
         }
 
         updated_files = []
@@ -1238,7 +1269,7 @@ class SkillService:
             ".github/workflows/release.yml": self._write_scaffold_release_workflow,
             ".github/workflows/sync-registry.yml": self._write_scaffold_sync_registry_workflow,
             ".github/workflows/validate-skills.yml": self._write_scaffold_validate_skills_workflow,
-            ".github/workflows/auto-rebase.yml": self._write_scaffold_auto_rebase_workflow,
+            ".github/workflows/skill-onboarding.md": self._write_scaffold_skill_onboarding_workflow,
             # GitHub templates
             ".github/ISSUE_TEMPLATE/new-skill.md": self._write_scaffold_issue_template,
             ".github/PULL_REQUEST_TEMPLATE.md": self._write_scaffold_pr_template,
@@ -1268,6 +1299,10 @@ class SkillService:
             "marketplace.json": lambda p: self._write_scaffold_marketplace_json(
                 p, repo_name
             ),
+            # Claude Code plugin marketplace (requires repo_name)
+            ".claude-plugin/marketplace.json": lambda p: (
+                self._write_scaffold_claude_plugin_marketplace(p, repo_name)
+            ),
             # Documentation (requires repo_name)
             "README.md": lambda p: self._write_scaffold_readme(p, repo_name),
             "CONTRIBUTING.md": lambda p: self._write_scaffold_contributing(
@@ -1283,13 +1318,13 @@ class SkillService:
             self._write_scaffold_registry_version(repo_path)
 
     def _update_json_version_markers(self, repo_path: Path) -> None:
-        """Update registry_version in marketplace.json.
+        """Update registry_version in marketplace.json and .claude-plugin/marketplace.json.
 
         Note: skills.json is handled by _regenerate_skills_json() which
         rewrites the file from scratch during upgrade-repo, so we skip it
         here to avoid redundant I/O.
         """
-        # Update marketplace.json
+        # Update marketplace.json (ContextHarness-native format)
         marketplace_path = repo_path / "marketplace.json"
         if marketplace_path.exists():
             try:
@@ -1297,6 +1332,20 @@ class SkillService:
                 data["registry_version"] = CH_VERSION
                 data["schema_version"] = "1.1"
                 marketplace_path.write_text(
+                    json.dumps(data, indent=2) + "\n", encoding="utf-8"
+                )
+            except (json.JSONDecodeError, KeyError):
+                pass
+
+        # Update .claude-plugin/marketplace.json (Claude Code standard)
+        claude_mkt_path = repo_path / ".claude-plugin" / "marketplace.json"
+        if claude_mkt_path.exists():
+            try:
+                data = json.loads(claude_mkt_path.read_text(encoding="utf-8"))
+                if "metadata" not in data:
+                    data["metadata"] = {}
+                data["metadata"]["version"] = CH_VERSION
+                claude_mkt_path.write_text(
                     json.dumps(data, indent=2) + "\n", encoding="utf-8"
                 )
             except (json.JSONDecodeError, KeyError):
@@ -1408,6 +1457,45 @@ class SkillService:
         except OSError:
             return False  # Don't fail the upgrade if skills.json can't be written
 
+    def _try_compile_agentic_workflows(self, repo_path: Path) -> bool:
+        """Attempt to compile agentic workflows using gh-aw.
+
+        Looks for .md files in .github/workflows/ and runs `gh aw compile`
+        to generate the corresponding .lock.yml files. These lock files are
+        what GitHub Actions actually executes.
+
+        This is a best-effort operation -- if gh-aw is not installed, the
+        .md file is still scaffolded and the user can compile later.
+
+        Args:
+            repo_path: Path to the repository root
+
+        Returns:
+            True if compilation succeeded, False otherwise
+        """
+        workflows_dir = repo_path / ".github" / "workflows"
+        md_workflows = (
+            list(workflows_dir.glob("*.md")) if workflows_dir.exists() else []
+        )
+
+        if not md_workflows:
+            return False
+
+        try:
+            result = subprocess.run(
+                ["gh", "aw", "compile"],
+                capture_output=True,
+                text=True,
+                cwd=str(repo_path),
+                timeout=60,
+            )
+            return result.returncode == 0
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            # gh-aw extension not installed or timed out -- not an error
+            return False
+        except Exception:
+            return False
+
     def _write_registry_scaffold(self, repo_path: Path, repo_name: str) -> None:
         """Write the full skills registry scaffold with CI/CD automation.
 
@@ -1454,7 +1542,7 @@ class SkillService:
         self._write_scaffold_release_workflow(repo_path)
         self._write_scaffold_sync_registry_workflow(repo_path)
         self._write_scaffold_validate_skills_workflow(repo_path)
-        self._write_scaffold_auto_rebase_workflow(repo_path)
+        self._write_scaffold_skill_onboarding_workflow(repo_path)
 
         # --- Scripts ---
         self._write_scaffold_sync_registry_script(repo_path)
@@ -1471,6 +1559,15 @@ class SkillService:
 
         # --- Marketplace manifest for plugin discovery ---
         self._write_scaffold_marketplace_json(repo_path, repo_name)
+
+        # --- Claude Code plugin marketplace (per-skill plugins) ---
+        self._write_scaffold_claude_plugin_marketplace(repo_path, repo_name)
+        # Write .claude-plugin/plugin.json for each skill directory
+        skills_dir = repo_path / "skill"
+        if skills_dir.exists():
+            for skill_dir in sorted(skills_dir.iterdir()):
+                if skill_dir.is_dir() and (skill_dir / "SKILL.md").exists():
+                    self._write_scaffold_skill_plugin_json(skill_dir)
 
         # --- Registry version marker (for upgrade detection) ---
         self._write_scaffold_registry_version(repo_path)
@@ -1697,6 +1794,23 @@ context-harness skill use-registry http://localhost:8080
 context-harness skill install <skill-name> --registry http://localhost:8080
 ```
 
+## Claude Code Plugin Marketplace
+
+This registry is also a **Claude Code plugin marketplace**. Each skill is an
+individually installable plugin, so you can use either the ContextHarness CLI
+or Claude Code's built-in plugin system:
+
+```bash
+# Add as a Claude Code plugin marketplace
+/plugin marketplace add {repo_name}
+
+# Install a specific skill as a Claude Code plugin
+/plugin install <skill-name>@{repo_name.split("/")[-1]}
+```
+
+Skills installed via Claude Code are available as `/skill-name` commands
+inside Claude Code sessions.
+
 ## Commit Convention
 
 | Commit prefix | Version bump | Example |
@@ -1711,12 +1825,14 @@ context-harness skill install <skill-name> --registry http://localhost:8080
 
 ```
 {repo_name}/
+├── .claude-plugin/
+│   └── marketplace.json          # Claude Code plugin marketplace manifest
 ├── .github/
 │   └── workflows/
 │       ├── release.yml           # release-please automation
 │       ├── sync-registry.yml     # Rebuilds skills.json post-release
 │       ├── validate-skills.yml   # PR validation checks
-│       └── auto-rebase.yml       # Auto-rebase PRs when shared files change
+│       └── skill-onboarding.md   # Agentic workflow: auto-registers new skills
 ├── scripts/
 │   ├── sync-registry.py          # Parses skills → skills.json
 │   └── validate_skills.py        # Pydantic-based validation
@@ -1727,13 +1843,15 @@ context-harness skill install <skill-name> --registry http://localhost:8080
 │       └── skill.html            # Individual skill pages
 ├── skill/
 │   └── example-skill/
+│       ├── .claude-plugin/
+│       │   └── plugin.json       # Claude Code plugin manifest
 │       ├── SKILL.md              # Skill content (no version field)
 │       └── version.txt           # Managed by release-please
 ├── Dockerfile                    # nginx container for HTTP hosting
 ├── docker-compose.yml            # Easy local deployment
 ├── llms.txt                      # AI agent installation instructions
 ├── skills.json                   # Auto-maintained registry manifest
-├── marketplace.json              # Plugin marketplace compatibility
+├── marketplace.json              # ContextHarness marketplace manifest
 ├── release-please-config.json    # Per-skill release configuration
 ├── .release-please-manifest.json # Current versions (CI-managed)
 ├── CONTRIBUTING.md
@@ -1774,36 +1892,15 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for how to add or update skills.
    Your skill content here...
    ```
 
-3. **Create version.txt** (bootstrapped at 0.1.0):
-   ```bash
-   echo "0.1.0" > skill/my-skill/version.txt
-   ```
+3. **Open a pull request** — that's it!
 
-4. **Register with release-please** — add to `release-please-config.json`:
-   ```json
-   {{
-     "packages": {{
-       "skill/my-skill": {{
-         "release-type": "simple",
-         "component": "my-skill"
-       }}
-     }}
-   }}
-   ```
+   The **Skill Onboarding** agentic workflow will automatically:
+   - Create `version.txt` with `0.1.0`
+   - Register your skill in `release-please-config.json`
+   - Register your skill in `.release-please-manifest.json`
+   - Push the generated files to your PR branch
 
-   And to `.release-please-manifest.json`:
-   ```json
-   {{
-     "skill/my-skill": "0.1.0"
-   }}
-   ```
-
-5. **Commit and push**:
-   ```bash
-   git add skill/my-skill/ release-please-config.json .release-please-manifest.json
-   git commit -m "feat: add my-skill"
-   git push origin main
-   ```
+4. **Review and merge** your PR once CI passes
 
 ## Updating a Skill
 
@@ -1819,6 +1916,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for how to add or update skills.
 
 - **Never edit `version.txt` manually** — release-please manages it
 - **Never edit `skills.json` manually** — CI rebuilds it after releases
+- **Never edit `.claude-plugin/` files manually** — CI regenerates them after releases
 - **Never add `version` to SKILL.md frontmatter** — it lives in `version.txt`
 - The `name` field in SKILL.md **must match** the directory name
 """
@@ -1869,37 +1967,27 @@ tags:
 
 Instructions and content for your skill go here.
 SKILLEOF
-
-# Bootstrap version (required for release-please)
-echo "0.1.0" > skill/my-first-skill/version.txt
 ```
 
-### 2. Register with Release-Please
-
-Add the skill to `release-please-config.json` under `"packages"`:
-
-```json
-"skill/my-first-skill": {{
-  "release-type": "simple",
-  "component": "my-first-skill"
-}}
-```
-
-Add to `.release-please-manifest.json`:
-
-```json
-"skill/my-first-skill": "0.1.0"
-```
-
-### 3. Commit and Push
+### 2. Open a Pull Request
 
 ```bash
-git add .
+git checkout -b add-my-first-skill
+git add skill/my-first-skill/
 git commit -m "feat: add my-first-skill"
-git push origin main
+git push origin add-my-first-skill
+gh pr create --title "feat: add my-first-skill" --body "Adds my-first-skill"
 ```
 
-### 4. What Happens Next
+The **Skill Onboarding** agentic workflow will automatically:
+- Create `version.txt` with `0.1.0`
+- Register your skill in `release-please-config.json`
+- Register your skill in `.release-please-manifest.json`
+- Push the generated files to your PR branch
+
+### 3. Merge and Release
+
+Once CI passes, merge your PR.
 
 1. **release-please** creates a release PR bumping `version.txt`
 2. Merge the release PR → tag `my-first-skill@v0.1.0` is created
@@ -1908,12 +1996,24 @@ git push origin main
 
 ## Install Your Skill
 
+### Via ContextHarness CLI
+
 ```bash
 # Configure this registry (one time)
 context-harness config set skills-repo {repo_name}
 
 # Install
 context-harness skill install my-first-skill
+```
+
+### Via Claude Code Plugin Marketplace
+
+```bash
+# Add this registry as a Claude Code plugin marketplace (one time)
+/plugin marketplace add {repo_name}
+
+# Install
+/plugin install my-first-skill@{repo_name.split("/")[-1]}
 ```
 """
         (repo_path / "QUICKSTART.md").write_text(content, encoding="utf-8")
@@ -2045,7 +2145,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add skills.json marketplace.json skill/*/.listing.json
+           git add skills.json marketplace.json .claude-plugin/marketplace.json skill/*/.listing.json skill/*/.claude-plugin/plugin.json
           git diff --cached --quiet || git commit -m "chore: sync registry manifests [skip ci]"
           git push
 """
@@ -2116,174 +2216,213 @@ jobs:
             content, encoding="utf-8"
         )
 
-    def _write_scaffold_auto_rebase_workflow(self, repo_path: Path) -> None:
-        """Write .github/workflows/auto-rebase.yml for automatic PR rebasing.
+    def _write_scaffold_skill_onboarding_workflow(self, repo_path: Path) -> None:
+        """Write .github/workflows/skill-onboarding.md agentic workflow.
 
-        Automatically rebases PRs when main changes to resolve conflicts
-        with shared files (skills.json, release-please-config.json, etc.)
-        that occur when multiple skills are extracted in parallel.
+        Automatically detects new skills in PRs and generates required
+        release-please configuration, version files, and registry metadata
+        so contributors only need to create their SKILL.md file.
 
-        For JSON files with conflicts, accepts main's version then rebuilds
-        using sync-registry.py to include all skills.
+        This is a GitHub Agentic Workflow (.md format) that requires
+        compilation via `gh aw compile` to generate the .lock.yml file
+        that GitHub Actions actually executes.
+
+        Replaces the previous auto-rebase.yml approach by handling
+        release-please registration on the PR branch before merge,
+        eliminating shared-file merge conflicts.
         """
         content = """\
-name: Auto Rebase
-
+---
+name: Skill Onboarding
+description: >
+  Automatically detects new skills in PRs and generates required
+  release-please configuration and version files so contributors
+  only need to create their SKILL.md file.
 on:
-  push:
-    branches:
-      - main
+  pull_request:
+    types: [opened, synchronize]
+    branches: [main]
     paths:
-      - "skills.json"
-      - "release-please-config.json"
-      - ".release-please-manifest.json"
-
+      - "skill/**"
+tools:
+  github:
+    toolsets: [context, repos, pull_requests]
+  edit:
+  bash: true
+safe-outputs:
+  push-to-pull-request-branch:
+    max: 1
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
+  pull-requests: read
+---
 
-jobs:
-  rebase:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+# Skill Onboarding
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+You are a skill registry automation agent. Your sole job is to detect new
+skills added in pull requests and generate the required configuration files
+so that release-please can version and release them automatically.
 
-      - name: Install dependencies
-        run: pip install python-frontmatter
+## Context
 
-      - name: Rebase open PRs with conflict resolution
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Configure git identity for rebase commits
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+This repository is a ContextHarness skills registry. Skills live in
+`skill/<name>/` directories. Each skill requires these files for the
+release pipeline to work:
 
-          # Get open PRs and process each one
-          gh pr list --base main --state open --json number,headRefName \\
-            --jq '.[] | "\\(.number) \\(.headRefName)"' \\
-            | while read -r pr_number pr_branch; do
-              if [ -z "$pr_number" ] || [ -z "$pr_branch" ]; then
-                continue
-              fi
+1. `skill/<name>/SKILL.md` -- The skill content (created by the contributor)
+2. `skill/<name>/version.txt` -- Contains `0.1.0` (you create this)
+3. An entry in `release-please-config.json` under `packages` (you create this)
+4. An entry in `.release-please-manifest.json` (you create this)
 
-              echo "Attempting to rebase PR #$pr_number ($pr_branch)"
+Contributors only create item 1. You generate items 2-4.
 
-              # Fetch the PR branch
-              git fetch origin "$pr_branch" || continue
+## Instructions
 
-              # Checkout the PR branch
-              git checkout "$pr_branch" || continue
+Follow these steps in exact order. Do NOT skip steps.
 
-              # Try to rebase onto main
-              if git rebase origin/main; then
-                echo "Rebase successful, pushing..."
-                git push origin "$pr_branch" --force-with-lease
-                echo "✅ PR #$pr_number rebased successfully"
-              else
-                echo "⚠️ Rebase has conflicts, attempting auto-resolution..."
+### Step 1: Detect new skills
 
-                # Get list of conflicted files
-                CONFLICTS=$(git diff --name-only --diff-filter=U)
+Use bash to find skill directories that have a `SKILL.md` but are NOT yet
+registered in `release-please-config.json`:
 
-                if echo "$CONFLICTS" | grep -q ".json"; then
-                  echo "Found JSON conflicts: $CONFLICTS"
+```bash
+# List all skill directories containing SKILL.md
+for dir in skill/*/; do
+  if [ -f "${dir}SKILL.md" ]; then
+    skill_name=$(basename "$dir")
+    # Check if already registered in release-please config
+    if ! grep -q "\\"skill/${skill_name}\\"" release-please-config.json 2>/dev/null; then
+      echo "NEW:${skill_name}"
+    fi
+  fi
+done
+```
 
-                  # Resolve each conflicting JSON file by merging
-                  python3 << 'PYRESOLVE'
-import json
-import subprocess
-import os
+If no lines starting with `NEW:` are printed, there are no new skills.
+Stop here and do NOT push any changes.
 
-# Get conflicted files
-result = subprocess.run(['git', 'diff', '--name-only', '--diff-filter=U'],
-                       capture_output=True, text=True)
-conflicts = [f for f in result.stdout.strip().split('\n') if f and f.endswith('.json')]
+### Step 2: Create version.txt for each new skill
 
-for filepath in conflicts:
-    if not os.path.exists(filepath):
-        continue
+For each new skill found in Step 1, use bash to create `version.txt`
+ONLY if it does not already exist:
 
-    # During rebase conflict:
-    # - :2:filepath = stage 2 = "ours" = upstream (main)
-    # - :3:filepath = stage 3 = "theirs" = commit being replayed (PR)
+```bash
+# For each new skill name from Step 1:
+if [ ! -f "skill/<name>/version.txt" ]; then
+  printf "0.1.0" > "skill/<name>/version.txt"
+fi
+```
 
-    # Get main's version (stage 2)
-    main_result = subprocess.run(
-        ['git', 'show', ':2:' + filepath],
-        capture_output=True, text=True
-    )
-    try:
-        main_data = json.loads(main_result.stdout) if main_result.returncode == 0 else {}
-    except:
-        main_data = {}
+The content MUST be exactly the string `0.1.0` with no trailing newline.
+Use `printf` not `echo` to avoid trailing newlines.
 
-    # Get PR's version (stage 3 - the commit being replayed during rebase)
-    ours_result = subprocess.run(
-        ['git', 'show', ':3:' + filepath],
-        capture_output=True, text=True
-    )
-    try:
-        ours_data = json.loads(ours_result.stdout) if ours_result.returncode == 0 else {}
-    except:
-        ours_data = {}
+### Step 3: Update release-please-config.json
 
-    # Deep merge: overlay PR's changes onto main's base
-    def deep_merge(base, overlay):
-        if isinstance(base, dict) and isinstance(overlay, dict):
-            result = dict(base)
-            for k, v in overlay.items():
-                if k in result and isinstance(result[k], dict) and isinstance(v, dict):
-                    result[k] = deep_merge(result[k], v)
-                else:
-                    result[k] = v
-            return result
-        return overlay
+Read `release-please-config.json` with `cat`. For each new skill, add an
+entry to the `packages` object.
 
-    merged = deep_merge(main_data, ours_data)
+The EXACT format for each new entry is:
 
-    # Write merged file
-    with open(filepath, 'w') as f:
-        json.dump(merged, f, indent=2, sort_keys=True)
-        f.write('\n')
+```json
+"skill/<name>": {
+  "release-type": "simple",
+  "component": "<name>"
+}
+```
 
-    print(f"Merged {filepath}")
+Where `<name>` is the directory name (e.g., `my-skill`).
 
-# Also rebuild skills.json from all skills on disk
-subprocess.run(['python', 'scripts/sync-registry.py'], capture_output=True)
-print("Rebuilt skills.json")
-PYRESOLVE
+**Rules you MUST follow:**
 
-                  # Stage all resolved files
-                  git add skills.json release-please-config.json .release-please-manifest.json 2>/dev/null || true
+- NEVER remove or modify ANY existing entries in `packages`
+- NEVER modify top-level keys (`$schema`, `separate-pull-requests`,
+  `include-component-in-tag`, `tag-separator`)
+- Use exactly 2-space indentation
+- Ensure valid JSON with proper commas between all entries
+- Write the file using the `edit` tool
 
-                  # Continue rebase
-                  if git rebase --continue; then
-                    echo "Auto-resolution successful, pushing..."
-                    git push origin "$pr_branch" --force-with-lease
-                    echo "✅ PR #$pr_number rebased with conflict resolution"
-                  else
-                    echo "❌ Could not complete rebase even after conflict resolution"
-                    git rebase --abort
-                  fi
-                else
-                  echo "❌ Non-JSON conflicts detected, cannot auto-resolve"
-                  git rebase --abort
-                fi
-              fi
+**Complete example** -- if the file currently has `example-skill` and
+`skill-release`, and you are adding `my-new-skill`:
 
-              # Go back to main for next iteration
-              git checkout main
-            done
+```json
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "separate-pull-requests": true,
+  "include-component-in-tag": true,
+  "tag-separator": "@",
+  "packages": {
+    "skill/example-skill": {
+      "release-type": "simple",
+      "component": "example-skill"
+    },
+    "skill/my-new-skill": {
+      "release-type": "simple",
+      "component": "my-new-skill"
+    },
+    "skill/skill-release": {
+      "release-type": "simple",
+      "component": "skill-release"
+    }
+  }
+}
+```
+
+### Step 4: Update .release-please-manifest.json
+
+Read `.release-please-manifest.json` with `cat`. For each new skill, add
+an entry with the initial version `0.1.0`.
+
+The EXACT format for each new entry is:
+
+```json
+"skill/<name>": "0.1.0"
+```
+
+**Rules you MUST follow:**
+
+- NEVER remove or modify ANY existing entries
+- Use exactly 2-space indentation
+- Ensure valid JSON with proper commas between all entries
+- Write the file using the `edit` tool
+
+**Complete example** -- adding `my-new-skill` to existing entries:
+
+```json
+{
+  "skill/example-skill": "0.1.0",
+  "skill/my-new-skill": "0.1.0",
+  "skill/skill-release": "0.1.0"
+}
+```
+
+### Step 5: Push changes
+
+If you created or modified any files in Steps 2-4, use the
+`push-to-pull-request-branch` safe output to commit and push.
+
+Commit message: `chore: register new skill(s) in release-please`
+
+If no files were created or modified, do NOT push. Produce no output.
+
+## Skip Conditions
+
+Do NOT make any changes and do NOT push if ANY of these are true:
+
+- All skill directories with `SKILL.md` are already in `release-please-config.json`
+- The PR only modifies files in existing skill directories (no new directories)
+- No `SKILL.md` file exists in any new directory under `skill/`
+
+## Quality Checklist
+
+Before pushing, verify:
+
+- [ ] All JSON files are valid (properly nested braces, correct commas)
+- [ ] `version.txt` contains exactly `0.1.0` with no extra whitespace
+- [ ] No existing entries were removed from either JSON file
+- [ ] No `SKILL.md` files were modified
+- [ ] The `component` value matches the directory name exactly
 """
-        (repo_path / ".github" / "workflows" / "auto-rebase.yml").write_text(
+        (repo_path / ".github" / "workflows" / "skill-onboarding.md").write_text(
             content, encoding="utf-8"
         )
 
@@ -2464,8 +2603,95 @@ def update_marketplace_json(skills: list) -> None:
     print(f"Updated marketplace.json with {len(skills)} skill(s)")
 
 
+def update_claude_plugin_marketplace(skills: list) -> None:
+    """Update .claude-plugin/marketplace.json (Claude Code plugin marketplace standard).
+
+    Generates a marketplace.json conforming to the Claude Code plugin
+    marketplace specification so the registry can also be added via:
+
+        /plugin marketplace add owner/repo
+        /plugin install skill-name@marketplace-name
+
+    Each skill becomes an individually installable plugin entry.
+    """
+    import os
+
+    repo = os.environ.get("GITHUB_REPOSITORY", "")
+    parts = repo.split("/") if repo else []
+    owner = parts[0] if len(parts) == 2 else ""
+    name = parts[1] if len(parts) == 2 else ""
+
+    # Load existing .claude-plugin/marketplace.json to preserve owner metadata
+    claude_mkt_path = Path(".claude-plugin/marketplace.json")
+    if claude_mkt_path.exists():
+        try:
+            existing = json.loads(claude_mkt_path.read_text())
+        except json.JSONDecodeError:
+            existing = {}
+    else:
+        existing = {}
+
+    # Build plugin entries from skills
+    plugins = []
+    for skill in skills:
+        plugin_entry = {
+            "name": skill["name"],
+            "source": f"./skill/{skill['path'].split('/')[-1]}" if "/" in skill.get("path", "") else f"./skill/{skill['name']}",
+            "description": skill.get("description", ""),
+            "version": skill.get("version", "0.1.0"),
+        }
+        plugins.append(plugin_entry)
+
+    marketplace = {
+        "name": existing.get("name", name or repo),
+        "owner": existing.get("owner", {"name": owner or "Registry Owner"}),
+        "metadata": {
+            "description": existing.get("metadata", {}).get(
+                "description",
+                f"{name or repo} skills registry — "
+                "installable via ContextHarness CLI or Claude Code plugins",
+            ),
+            "version": get_registry_version(),
+            "pluginRoot": "./skill",
+        },
+        "plugins": plugins,
+    }
+
+    claude_mkt_path.parent.mkdir(parents=True, exist_ok=True)
+    claude_mkt_path.write_text(
+        json.dumps(marketplace, indent=2) + "\\n", encoding="utf-8"
+    )
+    print(f"Updated .claude-plugin/marketplace.json with {len(plugins)} plugin(s)")
+
+
+def update_skill_plugin_json(skills: list) -> None:
+    """Write .claude-plugin/plugin.json for each skill directory.
+
+    Each skill gets a Claude Code plugin manifest so it can be installed
+    individually via the Claude Code plugin marketplace.
+    """
+    for skill in skills:
+        skill_path = Path(skill.get("path", f"skill/{skill['name']}"))
+        if not skill_path.exists():
+            continue
+
+        plugin_manifest = {
+            "name": skill["name"],
+            "description": skill.get("description", ""),
+            "version": skill.get("version", "0.1.0"),
+        }
+
+        plugin_dir = skill_path / ".claude-plugin"
+        plugin_dir.mkdir(parents=True, exist_ok=True)
+        (plugin_dir / "plugin.json").write_text(
+            json.dumps(plugin_manifest, indent=2) + "\\n", encoding="utf-8"
+        )
+
+    print(f"Updated .claude-plugin/plugin.json for {len(skills)} skill(s)")
+
+
 def main() -> None:
-    """Rebuild and write skills.json and marketplace.json."""
+    """Rebuild and write skills.json, marketplace.json, and Claude Code plugin manifests."""
     registry = build_registry()
 
     Path("skills.json").write_text(
@@ -2476,8 +2702,12 @@ def main() -> None:
     for skill in registry["skills"]:
         print(f"  - {skill['name']} v{skill['version']}")
 
-    # Also update marketplace.json
+    # Also update marketplace.json (ContextHarness-native format)
     update_marketplace_json(registry["skills"])
+
+    # Update Claude Code plugin marketplace manifests
+    update_claude_plugin_marketplace(registry["skills"])
+    update_skill_plugin_json(registry["skills"])
 
 
 if __name__ == "__main__":
@@ -2796,37 +3026,25 @@ Your skill content here...
   AND when to use it
 - Do NOT include a `version` field
 
-### Step 3 — Bootstrap version.txt
+### Step 3 — Open a Pull Request
 
 ```bash
-echo "0.1.0" > skill/<skill-name>/version.txt
-```
-
-### Step 4 — Register with release-please
-
-Add to `release-please-config.json` under `"packages"`:
-
-```json
-"skill/<skill-name>": {
-  "release-type": "simple",
-  "component": "<skill-name>"
-}
-```
-
-Add to `.release-please-manifest.json`:
-
-```json
-"skill/<skill-name>": "0.1.0"
-```
-
-### Step 5 — Commit with feat: prefix
-
-```bash
-git add skill/<skill-name>/ release-please-config.json \\
-  .release-please-manifest.json
+git checkout -b add-<skill-name>
+git add skill/<skill-name>/
 git commit -m "feat: add <skill-name>"
-git push origin main
+git push origin add-<skill-name>
+gh pr create --title "feat: add <skill-name>" --body "Adds <skill-name>"
 ```
+
+The **Skill Onboarding** agentic workflow will automatically:
+- Create `version.txt` with `0.1.0`
+- Register the skill in `release-please-config.json`
+- Register the skill in `.release-please-manifest.json`
+- Push the generated files to your PR branch
+
+### Step 4 — Merge
+
+Once CI passes, merge your PR.
 
 The `feat:` prefix is critical — it is a releasable commit type that
 triggers release-please to create the initial release PR.
@@ -2887,7 +3105,6 @@ git commit --allow-empty -m "chore: release 2.0.0" -m "Release-As: 2.0.0"
 |---------|---------|-----|
 | Using `docs:` for skill edits | No release PR created | Use `feat:` or `fix:` |
 | Adding `version` to frontmatter | Validation failure | Remove it |
-| Forgetting release-please registration | No release PR | Add to both JSON files |
 | Editing `version.txt` manually | Version conflict | Revert; let CI manage |
 | Editing `skills.json` manually | Overwritten on release | Let CI rebuild it |
 
@@ -2927,7 +3144,9 @@ pipeline.
    YES → Continue
 
 3. Is the skill registered in release-please-config.json?
-   NO  → Add package entry and re-push
+   NO  → The Skill Onboarding workflow should have added it.
+         Check if the workflow ran on your PR. Re-trigger by
+         pushing a new commit to the PR branch.
    YES → Continue
 
 4. Did the release.yml workflow run?
@@ -3455,6 +3674,134 @@ python scripts/validate_skills.py
         }
         (repo_path / "marketplace.json").write_text(
             json.dumps(marketplace, indent=2) + "\n", encoding="utf-8"
+        )
+
+    def _write_scaffold_claude_plugin_marketplace(
+        self, repo_path: Path, repo_name: str
+    ) -> None:
+        """Write .claude-plugin/marketplace.json — Claude Code plugin marketplace.
+
+        Generates a marketplace.json conforming to the Claude Code plugin
+        marketplace standard (https://code.claude.com/docs/en/plugin-marketplaces).
+        Each skill directory is listed as an individual plugin with a relative
+        path source, enabling per-skill installation via:
+
+            /plugin marketplace add owner/repo
+            /plugin install skill-name@marketplace-name
+
+        The marketplace is regenerated by sync-registry.py alongside the
+        ContextHarness-native marketplace.json whenever skills are updated.
+        """
+        parts = repo_name.split("/")
+        if len(parts) == 2:
+            owner, name = parts
+        else:
+            owner = repo_name
+            name = repo_name
+
+        # Build plugin entries from existing skill directories
+        plugins: list[dict[str, Any]] = []
+        skills_dir = repo_path / "skill"
+        if skills_dir.exists():
+            for skill_dir in sorted(skills_dir.iterdir()):
+                if not skill_dir.is_dir():
+                    continue
+                skill_md = skill_dir / "SKILL.md"
+                if not skill_md.exists():
+                    continue
+
+                # Parse skill metadata from SKILL.md frontmatter
+                description = ""
+                skill_name = skill_dir.name
+                version = "0.1.0"
+                try:
+                    content = skill_md.read_text(encoding="utf-8")
+                    if content.startswith("---"):
+                        end = content.index("---", 3)
+                        import yaml
+
+                        fm = yaml.safe_load(content[3:end])
+                        if isinstance(fm, dict):
+                            description = fm.get("description", "")
+                            skill_name = fm.get("name", skill_dir.name)
+                except Exception:
+                    pass
+
+                version_txt = skill_dir / "version.txt"
+                if version_txt.exists():
+                    version = version_txt.read_text(encoding="utf-8").strip()
+
+                plugin_entry: dict[str, Any] = {
+                    "name": skill_name,
+                    "source": f"./skill/{skill_dir.name}",
+                    "description": description,
+                    "version": version,
+                }
+                plugins.append(plugin_entry)
+
+        marketplace = {
+            "name": name,
+            "owner": {
+                "name": owner,
+            },
+            "metadata": {
+                "description": f"{name} skills registry — "
+                f"installable via ContextHarness CLI or Claude Code plugins",
+                "version": CH_VERSION,
+                "pluginRoot": "./skill",
+            },
+            "plugins": plugins,
+        }
+
+        claude_plugin_dir = repo_path / ".claude-plugin"
+        claude_plugin_dir.mkdir(parents=True, exist_ok=True)
+        (claude_plugin_dir / "marketplace.json").write_text(
+            json.dumps(marketplace, indent=2) + "\n", encoding="utf-8"
+        )
+
+    def _write_scaffold_skill_plugin_json(self, skill_path: Path) -> None:
+        """Write .claude-plugin/plugin.json for a skill directory.
+
+        Each skill directory gets a Claude Code plugin manifest so it can
+        be installed individually via the Claude Code plugin marketplace.
+        The plugin exposes the skill's SKILL.md as a Claude Code skill.
+
+        Args:
+            skill_path: Path to the skill directory (e.g., skill/example-skill/)
+        """
+        skill_md = skill_path / "SKILL.md"
+
+        # Extract metadata from SKILL.md frontmatter
+        skill_name = skill_path.name
+        description = ""
+        try:
+            content = skill_md.read_text(encoding="utf-8")
+            if content.startswith("---"):
+                end = content.index("---", 3)
+                import yaml
+
+                fm = yaml.safe_load(content[3:end])
+                if isinstance(fm, dict):
+                    skill_name = fm.get("name", skill_path.name)
+                    description = fm.get("description", "")
+        except Exception:
+            pass
+
+        version = "0.1.0"
+        version_txt = skill_path / "version.txt"
+        if version_txt.exists():
+            version = version_txt.read_text(encoding="utf-8").strip()
+
+        plugin_manifest = {
+            "name": skill_name,
+            "description": description,
+            "version": version,
+        }
+
+        plugin_dir = skill_path / ".claude-plugin"
+        plugin_dir.mkdir(parents=True, exist_ok=True)
+        (plugin_dir / "plugin.json").write_text(
+            json.dumps(plugin_manifest, indent=2) + "\n", encoding="utf-8"
         )
 
     def _write_scaffold_http_registry(self, repo_path: Path, repo_name: str) -> None:
@@ -4102,14 +4449,42 @@ tags: [category]
         async function discoverFiles() {
             var basePath = 'skill/' + skillName;
             var files = [];
-            var knownFiles = [{ path: 'SKILL.md', icon: '📄', name: 'SKILL.md' }, { path: 'version.txt', icon: '📄', name: 'version.txt' }, { path: 'CHANGELOG.md', icon: '📄', name: 'CHANGELOG.md' }];
-            for (var i = 0; i < knownFiles.length; i++) {
-                var exists = await checkFileExists(basePath + '/' + knownFiles[i].path);
-                if (exists) { files.push(Object.assign({}, knownFiles[i], { type: 'file' })); }
+            try {
+                var res = await fetch(basePath + '/.listing.json');
+                if (res.ok) {
+                    var listing = await res.json();
+                    if (listing.files) {
+                        listing.files.forEach(function(f) {
+                            files.push({ path: f, icon: getIcon(f), name: f, type: 'file' });
+                        });
+                    }
+                    if (listing.directories && listing.directory_files) {
+                        listing.directories.forEach(function(dir) {
+                            var dirFiles = listing.directory_files[dir] || [];
+                            dirFiles.forEach(function(f) {
+                                files.push({ path: dir + '/' + f, icon: getIcon(f), name: dir + '/' + f, type: 'file' });
+                            });
+                        });
+                    }
+                } else {
+                    var knownFiles = ['SKILL.md', 'version.txt', 'CHANGELOG.md'];
+                    for (var i = 0; i < knownFiles.length; i++) {
+                        var exists = await checkFileExists(basePath + '/' + knownFiles[i]);
+                        if (exists) { files.push({ path: knownFiles[i], icon: '📄', name: knownFiles[i], type: 'file' }); }
+                    }
+                }
+            } catch (e) {
+                console.error('Error discovering files:', e);
             }
             renderFileTree(files);
             var skillMd = files.find(function(f) { return f.path === 'SKILL.md'; });
             if (skillMd) { selectFile(skillMd); }
+        }
+        function getIcon(filename) {
+            if (filename.endsWith('.md')) return '📝';
+            if (filename.endsWith('.json')) return '📋';
+            if (filename.endsWith('.txt')) return '📄';
+            return '📄';
         }
         async function checkFileExists(path) {
             try { var res = await fetch(path, { method: 'HEAD' }); return res.ok; }

@@ -134,6 +134,19 @@ context-harness config set skills-repo your-org/your-skills
 context-harness config set skills-repo your-org/your-skills --user
 ```
 
+### Claude Code Plugin Marketplace
+
+Skills registries created with `ch skill init-repo` are also compatible with the [Claude Code plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces). Users can install skills via either tool:
+
+```bash
+# Via ContextHarness CLI
+ch skill install my-skill
+
+# Via Claude Code plugin marketplace
+/plugin marketplace add your-org/your-skills
+/plugin install my-skill@your-skills
+```
+
 ## Documentation
 
 - [Getting Started](docs/getting-started/) - Step-by-step guides

@@ -25,43 +25,35 @@ from context_harness.completion import (
 class TestFuzzyMatch:
     """Tests for fuzzy matching algorithm."""
 
-    def test_fuzzy_match_exact(self):
-        """Test exact match."""
-        assert _fuzzy_match("react-forms", "react-forms") is True
-
-    def test_fuzzy_match_prefix(self):
-        """Test prefix match."""
-        assert _fuzzy_match("react", "react-forms") is True
-
-    def test_fuzzy_match_fuzzy(self):
-        """Test fuzzy pattern matching."""
-        assert _fuzzy_match("rf", "react-forms") is True
-        assert _fuzzy_match("dja", "django-auth") is True
-        assert _fuzzy_match("rfs", "react-forms") is True
-
-    def test_fuzzy_match_case_insensitive(self):
-        """Test case insensitive matching."""
-        assert _fuzzy_match("RF", "react-forms") is True
-        assert _fuzzy_match("react", "React-Forms") is True
-
-    def test_fuzzy_match_no_match(self):
-        """Test non-matching patterns."""
-        assert _fuzzy_match("xyz", "react-forms") is False
-        assert _fuzzy_match("abc", "django-auth") is False
-
-    def test_fuzzy_match_empty_pattern(self):
-        """Test empty pattern matches everything."""
-        assert _fuzzy_match("", "react-forms") is True
-        assert _fuzzy_match("", "anything") is True
-
-    def test_fuzzy_match_pattern_longer_than_text(self):
-        """Test pattern longer than text doesn't match."""
-        assert _fuzzy_match("react-forms-extended", "react") is False
-
-    def test_fuzzy_match_special_characters(self):
-        """Test matching with hyphens and underscores."""
-        assert _fuzzy_match("r-f", "react-forms") is True
-        assert _fuzzy_match("r_f", "react_forms") is True
+    @pytest.mark.parametrize(
+        "pattern,text,expected",
+        [
+            # Exact match
+            ("react-forms", "react-forms", True),
+            # Prefix match
+            ("react", "react-forms", True),
+            # Fuzzy pattern matching
+            ("rf", "react-forms", True),
+            ("dja", "django-auth", True),
+            ("rfs", "react-forms", True),
+            # Case insensitive
+            ("RF", "react-forms", True),
+            ("react", "React-Forms", True),
+            # No match
+            ("xyz", "react-forms", False),
+            ("abc", "django-auth", False),
+            # Empty pattern matches everything
+            ("", "react-forms", True),
+            ("", "anything", True),
+            # Pattern longer than text doesn't match
+            ("react-forms-extended", "react", False),
+            # Special characters
+            ("r-f", "react-forms", True),
+            ("r_f", "react_forms", True),
+        ],
+    )
+    def test_fuzzy_match(self, pattern, text, expected):
+        assert _fuzzy_match(pattern, text) is expected
 
 
 class TestFuzzyScore:
@@ -148,14 +140,12 @@ class TestCaching:
         """Test that expired cache returns None."""
         cache_dir, cache_file = clean_cache
 
-        # Set a very short TTL for testing
-        monkeypatch.setattr("context_harness.completion.CACHE_TTL_SECONDS", 1)
-
         skills = [{"name": "skill-one", "description": "First"}]
         _save_skills_to_cache(skills)
 
-        # Wait for cache to expire
-        time.sleep(1.5)
+        # Advance time past the TTL so the cached timestamp appears expired
+        future_time = time.time() + CACHE_TTL_SECONDS + 10
+        monkeypatch.setattr(time, "time", lambda: future_time)
 
         result = _get_cached_skills()
         assert result is None
